@@ -79,8 +79,8 @@ sudo systemctl enable --now shadownet-inside.service`}</pre>
           <div className="mt-4 rounded-lg border border-gray-800 bg-gray-950 p-4">
             <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap">{`pkg update -y
 pkg install -y wget openssl-tool
-wget -O shadownet-inside /downloads/v0.1.0/shadownet-inside-v0.1.0-android-arm64
-wget -O shadownet-inside.sha256 /downloads/v0.1.0/shadownet-inside-v0.1.0-android-arm64.sha256
+wget -O shadownet-inside ${githubRawDownloads}/shadownet-inside-v0.1.0-android-arm64
+wget -O shadownet-inside.sha256 ${githubRawDownloads}/shadownet-inside-v0.1.0-android-arm64.sha256
 sha256sum -c shadownet-inside.sha256
 chmod +x shadownet-inside
 ./shadownet-inside`}</pre>
