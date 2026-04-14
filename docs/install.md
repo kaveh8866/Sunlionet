@@ -12,7 +12,8 @@ This repository currently targets:
 
 ## Development prerequisites
 
-- Go 1.21+
+- Go 1.22+
+
 
 Optional tools:
 
@@ -46,7 +47,10 @@ go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
 
 Inside does not fetch from a central API. Initial seeds arrive via:
 
-1. Signal from a trusted Outside helper (`snb://v1:` bundle)
+1. Signal from a trusted Outside helper (`snb://v2:` bundle)
 2. QR code (in person)
 3. Bluetooth mesh (from nearby Inside peers during blackout)
 
+## Android notes
+
+This repository does not currently ship a production Android APK. For development, run the Inside agent in Termux (CLI) and keep the VPN/foreground-service wrapper as a separate Android project.

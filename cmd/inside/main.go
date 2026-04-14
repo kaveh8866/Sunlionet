@@ -4,12 +4,17 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
+	"filippo.io/age"
 	"github.com/kaveh/shadownet-agent/pkg/detector"
+	"github.com/kaveh/shadownet-agent/pkg/importctl"
 	"github.com/kaveh/shadownet-agent/pkg/llm"
 	"github.com/kaveh/shadownet-agent/pkg/policy"
 	"github.com/kaveh/shadownet-agent/pkg/profile"
@@ -25,6 +30,53 @@ func main() {
 
 	// 1. Load Encrypted Local Store
 	// profiles.enc, state.db, etc.
+	var importer *importctl.Importer
+	{
+		masterKey := os.Getenv("SHADOWNET_MASTER_KEY")
+		if len(masterKey) == 32 {
+			storePath := os.Getenv("SHADOWNET_STORE_PATH")
+			if storePath == "" {
+				home, err := os.UserHomeDir()
+				if err == nil {
+					storePath = filepath.Join(home, ".shadownet", "profiles.enc")
+				} else {
+					storePath = filepath.Join(".", "profiles.enc")
+				}
+			}
+
+			store, err := profile.NewStore(storePath, masterKey)
+			if err != nil {
+				log.Printf("Signal import disabled: failed to init local store: %v", err)
+			} else {
+				signerPubB64URL := os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+				ageIdentityStr := os.Getenv("SHADOWNET_AGE_IDENTITY")
+
+				if signerPubB64URL == "" || ageIdentityStr == "" {
+					log.Printf("Signal import disabled: missing SHADOWNET_TRUSTED_SIGNER_PUB_B64URL or SHADOWNET_AGE_IDENTITY")
+				} else {
+					pubBytes, err := base64.RawURLEncoding.DecodeString(signerPubB64URL)
+					if err != nil {
+						log.Printf("Signal import disabled: invalid SHADOWNET_TRUSTED_SIGNER_PUB_B64URL: %v", err)
+					} else if len(pubBytes) != ed25519.PublicKeySize {
+						log.Printf("Signal import disabled: invalid signer public key size: %d", len(pubBytes))
+					} else {
+						ageIdentity, err := age.ParseX25519Identity(ageIdentityStr)
+						if err != nil {
+							log.Printf("Signal import disabled: invalid SHADOWNET_AGE_IDENTITY: %v", err)
+						} else {
+							importer = importctl.NewImporter(store, []ed25519.PublicKey{ed25519.PublicKey(pubBytes)}, ageIdentity)
+							log.Printf("Signal import enabled: store=%s", storePath)
+						}
+					}
+				}
+			}
+		} else if masterKey != "" {
+			log.Printf("Signal import disabled: SHADOWNET_MASTER_KEY must be exactly 32 bytes")
+		} else {
+			log.Printf("Signal import disabled: missing SHADOWNET_MASTER_KEY")
+		}
+	}
+
 	activeProfile := profile.Profile{
 		ID:     "reality_01_a",
 		Family: profile.FamilyReality,
@@ -78,10 +130,21 @@ func main() {
 	recentEvents := []detector.Event{}
 	for {
 		select {
-		case bundlePayload := <-rx.BundleChan:
-			log.Printf("Supervisor: Processing new bundle! Revocations: %d, New Profiles: %d",
-				len(bundlePayload.Revocations), len(bundlePayload.Profiles))
-			// Apply new profiles logic...
+		case uri := <-rx.URIChan:
+			if importer == nil {
+				log.Printf("Supervisor: Received bundle URI but Signal import is disabled")
+				continue
+			}
+			payload, err := importer.ParseURI(uri)
+			if err != nil {
+				log.Printf("Supervisor: Rejected bundle: %v", err)
+				continue
+			}
+			if err := importer.ProcessAndStore(payload); err != nil {
+				log.Printf("Supervisor: Failed to store bundle payload: %v", err)
+				continue
+			}
+			log.Printf("Supervisor: Imported bundle. Revocations: %d, New Profiles: %d", len(payload.Revocations), len(payload.Profiles))
 
 		case ev := <-eventChan:
 			log.Printf("Detected Event: [%s] %s\n", ev.Severity, ev.Type)

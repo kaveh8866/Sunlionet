@@ -2,44 +2,38 @@
 
 ShadowNet uses signed bundles to move seed profiles from Outside → Inside without a central API.
 
-## v1 (current: signed, unencrypted)
+## v2 (signed + encrypted payload)
 
-Implemented by [import.go](../pkg/importctl/import.go).
+Implemented by [crypto.go](../pkg/bundle/crypto.go) and consumed by [import.go](../pkg/importctl/import.go).
 
 Wire format:
 
 ```
-snb://v1:<base64url(payload_json)>.<base64url(ed25519_signature)>
+snb://v2:<base64url(wrapper_json)>
 ```
 
-Payload JSON (current):
+Where `wrapper_json` is:
 
 ```json
 {
-  "ts": 1713100000,
-  "profiles": [],
-  "revoked_ids": []
+  "header": {
+    "magic": "SNB1",
+    "bundle_id": "bndl_...",
+    "publisher_key_id": "key-1",
+    "recipient_key_id": "default",
+    "seq": 1,
+    "created_at": 1713100000,
+    "expires_at": 1713700000,
+    "cipher": "age-x25519",
+    "signature": "base64url(ed25519_signature)"
+  },
+  "ciphertext": "base64url(age_encrypted_payload_bytes)"
 }
 ```
 
-Security properties:
+Signature input:
 
-- Integrity/authenticity: Ed25519 signature verified against a trusted public-key list.
-- Confidentiality: none (payload is readable to anyone who sees the message).
-
-## v2 (recommended: signed + encrypted payload)
-
-The repository contains a richer bundle schema in [bundle.go](../pkg/bundle/bundle.go) intended for encrypted distribution. v2 should be used for production deployments because it provides confidentiality in addition to authenticity.
-
-Recommended wire format:
-
-```
-snb://v2:<base64url(header_json)>.<base64url(ciphertext)>.<base64url(ed25519_signature)>
-```
-
-- `header_json` contains authenticated metadata (versioning, key IDs, timestamps, cipher suite).
-- `ciphertext` is an encrypted `BundlePayload` JSON.
-- `signature` is Ed25519 over `header_json || "." || ciphertext`.
+- `ed25519_signature = Sign( MarshalJSON(header_without_signature) || ciphertext_bytes )`
 
 Bundle payload schema:
 
@@ -60,9 +54,6 @@ Bundle payload schema:
 
 Cipher suite recommendation:
 
-- X25519 + AEAD (e.g., ChaCha20-Poly1305)
-- One-time sender ephemeral key per bundle
+- age X25519 recipient encryption
 - Short expiry (`expires_at`) to reduce replay value
-
-Inside must treat all failures as fail-closed: reject unknown versions, expired bundles, invalid signatures, and decryption failures.
 

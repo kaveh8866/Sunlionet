@@ -7,7 +7,7 @@
 
 ## پیش‌نیازها
 
-- Go نسخه 1.21 به بالا
+- Go نسخه 1.22 به بالا
 
 ## بیلد
 
@@ -32,3 +32,6 @@ go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
   ./scripts/run_tests.sh
   ```
 
+## نکات اندروید
+
+در حال حاضر این مخزن یک APK آمادهٔ تولید ارائه نمی‌دهد. برای توسعه می‌توانید نسخهٔ Inside را در Termux (به‌صورت CLI) اجرا کنید و پروژهٔ «VPN/Foreground Service» را به‌صورت یک پروژهٔ جداگانهٔ اندرویدی نگه دارید.
