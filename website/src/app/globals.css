@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --muted: #475569;
+  --muted-foreground: #64748b;
+  --border: rgba(15, 23, 42, 0.12);
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --ring: rgba(109, 40, 217, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #070a12;
+    --foreground: #e6eaf2;
+    --card: rgba(11, 16, 32, 0.7);
+    --card-foreground: #e6eaf2;
+    --muted: #9aa4b2;
+    --muted-foreground: #aab4c2;
+    --border: rgba(148, 163, 184, 0.16);
+    --primary: #8b5cf6;
+    --primary-foreground: #070a12;
+    --ring: rgba(139, 92, 246, 0.35);
+  }
+}
+
+html.dark {
+  --background: #070a12;
+  --foreground: #e6eaf2;
+  --card: rgba(11, 16, 32, 0.7);
+  --card-foreground: #e6eaf2;
+  --muted: #9aa4b2;
+  --muted-foreground: #aab4c2;
+  --border: rgba(148, 163, 184, 0.16);
+  --primary: #8b5cf6;
+  --primary-foreground: #070a12;
+  --ring: rgba(139, 92, 246, 0.35);
+}
+
+html.light {
+  --background: #ffffff;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --muted: #475569;
+  --muted-foreground: #64748b;
+  --border: rgba(15, 23, 42, 0.12);
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --ring: rgba(109, 40, 217, 0.35);
+}
+
+body {
+  background: radial-gradient(900px circle at 18% 12%, rgba(109, 40, 217, 0.12), transparent 45%),
+    radial-gradient(900px circle at 82% 18%, rgba(14, 165, 233, 0.10), transparent 44%), var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.docs-prose {
+  color: var(--muted);
+  line-height: 1.75;
+  display: grid;
+  gap: 1rem;
+}
+
+.docs-prose p {
+  margin: 0;
+}
+
+.docs-prose ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.docs-prose li {
+  margin: 0;
+}
+
+.docs-prose a {
+  color: color-mix(in oklab, var(--primary) 70%, white);
+  text-decoration: none;
+}
+
+.docs-prose a:hover {
+  color: var(--primary);
+}
+
+.docs-prose code {
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+  color: var(--foreground);
+}
