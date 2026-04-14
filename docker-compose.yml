@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  singbox-reality:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: sb-reality
+    command: run -c /etc/sing-box/config.json
+    volumes:
+      - ./tests/singbox_servers/reality_server.json:/etc/sing-box/config.json:ro
+    ports:
+      - "8443:8443"
+    restart: unless-stopped
+
+  singbox-hysteria2:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: sb-hy2
+    command: run -c /etc/sing-box/config.json
+    volumes:
+      - ./tests/singbox_servers/hysteria2_server.json:/etc/sing-box/config.json:ro
+    ports:
+      - "9443:9443/udp"
+    restart: unless-stopped

@@ -1,0 +1,111 @@
+package profile
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+)
+
+// Store represents an encrypted local store for seed configs.
+// Real implementations would use SQLCipher (SQLite) or `age`.
+// This mock uses AES-GCM for encrypted JSON storage on disk.
+type Store struct {
+	dbPath string
+	key    []byte
+	mu     sync.RWMutex
+}
+
+func NewStore(dbPath string, masterKey string) (*Store, error) {
+	if len(masterKey) != 32 {
+		return nil, errors.New("masterKey must be 32 bytes for AES-256")
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
+		return nil, err
+	}
+
+	return &Store{
+		dbPath: dbPath,
+		key:    []byte(masterKey),
+	}, nil
+}
+
+// Save encrypts and writes a bundle of profiles to the store
+func (s *Store) Save(profiles []Profile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	plaintext, err := json.Marshal(profiles)
+	if err != nil {
+		return err
+	}
+
+	block, err := aes.NewCipher(s.key)
+	if err != nil {
+		return err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+
+	// Write encrypted bundle to disk (no plaintext stored)
+	return os.WriteFile(s.dbPath, ciphertext, 0600)
+}
+
+// Load reads and decrypts the stored profiles
+func (s *Store) Load() ([]Profile, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	ciphertext, err := os.ReadFile(s.dbPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []Profile{}, nil // Empty store
+		}
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(s.key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) < gcm.NonceSize() {
+		return nil, errors.New("malformed ciphertext")
+	}
+
+	nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decryption failed (wrong key or corrupted data): %w", err)
+	}
+
+	var profiles []Profile
+	if err := json.Unmarshal(plaintext, &profiles); err != nil {
+		return nil, err
+	}
+
+	return profiles, nil
+}

@@ -1,0 +1,36 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 9443,
+      "users": [
+        {
+          "password": "my_secure_password"
+        }
+      ],
+      "obfs": {
+        "type": "salamander",
+        "password": "salamander_password"
+      },
+      "tls": {
+        "enabled": true,
+        "alpn": [
+          "h3"
+        ],
+        "certificate_path": "/etc/sing-box/cert.pem",
+        "key_path": "/etc/sing-box/key.pem"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}

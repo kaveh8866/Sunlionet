@@ -1,0 +1,90 @@
+package policy
+
+import (
+	"github.com/kaveh/shadownet-agent/pkg/detector"
+	"github.com/kaveh/shadownet-agent/pkg/profile"
+)
+
+type ActionType string
+
+const (
+	ActionKeep              ActionType = "KEEP"
+	ActionSwitchProfile     ActionType = "SWITCH_PROFILE"
+	ActionSwitchFamily      ActionType = "SWITCH_FAMILY"
+	ActionEnterEmergencyDNS ActionType = "ENTER_EMERGENCY_DNS"
+	ActionReduceProbes      ActionType = "REDUCE_PROBES"
+	ActionRollbackLastGood  ActionType = "ROLLBACK_LAST_GOOD"
+	ActionInvokeLLM         ActionType = "INVOKE_LLM" // Explicit handoff
+)
+
+// Action is the output of the policy engine or LLM advisor
+type Action struct {
+	Type          ActionType `json:"action"`
+	TargetProfile string     `json:"target_profile_id,omitempty"`
+	MutationSet   string     `json:"mutation_set,omitempty"`
+	CooldownSec   int        `json:"cooldown_sec,omitempty"`
+	ReasonCode    string     `json:"reason_code,omitempty"`
+	Confidence    float64    `json:"confidence,omitempty"`
+}
+
+// Advisor interface for the bounded LLM planner
+type Advisor interface {
+	ProposeAction(
+		fingerprint string,
+		currentProfile profile.Profile,
+		candidates []profile.Profile,
+		recentEvents []detector.Event,
+	) (Action, error)
+}
+
+// Engine evaluates events deterministically before calling the LLM
+type Engine struct {
+	// Active state and threshold constraints would go here
+	MaxBurstFailures int
+}
+
+// Evaluate applies hardcoded deterministic rules
+func (e *Engine) Evaluate(events []detector.Event, activeProfile profile.Profile) Action {
+	// Simple mock rule evaluation logic for V1
+
+	// If no events, we keep the profile
+	if len(events) == 0 {
+		return Action{Type: ActionKeep, ReasonCode: "stable"}
+	}
+
+	lastEvent := events[len(events)-1]
+
+	// 1. High-confidence DNS Poisoning -> Switch to secure DNS tunnel mode or rotate DNS
+	if lastEvent.Type == detector.EventDNSPoisonSuspected && lastEvent.Severity == detector.SeverityCritical {
+		return Action{
+			Type:        ActionEnterEmergencyDNS,
+			ReasonCode:  "dns_poison_critical",
+			CooldownSec: 1800,
+		}
+	}
+
+	// 2. High-confidence UDP Blocking -> Leave UDP family (Hysteria/TUIC) for TCP (Reality/ShadowTLS)
+	if lastEvent.Type == detector.EventUDPBlockSuspected && activeProfile.Capabilities.Transport == "udp" {
+		return Action{
+			Type:       ActionSwitchFamily,
+			ReasonCode: "udp_block_suspected",
+			// Target Family would be chosen by supervisor or passed explicitly
+		}
+	}
+
+	// 3. Handshake bursts -> Switch profile within same family
+	if lastEvent.Type == detector.EventHandshakeBurstFailure {
+		return Action{
+			Type:       ActionSwitchProfile,
+			ReasonCode: "burst_failures",
+			// Needs next best profile ID
+		}
+	}
+
+	// 4. Ambiguous or multi-signal cases -> Handoff to LLM advisor
+	// (e.g. SNI block + UDP block signals happening together)
+	return Action{
+		Type:       ActionInvokeLLM,
+		ReasonCode: "ambiguous_signals",
+	}
+}

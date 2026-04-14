@@ -1,0 +1,40 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "::",
+      "listen_port": 8443,
+      "users": [
+        {
+          "uuid": "b831381d-6324-4d53-ad4f-8cda48b30811",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "www.apple.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.apple.com",
+            "server_port": 443
+          },
+          "private_key": "YOUR_PRIVATE_KEY_HERE",
+          "short_id": [
+            "1234567890abcdef"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}
