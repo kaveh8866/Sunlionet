@@ -10,6 +10,9 @@ type Doc = {
 };
 
 const version = "v0.1.0";
+const repoOwner = "kaveh8866";
+const repoName = "shadownet-agent";
+const githubRawDownloads = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/website/public/downloads/${version}`;
 
 const docs: Record<string, Doc> = {
   "install-linux": {
@@ -22,8 +25,8 @@ const docs: Record<string, Doc> = {
         <div className="mt-6 grid gap-4">
           <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
             <div className="text-xs font-mono text-gray-300 whitespace-pre-wrap">
-              {`curl -LO /downloads/${version}/shadownet-inside-${version}-linux-amd64.tar.gz
-curl -LO /downloads/${version}/shadownet-inside-${version}-linux-amd64.tar.gz.sha256
+              {`curl -LO ${githubRawDownloads}/shadownet-inside-${version}-linux-amd64.tar.gz
+curl -LO ${githubRawDownloads}/shadownet-inside-${version}-linux-amd64.tar.gz.sha256
 sha256sum -c shadownet-inside-${version}-linux-amd64.tar.gz.sha256
 tar -xzf shadownet-inside-${version}-linux-amd64.tar.gz
 sudo ./install-linux.sh inside`}
@@ -51,8 +54,8 @@ sudo journalctl -u shadownet-inside -f`}
           <div className="text-xs font-mono text-gray-300 whitespace-pre-wrap">
             {`pkg update -y
 pkg install -y wget openssl-tool
-wget -O shadownet-inside /downloads/${version}/shadownet-inside-${version}-android-arm64
-wget -O shadownet-inside.sha256 /downloads/${version}/shadownet-inside-${version}-android-arm64.sha256
+wget -O shadownet-inside ${githubRawDownloads}/shadownet-inside-${version}-android-arm64
+wget -O shadownet-inside.sha256 ${githubRawDownloads}/shadownet-inside-${version}-android-arm64.sha256
 sha256sum -c shadownet-inside.sha256
 chmod +x shadownet-inside
 ./shadownet-inside`}
@@ -92,8 +95,8 @@ chmod +x shadownet-inside
         </p>
         <div className="mt-6 rounded-lg border border-gray-800 bg-gray-950 p-4">
           <div className="text-xs font-mono text-gray-300 whitespace-pre-wrap">
-            {`curl -LO /downloads/${version}/shadownet-inside-${version}-linux-arm64.tar.gz
-curl -LO /downloads/${version}/shadownet-inside-${version}-linux-arm64.tar.gz.sha256
+            {`curl -LO ${githubRawDownloads}/shadownet-inside-${version}-linux-arm64.tar.gz
+curl -LO ${githubRawDownloads}/shadownet-inside-${version}-linux-arm64.tar.gz.sha256
 sha256sum -c shadownet-inside-${version}-linux-arm64.tar.gz.sha256
 tar -xzf shadownet-inside-${version}-linux-arm64.tar.gz
 sudo ./install-linux.sh inside`}
@@ -221,8 +224,9 @@ export function generateStaticParams() {
   return Object.keys(docs).map((slug) => ({ slug }));
 }
 
-export default function DocPage({ params }: { params: { slug: string } }) {
-  const doc = docs[params.slug];
+export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const doc = docs[slug];
   if (!doc) {
     notFound();
   }
