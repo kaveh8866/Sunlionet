@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,5 +119,65 @@ func TestProposeAction_Timeout(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatalf("Expected timeout error, got nil")
+	}
+}
+
+func TestProposeAction_InvalidJSON(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(LlamaResponse{Content: "not-json"})
+	}))
+	defer mockServer.Close()
+
+	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+	client.httpClient.Timeout = 500 * time.Millisecond
+
+	_, err := client.ProposeAction(
+		"fp",
+		profile.Profile{ID: "p1"},
+		[]profile.Profile{{ID: "p2"}},
+		[]detector.Event{},
+	)
+	if err == nil {
+		t.Fatalf("expected parse error, got nil")
+	}
+}
+
+func TestProposeAction_DoesNotLeakSecretsInPrompt(t *testing.T) {
+	const secret = "SHADOWNET_MASTER_KEY=super-secret-material"
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req LlamaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if strings.Contains(req.Prompt, secret) {
+			t.Fatalf("llm prompt leaked secret material")
+		}
+
+		mockResp := LlamaResponse{
+			Content: `{"protocol":"reality","parameters":{"sni":"www.apple.com","utls":"chrome","port":443},"rotation_interval_sec":1800,"enable_bt_mesh":false,"explanation":"ok"`,
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(mockResp)
+	}))
+	defer mockServer.Close()
+
+	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+
+	_, err := client.ProposeAction(
+		secret,
+		profile.Profile{
+			ID: "p1",
+			Endpoint: profile.Endpoint{
+				Host: "very-sensitive.example.com",
+				Port: 443,
+			},
+		},
+		[]profile.Profile{{ID: "p2"}},
+		[]detector.Event{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

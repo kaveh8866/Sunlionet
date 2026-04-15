@@ -82,6 +82,16 @@ Inside devices can be seized. Design goals:
 
 For the detailed threat model and dual-agent design, see `/docs`.
 
+## Documentation
+
+- [Core Modules Architecture](docs/core-modules.md) (Detector, Policy Engine, Secure Store)
+- [Website & Docs Specification](docs/website-spec.md)
+- [Architecture Details](docs/architecture.md)
+- [Bundle Format](docs/bundle-format.md)
+- [Signal Integration](docs/signal.md)
+- [Installation Guide](docs/install.md) (English)
+- [راهنمای نصب (Persian)](docs/fa/install.md)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

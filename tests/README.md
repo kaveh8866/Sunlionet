@@ -50,3 +50,25 @@ go run cmd/inside/main.go
 6. `generator.go` creates the new config pointing to the UDP proxy.
 7. `sbctl` hot-reloads `sing-box` with the new config.
 8. The Mock DPI proxy will now intercept the UDP traffic and randomly drop packets, testing the UDP fallback.
+
+## Mobile Wrapper Tests (Android/iOS)
+
+This repository ships the portable core agent (detector/policy/LLM advisor/secure store) and a CLI entrypoint. Production
+mobile wrappers (Android VpnService / iOS Packet Tunnel Provider) should be built as separate projects. When those wrappers
+exist, keep the tests focused on correctness, privacy, and platform compliance:
+
+1. **Background constraints**
+   - Verify the VPN service/extension remains connected under screen-off + Doze/background pressure.
+   - Verify periodic health checks and profile rotation still run under OS scheduling limits.
+
+2. **Visibility expectations**
+   - Assert OS-controlled VPN indicators and Settings entries are present (do not attempt to bypass or suppress them).
+   - Ensure user-consent flows are clear and repeatable (Android VPN consent, iOS VPN configuration permission).
+
+3. **Privacy checks**
+   - Confirm local storage is encrypted-at-rest and contains no plaintext endpoints/seeds (see Go store tests).
+   - Confirm log output is bounded and does not include domains or secrets.
+
+4. **Performance/battery**
+   - Measure baseline CPU wakeups and memory in steady-state tunneling.
+   - Validate the core stays within budget when the mobile wrapper is running the VPN pipeline.

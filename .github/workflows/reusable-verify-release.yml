@@ -1,0 +1,123 @@
+name: reusable-verify-release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+      - name: Run tests
+        run: go test ./...
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shadownet-release-${{ inputs.version }}
+          path: dist
+
+      - name: Compute checksums + release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          cd dist
+
+          rm -f checksums.sha256 checksums.sha512 release-manifest.json
+          touch checksums.sha256 checksums.sha512
+
+          files="$(ls -1 | grep -vE '^(checksums\.sha(256|512)|release-manifest\.json)$')"
+          if [ -z "$files" ]; then
+            echo "no artifacts found in dist/"
+            exit 1
+          fi
+
+          for f in $files; do
+            sha256sum "$f" > "${f}.sha256"
+            sha512sum "$f" > "${f}.sha512"
+            cat "${f}.sha256" >> checksums.sha256
+            cat "${f}.sha512" >> checksums.sha512
+          done
+
+          python3 - <<'PY'
+          import glob, json, os
+          version = os.environ["VERSION"]
+          artifacts = []
+          for path in sorted([p for p in glob.glob("*") if os.path.isfile(p)]):
+            if path.endswith((".sha256", ".sha512", ".sig", ".pem")):
+              continue
+            if path in ("checksums.sha256", "checksums.sha512", "release-manifest.json"):
+              continue
+            sha256_path = path + ".sha256"
+            sha512_path = path + ".sha512"
+            sha256 = open(sha256_path, "r", encoding="utf-8").read().split()[0] if os.path.exists(sha256_path) else None
+            sha512 = open(sha512_path, "r", encoding="utf-8").read().split()[0] if os.path.exists(sha512_path) else None
+            artifacts.append(
+              {
+                "name": path,
+                "sha256": sha256,
+                "sha512": sha512,
+                "size": os.path.getsize(path),
+              }
+            )
+          manifest = {
+            "schema": "shadownet.release-manifest.v1",
+            "version": version,
+            "artifacts": artifacts,
+          }
+          with open("release-manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+          PY
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign artifacts (keyless)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          export COSIGN_EXPERIMENTAL=1
+
+          to_sign="$(ls -1 | grep -vE '\\.(sig|pem)$')"
+          for f in $to_sign; do
+            cosign sign-blob --yes --output-signature "${f}.sig" --output-certificate "${f}.pem" "$f"
+          done
+
+      - name: Verify signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          export COSIGN_EXPERIMENTAL=1
+
+          to_verify="$(ls -1 | grep -vE '\\.(sig|pem)$')"
+          for f in $to_verify; do
+            cosign verify-blob --certificate "${f}.pem" --signature "${f}.sig" "$f" >/dev/null
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shadownet-release-verified-${{ inputs.version }}
+          path: dist/*

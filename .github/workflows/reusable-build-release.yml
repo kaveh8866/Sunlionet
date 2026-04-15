@@ -1,0 +1,191 @@
+name: reusable-build-release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+        type: string
+      enable_packages:
+        description: "Build .deb/.rpm packages (requires extra tooling)"
+        required: false
+        type: boolean
+        default: false
+      enable_android_apk:
+        description: "Build Android APKs (requires android/ project)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ inputs.version }}"
+          DIST="dist"
+          rm -rf "$DIST"
+          mkdir -p "$DIST"
+
+          cat > "$DIST/install-linux.sh" <<'SH'
+          #!/usr/bin/env sh
+          set -eu
+          mode="${1:-inside}"
+          bin="shadownet-${mode}"
+          src="./${bin}"
+          dst="/usr/local/bin/${bin}"
+          install -m 0755 "$src" "$dst"
+          mkdir -p /etc/shadownet
+          if [ -f "./${bin}.service" ]; then
+            install -m 0644 "./${bin}.service" "/etc/systemd/system/${bin}.service"
+            systemctl daemon-reload || true
+          fi
+          printf "%s\n" "installed ${dst}"
+          SH
+          chmod +x "$DIST/install-linux.sh"
+
+          cat > "$DIST/shadownet-inside.service" <<'UNIT'
+          [Unit]
+          Description=ShadowNet Agent (Inside)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          EnvironmentFile=-/etc/shadownet/inside.env
+          ExecStart=/usr/local/bin/shadownet-inside
+          Restart=always
+          RestartSec=2
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          cat > "$DIST/shadownet-outside.service" <<'UNIT'
+          [Unit]
+          Description=ShadowNet Agent (Outside)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          EnvironmentFile=-/etc/shadownet/outside.env
+          ExecStart=/usr/local/bin/shadownet-outside
+          Restart=always
+          RestartSec=2
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          build_bin() {
+            local mode="$1"
+            local tags="$2"
+            local goos="$3"
+            local goarch="$4"
+            local out="$5"
+            local pkg="./cmd/${mode}"
+
+            env GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+              go build -trimpath -tags "$tags" -ldflags "-s -w" -o "$out" "$pkg"
+          }
+
+          package_targz() {
+            local base="$1"
+            local work="$2"
+            tar -czf "${DIST}/${base}.tar.gz" -C "$work" .
+          }
+
+          package_zip() {
+            local base="$1"
+            local work="$2"
+            (cd "$work" && zip -qr "../../${DIST}/${base}.zip" .)
+          }
+
+          build_bundle() {
+            local mode="$1"
+            local tags="$2"
+            local goos="$3"
+            local goarch="$4"
+            local format="$5"
+
+            local base="shadownet-${mode}-${VERSION}-${goos}-${goarch}"
+            local work
+            work="$(mktemp -d)"
+
+            local bin="shadownet-${mode}"
+            if [ "$goos" = "windows" ]; then
+              bin="${bin}.exe"
+            fi
+
+            build_bin "$mode" "$tags" "$goos" "$goarch" "${work}/${bin}"
+
+            cp -f "${DIST}/install-linux.sh" "${work}/install-linux.sh"
+            if [ "$mode" = "inside" ]; then
+              cp -f "${DIST}/shadownet-inside.service" "${work}/shadownet-inside.service"
+            fi
+            if [ "$mode" = "outside" ]; then
+              cp -f "${DIST}/shadownet-outside.service" "${work}/shadownet-outside.service"
+            fi
+
+            if [ "$format" = "targz" ]; then
+              package_targz "$base" "$work"
+            else
+              package_zip "$base" "$work"
+            fi
+
+            rm -rf "$work"
+          }
+
+          build_raw() {
+            local mode="$1"
+            local tags="$2"
+            local goos="$3"
+            local goarch="$4"
+            local out="${DIST}/shadownet-${mode}-${VERSION}-${goos}-${goarch}"
+            build_bin "$mode" "$tags" "$goos" "$goarch" "$out"
+          }
+
+          build_bundle inside inside linux amd64 targz
+          build_bundle inside inside linux arm64 targz
+          build_bundle inside inside darwin arm64 targz
+          build_bundle inside inside windows amd64 zip
+          build_raw inside inside android arm64
+
+          build_bundle outside outside linux amd64 targz
+          build_bundle outside outside linux arm64 targz
+          build_bundle outside outside darwin arm64 targz
+          build_bundle outside outside windows amd64 zip
+
+          cp -f "${DIST}/shadownet-inside-${VERSION}-linux-arm64" "${DIST}/shadownet-inside-${VERSION}-raspberrypi-arm64"
+
+          git archive --format=tar.gz -o "${DIST}/shadownet-agent-${VERSION}-source.tar.gz" HEAD
+
+          if [ "${{ inputs.enable_packages }}" = "true" ]; then
+            echo "enable_packages=true set, but package builds are not implemented yet."
+            exit 1
+          fi
+
+          if [ "${{ inputs.enable_android_apk }}" = "true" ]; then
+            echo "enable_android_apk=true set, but android/ project is not implemented yet."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shadownet-release-${{ inputs.version }}
+          path: dist/*

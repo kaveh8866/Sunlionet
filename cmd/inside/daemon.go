@@ -1,3 +1,6 @@
+//go:build inside && daemon
+// +build inside,daemon
+
 package main
 
 import (

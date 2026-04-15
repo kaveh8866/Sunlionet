@@ -161,19 +161,18 @@ func (rm *RotationManager) getHealthyCandidates() ([]profile.Profile, error) {
 	var healthy []profile.Profile
 	now := time.Now()
 
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
+	rm.mu.Lock()
 	for _, p := range allProfiles {
-		if expiry, blacklisted := rm.blacklist[p.ID]; blacklisted {
+		expiry, blacklisted := rm.blacklist[p.ID]
+		if blacklisted {
 			if now.Before(expiry) {
-				continue // Skip blacklisted
+				continue
 			}
-			// Expiry passed, remove from blacklist
 			delete(rm.blacklist, p.ID)
 		}
 		healthy = append(healthy, p)
 	}
+	rm.mu.Unlock()
 
 	return healthy, nil
 }

@@ -5,9 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_heavy_tests:
+        description: "Run simulation/performance stress tests"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  test:
+  go-test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -31,3 +38,34 @@ jobs:
             exit 1
           fi
 
+  website:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: website/package-lock.json
+      - name: Install deps
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build static export
+        run: npm run build
+
+  heavy-sim-perf:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_heavy_tests }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run censorship matrix
+        run: go test ./tests/simulation -run TestCensorshipSimulationScenarioMatrix_64Scenarios -count=1
+      - name: Run latency and stability gates
+        run: go test ./tests/performance -run "TestDecisionLatencyP95_Under5s|TestRotationStability_1000Switches_NoPanic" -count=1

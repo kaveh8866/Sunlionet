@@ -1,6 +1,9 @@
 package policy
 
 import (
+	"sort"
+	"time"
+
 	"github.com/kaveh/shadownet-agent/pkg/detector"
 	"github.com/kaveh/shadownet-agent/pkg/profile"
 )
@@ -15,6 +18,15 @@ const (
 	ActionReduceProbes      ActionType = "REDUCE_PROBES"
 	ActionRollbackLastGood  ActionType = "ROLLBACK_LAST_GOOD"
 	ActionInvokeLLM         ActionType = "INVOKE_LLM" // Explicit handoff
+)
+
+const (
+	scoreScale             = 100.0
+	latencyPenalty         = 10.0
+	recentSuccessBonus     = 5.0
+	recentSuccessWindowSec = int64(3600)
+	highLatencyMs          = 1000
+	lowLatencyMs           = 300
 )
 
 // Action is the output of the policy engine or LLM advisor
@@ -39,8 +51,45 @@ type Advisor interface {
 
 // Engine evaluates events deterministically before calling the LLM
 type Engine struct {
-	// Active state and threshold constraints would go here
 	MaxBurstFailures int
+}
+
+// RankProfiles sorts profiles by health score, prioritizing high-success, low-cooldown profiles
+func (e *Engine) RankProfiles(profiles []profile.Profile) []profile.Profile {
+	// Filter out profiles currently in cooldown
+	now := time.Now().Unix()
+	var available []profile.Profile
+	for _, p := range profiles {
+		if p.Health.CooldownUntil > now {
+			continue
+		}
+
+		// Calculate dynamic health score
+		// Base score is EWMA of success rate (0.0 to 1.0)
+		score := p.Health.SuccessEWMA * scoreScale
+
+		// Penalize high handshake latency
+		if p.Health.MedianHandshakeMs > highLatencyMs {
+			score -= latencyPenalty
+		} else if p.Health.MedianHandshakeMs < lowLatencyMs && p.Health.MedianHandshakeMs > 0 {
+			score += latencyPenalty
+		}
+
+		// Reward recently successful profiles
+		if now-p.Health.LastOkAt < recentSuccessWindowSec {
+			score += recentSuccessBonus
+		}
+
+		p.Health.Score = score
+		available = append(available, p)
+	}
+
+	// Sort descending by score
+	sort.Slice(available, func(i, j int) bool {
+		return available[i].Health.Score > available[j].Health.Score
+	})
+
+	return available
 }
 
 // Evaluate applies hardcoded deterministic rules

@@ -3,10 +3,16 @@ package mesh
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
 	"golang.org/x/crypto/nacl/box"
+)
+
+var (
+	errDecrypt = errors.New("mesh decrypt failed")
+	errDecode  = errors.New("mesh payload decode failed")
 )
 
 // MeshMessage represents an encrypted payload exchanged over Bluetooth
@@ -108,6 +114,31 @@ func (m *MeshManager) EncryptOffer(offer ProxyOffer, recipientPub *[32]byte) (Me
 		Ciphertext: ciphertext,
 		SenderPub:  m.pubKey,
 	}, nil
+}
+
+// DecryptOffer decapsulates a mesh message and returns the plaintext offer.
+func (m *MeshManager) DecryptOffer(msg MeshMessage) (ProxyOffer, error) {
+	plaintext, ok := box.Open(nil, msg.Ciphertext, &msg.Nonce, &msg.SenderPub, &m.privKey)
+	if !ok {
+		return ProxyOffer{}, errDecrypt
+	}
+
+	var offer ProxyOffer
+	if err := json.Unmarshal(plaintext, &offer); err != nil {
+		return ProxyOffer{}, errDecode
+	}
+
+	return offer, nil
+}
+
+// ForwardMessage decrypts, increments hop count, and re-encrypts for the next hop.
+func (m *MeshManager) ForwardMessage(msg MeshMessage, nextHopPub *[32]byte) (MeshMessage, error) {
+	offer, err := m.DecryptOffer(msg)
+	if err != nil {
+		return MeshMessage{}, err
+	}
+	offer.HopCount++
+	return m.EncryptOffer(offer, nextHopPub)
 }
 
 // handleIncomingMessage decrypts and parses peer offers

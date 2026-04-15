@@ -13,13 +13,46 @@ import (
 	"sync"
 )
 
-// Store represents an encrypted local store for seed configs.
+// Store represents an encrypted local store for seed configs and recent events.
 // Real implementations would use SQLCipher (SQLite) or `age`.
 // This mock uses AES-GCM for encrypted JSON storage on disk.
 type Store struct {
 	dbPath string
 	key    []byte
 	mu     sync.RWMutex
+}
+
+// BoundedEventBuffer holds the last N events (in-memory or serialized)
+type BoundedEventBuffer struct {
+	Events []interface{} `json:"events"` // Using interface{} or detector.Event
+	Max    int           `json:"max"`
+}
+
+// WipeOnSuspicion securely deletes the local store and keys
+func (s *Store) WipeOnSuspicion() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Overwrite file with random data before deleting
+	if info, err := os.Stat(s.dbPath); err == nil {
+		buf := make([]byte, info.Size())
+		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
+			return err
+		}
+		if err := os.WriteFile(s.dbPath, buf, 0600); err != nil {
+			return err
+		}
+	}
+
+	// Zero out key in memory
+	for i := range s.key {
+		s.key[i] = 0
+	}
+
+	if err := os.Remove(s.dbPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func NewStore(dbPath string, masterKey string) (*Store, error) {

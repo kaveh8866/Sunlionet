@@ -23,48 +23,91 @@ type PlatformCard = {
   items: DownloadItem[];
 };
 
-const version = "v0.1.0";
-const base = `/downloads/${version}`;
 const repoOwner = "kaveh8866";
 const repoName = "shadownet-agent";
-const githubBlobBase = `https://github.com/${repoOwner}/${repoName}/blob/main/website/public`;
-const githubRawBase = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/website/public`;
+const githubRepo = `https://github.com/${repoOwner}/${repoName}`;
+const githubApiBase = `https://api.github.com/repos/${repoOwner}/${repoName}`;
+const defaultVersion = "v0.1.0";
 
-function fileUrl(file: string) {
-  return `${base}/${file}`;
+type GitHubReleaseAsset = {
+  name: string;
+  browser_download_url: string;
+  size: number;
+};
+
+type GitHubRelease = {
+  tag_name: string;
+  html_url: string;
+  assets: GitHubReleaseAsset[];
+};
+
+type ReleaseInfo = {
+  tag: string;
+  htmlUrl: string;
+  assets: Record<string, { url: string; size: number }>;
+};
+
+function githubRawPublicUrl(version: string, file: string) {
+  return `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/website/public/downloads/${version}/${file}`;
 }
 
-function shaUrl(file: string) {
-  return `${base}/${file}.sha256`;
+function githubSourceBrowseUrl(version: string, file: string) {
+  return `${githubRepo}/blob/main/website/public/downloads/${version}/${file}`;
 }
 
-function githubBlobUrl(publicPath: string) {
-  return `${githubBlobBase}${publicPath}`;
+function toAssetsMap(assets: GitHubReleaseAsset[]): ReleaseInfo["assets"] {
+  return Object.fromEntries(assets.map((a) => [a.name, { url: a.browser_download_url, size: a.size }]));
 }
 
-function githubRawUrl(publicPath: string) {
-  return `${githubRawBase}${publicPath}`;
+async function fetchReleaseInfo(tag: "latest" | string): Promise<ReleaseInfo | null> {
+  try {
+    const url = tag === "latest" ? `${githubApiBase}/releases/latest` : `${githubApiBase}/releases/tags/${tag}`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return null;
+    const json = (await r.json()) as GitHubRelease;
+    return { tag: json.tag_name, htmlUrl: json.html_url, assets: toAssetsMap(json.assets) };
+  } catch {
+    return null;
+  }
 }
 
-function rawFileUrl(file: string) {
-  return githubRawUrl(fileUrl(file));
+async function fetchRecentReleaseTags(limit: number): Promise<string[]> {
+  try {
+    const r = await fetch(`${githubApiBase}/releases?per_page=${limit}`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const releases = (await r.json()) as GitHubRelease[];
+    return releases.map((rel) => rel.tag_name).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
-function rawShaUrl(file: string) {
-  return githubRawUrl(shaUrl(file));
+function fileUrl(release: ReleaseInfo | null, version: string, file: string) {
+  return release?.assets[file]?.url ?? githubRawPublicUrl(version, file);
 }
 
-function recommendedFor(os: DetectedOS, role: Role): DownloadItem {
+function sha256Url(release: ReleaseInfo | null, version: string, file: string) {
+  const shaFile = `${file}.sha256`;
+  return release?.assets[shaFile]?.url ?? githubRawPublicUrl(version, shaFile);
+}
+
+function recommendedFor(
+  os: DetectedOS,
+  role: Role,
+  version: string,
+  getFileUrl: (file: string) => string,
+  getSha256Url: (file: string) => string,
+): DownloadItem {
   if (os === "android") {
     return {
       id: "android-termux-arm64",
       title: "Android (Termux) — arm64",
       description: "Run ShadowNet-Inside as a CLI binary in Termux (development).",
       file: `shadownet-inside-${version}-android-arm64`,
-      sha256Url: shaUrl(`shadownet-inside-${version}-android-arm64`),
-      installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${rawFileUrl(
+      sha256Url: getSha256Url(`shadownet-inside-${version}-android-arm64`),
+      installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${getFileUrl(
         `shadownet-inside-${version}-android-arm64`,
-      )} && wget -O shadownet-inside.sha256 ${rawShaUrl(`shadownet-inside-${version}-android-arm64`)} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
+      )} && wget -O shadownet-inside.sha256 ${getSha256Url(`shadownet-inside-${version}-android-arm64`)} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
       verifyCommand: `sha256sum -c shadownet-inside.sha256`,
       notes: [
         "No Play Store distribution. Sideloading/VPN wrapper is a separate Android project.",
@@ -80,8 +123,8 @@ function recommendedFor(os: DetectedOS, role: Role): DownloadItem {
       title: `Windows — ${role === "inside" ? "Inside" : "Outside"} (amd64)`,
       description: role === "inside" ? "Inside for restricted networks." : "Outside for supporters to curate and send bundles.",
       file,
-      sha256Url: shaUrl(file),
-      installCommand: `curl -LO ${rawFileUrl(file)} && curl -LO ${rawShaUrl(file)} && certutil -hashfile ${file} SHA256`,
+      sha256Url: getSha256Url(file),
+      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && certutil -hashfile ${file} SHA256`,
       verifyCommand: `Compare with ${file}.sha256`,
       notes: ["Extract zip, run the binary. For Inside, provide SHADOWNET_MASTER_KEY env var."],
     };
@@ -94,8 +137,8 @@ function recommendedFor(os: DetectedOS, role: Role): DownloadItem {
       title: `macOS — ${role === "inside" ? "Inside" : "Outside"} (arm64)`,
       description: "Apple Silicon build.",
       file,
-      sha256Url: shaUrl(file),
-      installCommand: `curl -LO ${rawFileUrl(file)} && curl -LO ${rawShaUrl(file)} && shasum -a 256 -c ${file}.sha256 && tar -xzf ${file}`,
+      sha256Url: getSha256Url(file),
+      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && shasum -a 256 -c ${file}.sha256 && tar -xzf ${file}`,
       verifyCommand: `shasum -a 256 -c ${file}.sha256`,
       notes: ["For Outside, use this machine to generate and send Signal bundles."],
     };
@@ -108,8 +151,8 @@ function recommendedFor(os: DetectedOS, role: Role): DownloadItem {
       title: "Raspberry Pi — Inside (ARM64)",
       description: "Optimized ARM64 build suitable for an always-on gateway.",
       file,
-      sha256Url: shaUrl(file),
-      installCommand: `curl -LO ${rawFileUrl(file)} && curl -LO ${rawShaUrl(file)} && sha256sum -c ${file}.sha256 && tar -xzf ${file} && sudo ./install-linux.sh inside`,
+      sha256Url: getSha256Url(file),
+      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && sha256sum -c ${file}.sha256 && tar -xzf ${file} && sudo ./install-linux.sh inside`,
       verifyCommand: `sha256sum -c ${file}.sha256`,
       notes: ["Install service file included in the tarball.", "Use ethernet when possible for stability."],
     };
@@ -121,8 +164,8 @@ function recommendedFor(os: DetectedOS, role: Role): DownloadItem {
     title: `Linux — ${role === "inside" ? "Inside" : "Outside"} (amd64)`,
     description: "Static binary bundle with install script and service file.",
     file: linuxFile,
-    sha256Url: shaUrl(linuxFile),
-    installCommand: `curl -LO ${rawFileUrl(linuxFile)} && curl -LO ${rawShaUrl(linuxFile)} && sha256sum -c ${linuxFile}.sha256 && tar -xzf ${linuxFile} && sudo ./install-linux.sh ${role}`,
+    sha256Url: getSha256Url(linuxFile),
+    installCommand: `curl -LO ${getFileUrl(linuxFile)} && curl -LO ${getSha256Url(linuxFile)} && sha256sum -c ${linuxFile}.sha256 && tar -xzf ${linuxFile} && sudo ./install-linux.sh ${role}`,
     verifyCommand: `sha256sum -c ${linuxFile}.sha256`,
     notes: ["For Inside, run on the censored side. For Outside, run on stable internet and send bundles."],
   };
@@ -171,9 +214,50 @@ export function DownloadSection() {
   const [role, setRole] = useState<Role>("inside");
   const [manualOS, setManualOS] = useState<DetectedOS>("unknown");
   const [sha, setSha] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string>("latest");
+  const [release, setRelease] = useState<ReleaseInfo | null>(null);
+  const [recentVersions, setRecentVersions] = useState<string[]>([]);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
 
   const effectiveOS: DetectedOS = supportsAutoRecommendation ? detection.os : manualOS;
-  const recommended = useMemo(() => recommendedFor(effectiveOS, role), [effectiveOS, role]);
+  const effectiveVersion = selectedVersion === "latest" ? (release?.tag ?? defaultVersion) : selectedVersion;
+  const releasePageUrl =
+    selectedVersion === "latest" ? (release?.htmlUrl ?? `${githubRepo}/releases`) : `${githubRepo}/releases/tag/${effectiveVersion}`;
+
+  const recommended = useMemo(
+    () =>
+      recommendedFor(
+        effectiveOS,
+        role,
+        effectiveVersion,
+        (file) => fileUrl(release, effectiveVersion, file),
+        (file) => sha256Url(release, effectiveVersion, file),
+      ),
+    [effectiveOS, role, effectiveVersion, release],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRecentReleaseTags(8).then((tags) => {
+      if (!cancelled) setRecentVersions(tags);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReleaseError(null);
+    void fetchReleaseInfo(selectedVersion === "latest" ? "latest" : selectedVersion).then((info) => {
+      if (cancelled) return;
+      setRelease(info);
+      if (!info) setReleaseError("Could not load live release metadata. Showing fallback links.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,35 +281,47 @@ export function DownloadSection() {
             id: "linux-amd64-inside",
             title: "Inside (x86_64 static bundle)",
             description: "Tarball with install script + systemd unit.",
-            file: `shadownet-inside-${version}-linux-amd64.tar.gz`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-linux-amd64.tar.gz`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-inside-${version}-linux-amd64.tar.gz`)} && curl -LO ${rawShaUrl(
-              `shadownet-inside-${version}-linux-amd64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${version}-linux-amd64.tar.gz.sha256 && tar -xzf shadownet-inside-${version}-linux-amd64.tar.gz && sudo ./install-linux.sh inside`,
-            verifyCommand: `sha256sum -c shadownet-inside-${version}-linux-amd64.tar.gz.sha256`,
+            file: `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
+            )} && curl -LO ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
+            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz && sudo ./install-linux.sh inside`,
+            verifyCommand: `sha256sum -c shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz.sha256`,
             notes: ["Includes: install-linux.sh, shadownet-inside.service"],
           },
           {
             id: "linux-arm64-inside",
             title: "Inside (arm64 static bundle)",
             description: "ARM64 tarball for servers and single-board devices.",
-            file: `shadownet-inside-${version}-linux-arm64.tar.gz`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-linux-arm64.tar.gz`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-inside-${version}-linux-arm64.tar.gz`)} && curl -LO ${rawShaUrl(
-              `shadownet-inside-${version}-linux-arm64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${version}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${version}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
+            file: `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            )} && curl -LO ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
           },
           {
             id: "linux-deb",
             title: ".deb package",
             description: "Placeholder (will be added via CI release automation).",
-            notes: ["Planned filename: shadownet-inside_${version}_amd64.deb", "Planned: apt install ./file.deb"],
+            notes: [`Planned filename: shadownet-inside_${effectiveVersion}_amd64.deb`, "Planned: apt install ./file.deb"],
           },
           {
             id: "linux-rpm",
             title: ".rpm package",
             description: "Placeholder (will be added via CI release automation).",
-            notes: ["Planned filename: shadownet-inside-${version}-1.x86_64.rpm", "Planned: sudo rpm -i ./file.rpm"],
+            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-1.x86_64.rpm`, "Planned: sudo rpm -i ./file.rpm"],
           },
         ],
       },
@@ -237,23 +333,29 @@ export function DownloadSection() {
             id: "android-apk-universal",
             title: "Universal APK",
             description: "Placeholder (VPN wrapper app is a separate Android project).",
-            notes: ["Planned filename: shadownet-inside-${version}-universal.apk", "Sideload only."],
+            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-universal.apk`, "Sideload only."],
           },
           {
             id: "android-apk-arm64",
             title: "APK (arm64-v8a)",
             description: "Placeholder (VPN wrapper app is a separate Android project).",
-            notes: ["Planned filename: shadownet-inside-${version}-arm64-v8a.apk"],
+            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-arm64-v8a.apk`],
           },
           {
             id: "android-termux",
             title: "Termux binary (arm64)",
             description: "Ready now (CLI).",
-            file: `shadownet-inside-${version}-android-arm64`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-android-arm64`),
-            installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${rawFileUrl(
-              `shadownet-inside-${version}-android-arm64`,
-            )} && wget -O shadownet-inside.sha256 ${rawShaUrl(`shadownet-inside-${version}-android-arm64`)} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
+            file: `shadownet-inside-${effectiveVersion}-android-arm64`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-android-arm64`),
+            installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-android-arm64`,
+            )} && wget -O shadownet-inside.sha256 ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-android-arm64`,
+            )} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
           },
         ],
       },
@@ -265,11 +367,17 @@ export function DownloadSection() {
             id: "pi-arm64",
             title: "ARM64 optimized bundle",
             description: "Use the Linux ARM64 Inside tarball.",
-            file: `shadownet-inside-${version}-linux-arm64.tar.gz`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-linux-arm64.tar.gz`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-inside-${version}-linux-arm64.tar.gz`)} && curl -LO ${rawShaUrl(
-              `shadownet-inside-${version}-linux-arm64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${version}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${version}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
+            file: `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            )} && curl -LO ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
+            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
           },
         ],
       },
@@ -281,22 +389,26 @@ export function DownloadSection() {
             id: "win-inside",
             title: "Inside (amd64)",
             description: "Zip bundle for Windows.",
-            file: `shadownet-inside-${version}-windows-amd64.zip`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-windows-amd64.zip`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-inside-${version}-windows-amd64.zip`)} && curl -LO ${rawShaUrl(
-              `shadownet-inside-${version}-windows-amd64.zip`,
-            )}`,
+            file: `shadownet-inside-${effectiveVersion}-windows-amd64.zip`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-windows-amd64.zip`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-windows-amd64.zip`,
+            )} && curl -LO ${sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-windows-amd64.zip`)}`,
             notes: ["Verify SHA256 using certutil and compare to the .sha256 file."],
           },
           {
             id: "win-outside",
             title: "Outside (amd64)",
             description: "Zip bundle for Windows supporters.",
-            file: `shadownet-outside-${version}-windows-amd64.zip`,
-            sha256Url: shaUrl(`shadownet-outside-${version}-windows-amd64.zip`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-outside-${version}-windows-amd64.zip`)} && curl -LO ${rawShaUrl(
-              `shadownet-outside-${version}-windows-amd64.zip`,
-            )}`,
+            file: `shadownet-outside-${effectiveVersion}-windows-amd64.zip`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-windows-amd64.zip`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-outside-${effectiveVersion}-windows-amd64.zip`,
+            )} && curl -LO ${sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-windows-amd64.zip`)}`,
           },
         ],
       },
@@ -308,21 +420,33 @@ export function DownloadSection() {
             id: "mac-inside",
             title: "Inside (arm64)",
             description: "Apple Silicon tarball.",
-            file: `shadownet-inside-${version}-darwin-arm64.tar.gz`,
-            sha256Url: shaUrl(`shadownet-inside-${version}-darwin-arm64.tar.gz`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-inside-${version}-darwin-arm64.tar.gz`)} && curl -LO ${rawShaUrl(
-              `shadownet-inside-${version}-darwin-arm64.tar.gz`,
-            )} && shasum -a 256 -c shadownet-inside-${version}-darwin-arm64.tar.gz.sha256`,
+            file: `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            )} && curl -LO ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            )} && shasum -a 256 -c shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz.sha256`,
           },
           {
             id: "mac-outside",
             title: "Outside (arm64)",
             description: "Apple Silicon tarball.",
-            file: `shadownet-outside-${version}-darwin-arm64.tar.gz`,
-            sha256Url: shaUrl(`shadownet-outside-${version}-darwin-arm64.tar.gz`),
-            installCommand: `curl -LO ${rawFileUrl(`shadownet-outside-${version}-darwin-arm64.tar.gz`)} && curl -LO ${rawShaUrl(
-              `shadownet-outside-${version}-darwin-arm64.tar.gz`,
-            )} && shasum -a 256 -c shadownet-outside-${version}-darwin-arm64.tar.gz.sha256`,
+            file: `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            sha256Url: sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`),
+            installCommand: `curl -LO ${fileUrl(
+              release,
+              effectiveVersion,
+              `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            )} && curl -LO ${sha256Url(
+              release,
+              effectiveVersion,
+              `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
+            )} && shasum -a 256 -c shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz.sha256`,
           },
         ],
       },
@@ -339,10 +463,11 @@ export function DownloadSection() {
         ],
       },
     ],
-    [],
+    [effectiveVersion, release],
   );
 
   const [activeTab, setActiveTab] = useState<PlatformCard["key"]>("linux");
+  const versionOptions = useMemo(() => Array.from(new Set([defaultVersion, ...recentVersions])), [recentVersions]);
 
   return (
     <section id="downloads" className="w-full">
@@ -354,6 +479,18 @@ export function DownloadSection() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            value={selectedVersion}
+            onChange={(e) => setSelectedVersion(e.target.value)}
+            className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+          >
+            <option value="latest">Latest</option>
+            {versionOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
           <TabButton active={role === "inside"} onClick={() => setRole("inside")}>
             Inside
           </TabButton>
@@ -371,6 +508,13 @@ export function DownloadSection() {
               {supportsAutoRecommendation ? detection.label : manualOS === "unknown" ? "Select your OS" : manualOS.toUpperCase()}
             </div>
             <div className="mt-2 text-muted-foreground text-sm max-w-2xl">{recommended.description}</div>
+            <div className="mt-3 text-xs text-muted-foreground">
+              Release:{" "}
+              <a className="text-primary hover:opacity-90" href={releasePageUrl} target="_blank" rel="noreferrer">
+                {effectiveVersion}
+              </a>
+            </div>
+            {releaseError ? <div className="mt-2 text-xs text-amber-300">{releaseError}</div> : null}
             {recommended.file ? (
               <div className="mt-3 text-xs font-mono text-muted-foreground break-all">File: {recommended.file}</div>
             ) : null}
@@ -378,11 +522,11 @@ export function DownloadSection() {
               <div className="mt-2 text-xs">
                 <a
                   className="text-primary hover:opacity-90"
-                  href={githubBlobUrl(fileUrl(recommended.file))}
+                  href={githubSourceBrowseUrl(effectiveVersion, recommended.file)}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  View on GitHub
+                  View source on GitHub
                 </a>
               </div>
             ) : null}
@@ -407,7 +551,7 @@ export function DownloadSection() {
 
             {recommended.file ? (
               <a
-                href={fileUrl(recommended.file)}
+                href={fileUrl(release, effectiveVersion, recommended.file)}
                 className="bg-primary hover:opacity-90 text-primary-foreground px-5 py-3 rounded-lg font-semibold text-center transition-opacity shadow-[0_0_0_1px_var(--border)]"
                 download
               >
@@ -486,19 +630,19 @@ export function DownloadSection() {
                     {i.file ? (
                       <div className="mt-3 flex items-center gap-3 flex-wrap">
                         <a
-                          href={fileUrl(i.file)}
+                          href={fileUrl(release, effectiveVersion, i.file)}
                           className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
                           download
                         >
                           Download
                         </a>
                         <a
-                          href={githubBlobUrl(fileUrl(i.file))}
+                          href={githubSourceBrowseUrl(effectiveVersion, i.file)}
                           className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
                           target="_blank"
                           rel="noreferrer"
                         >
-                          GitHub
+                          Source
                         </a>
                         {i.sha256Url ? (
                           <a

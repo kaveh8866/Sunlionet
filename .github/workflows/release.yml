@@ -1,0 +1,54 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: resolve
+    uses: ./.github/workflows/reusable-build-release.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      enable_packages: false
+      enable_android_apk: false
+    secrets: inherit
+
+  verify:
+    needs: [resolve, build]
+    uses: ./.github/workflows/reusable-verify-release.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+    secrets: inherit
+
+  publish:
+    needs: [resolve, verify]
+    uses: ./.github/workflows/reusable-publish-release.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+    secrets: inherit
