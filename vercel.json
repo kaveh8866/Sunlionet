@@ -1,6 +1,11 @@
 {
-  "installCommand": "cd website && npm ci",
-  "buildCommand": "cd website && npm run build",
-  "outputDirectory": "website/out"
+  "builds": [
+    {
+      "src": "website/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "out"
+      }
+    }
+  ]
 }
-
