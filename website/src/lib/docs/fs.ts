@@ -1,4 +1,5 @@
 import path from "node:path";
+import { existsSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { cache } from "react";
 
@@ -52,8 +53,42 @@ async function walk(dir: string, root: string): Promise<DocEntry[]> {
   return out;
 }
 
+function isDocsRoot(candidate: string) {
+  try {
+    return (
+      statSync(candidate).isDirectory() &&
+      existsSync(path.join(candidate, "index.md"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function findDocsRoot() {
+  const cwd = process.cwd();
+  const directCandidates = [
+    path.join(cwd, "docs"),
+    path.join(cwd, "..", "docs"),
+    path.join(cwd, "..", "..", "docs"),
+  ];
+  for (const c of directCandidates) {
+    if (isDocsRoot(c)) return c;
+  }
+
+  let dir = cwd;
+  for (let i = 0; i < 8; i++) {
+    const c = path.join(dir, "docs");
+    if (isDocsRoot(c)) return c;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return path.join(cwd, "docs");
+}
+
 export const getDocsIndex = cache(async () => {
-  const docsRoot = path.join(process.cwd(), "..", "docs");
+  const docsRoot = findDocsRoot();
   const entries = await walk(docsRoot, docsRoot);
   entries.sort((a, b) => a.slug.join("/").localeCompare(b.slug.join("/")));
   return entries;
