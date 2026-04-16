@@ -34,7 +34,7 @@ Default data flow is Outside → Inside only:
 
 1. Outside produces a bundle containing profiles/templates/metadata.
 2. Outside signs (Ed25519) and encrypts the bundle payload.
-3. Outside sends `snb://v1:<payload>.<signature>` via Signal.
+3. Outside sends `snb://v2:<base64url(wrapper_json)>` via Signal.
 4. Inside receives, verifies, decrypts, stores, and uses the bundle.
 
 Inside may optionally send a minimal health report only if the user explicitly enables it. Default remains receive-only.

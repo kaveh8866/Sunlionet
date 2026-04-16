@@ -1,31 +1,53 @@
 import Link from "next/link";
 import { DownloadSection } from "../../components/DownloadSection";
+import { InfoCard } from "../../components/ui/InfoCard";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { getLocalReleases } from "../../lib/releases/local";
 
 export const dynamic = "force-static";
 
-export default function DownloadPage() {
+export default async function DownloadPage() {
+  const releases = await getLocalReleases();
+
   return (
-    <div className="container mx-auto px-4 py-16 max-w-5xl">
-      <h1 className="text-4xl font-extrabold tracking-tight text-white mb-4">Download</h1>
-      <p className="text-gray-400 max-w-3xl leading-relaxed">
-        Smart OS detection recommends the best download for your device. Verify SHA256 before running. Seed profiles are
-        never hosted on the website.
-      </p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <div className="grid gap-10">
+        <PageHeader
+          title="Download"
+          subtitle="Production-style release artifacts with verification-first install steps. Always verify checksums before running."
+          actions={
+            <>
+              <Link
+                href="/docs/outside/verification"
+                prefetch={false}
+                className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+              >
+                Verification guide
+              </Link>
+              <Link
+                href="/docs/install"
+                prefetch={false}
+                className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+              >
+                Install
+              </Link>
+            </>
+          }
+        />
 
-      <div className="mt-10">
-        <DownloadSection />
-      </div>
+        <DownloadSection releases={releases} />
 
-      <div className="mt-10 rounded-xl border border-gray-800 bg-gray-950 p-6">
-        <div className="text-white font-bold mb-2">Need a step-by-step guide?</div>
-        <p className="text-gray-400 leading-relaxed max-w-3xl">
-          Follow the installation guide for Linux and Android (Termux). For seeded profiles, use Signal bundles from a
-          trusted contact.
-        </p>
-        <div className="mt-4">
-          <Link href="/installation" className="text-indigo-300 hover:text-indigo-200 text-sm">
-            Installation in under 10 minutes →
-          </Link>
+        <div className="grid md:grid-cols-2 gap-4">
+          <InfoCard
+            title="Installation (web guide)"
+            description="A step-by-step website page for the common paths (Linux, Termux)."
+            href="/installation"
+          />
+          <InfoCard
+            title="Repository docs"
+            description="The authoritative install, verification, and security docs from the repo."
+            href="/docs"
+          />
         </div>
       </div>
     </div>

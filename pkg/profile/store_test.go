@@ -10,7 +10,7 @@ func TestStore_SaveAndLoad(t *testing.T) {
 	// Setup a temporary directory for the test DB
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_store.enc")
-	masterKey := "0123456789abcdef0123456789abcdef" // 32 bytes
+	masterKey := []byte("0123456789abcdef0123456789abcdef") // 32 bytes
 
 	store, err := NewStore(dbPath, masterKey)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestStore_SaveAndLoad(t *testing.T) {
 }
 
 func TestStore_InvalidKeyLength(t *testing.T) {
-	_, err := NewStore("dummy.enc", "short-key")
+	_, err := NewStore("dummy.enc", []byte("short-key"))
 	if err == nil {
 		t.Fatal("Expected error for invalid key length, got nil")
 	}
@@ -80,7 +80,7 @@ func TestStore_InvalidKeyLength(t *testing.T) {
 func TestStore_LoadEmpty(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "empty_store.enc")
-	store, _ := NewStore(dbPath, "0123456789abcdef0123456789abcdef")
+	store, _ := NewStore(dbPath, []byte("0123456789abcdef0123456789abcdef"))
 
 	profiles, err := store.Load()
 	if err != nil {

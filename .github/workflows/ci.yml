@@ -26,8 +26,12 @@ jobs:
           go-version-file: go.mod
       - name: go test
         run: go test ./...
+      - name: go test (outside tag)
+        run: go test -tags outside ./...
       - name: go vet
         run: go vet ./...
+      - name: go vet (outside tag)
+        run: go vet -tags outside ./...
       - name: gofmt check
         shell: bash
         run: |
@@ -37,6 +41,15 @@ jobs:
             echo "$files"
             exit 1
           fi
+      - name: build cmd/inside
+        run: go build -tags inside ./cmd/inside
+      - name: build cmd/outside
+        run: go build -tags outside ./cmd/outside
+      - name: outside flow smoke tests
+        run: go test ./tests/integration -run TestOutside -count=1 -v
+      - name: linux mvp smoke test
+        if: runner.os == 'Linux'
+        run: go test ./tests/integration -run TestInsideLinuxMVP -count=1 -v
 
   website:
     runs-on: ubuntu-latest

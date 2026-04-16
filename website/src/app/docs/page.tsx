@@ -1,57 +1,93 @@
-import Link from "next/link";
-
 export const dynamic = "force-static";
+import Link from "next/link";
+import { InfoCard } from "../../components/ui/InfoCard";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { SectionHeader } from "../../components/ui/SectionHeader";
+import { getDocsIndex, readDocMarkdownBySlug } from "../../lib/docs/fs";
+import { renderMarkdown } from "../../lib/docs/markdown";
 
-const docs = [
-  { slug: "install-linux", title: "Install (Linux)", desc: "Inside + Outside binaries, systemd, verification." },
-  { slug: "install-android", title: "Install (Android)", desc: "Termux install for Inside, verification steps." },
-  { slug: "install-ios", title: "Install (iOS)", desc: "Packet Tunnel Provider wrapper, platform constraints." },
-  { slug: "install-raspberrypi", title: "Install (Raspberry Pi)", desc: "ARM64 binary, always-on gateway setup." },
-  { slug: "mobile", title: "Mobile Architecture", desc: "Android VpnService and iOS Network Extension integration." },
-  { slug: "signal", title: "Signal Bundles", desc: "Outside → Inside bundle delivery via snb://v2." },
-  { slug: "security", title: "Security Model", desc: "Threat model, local store, wipe-on-suspicion." },
-  { slug: "verification", title: "Verify Downloads", desc: "SHA256 checksums and integrity verification." },
-];
+export default async function DocsIndexPage() {
+  const entries = await getDocsIndex();
+  const index = new Map(entries.map((e) => [e.slug.join("/"), e]));
 
-export default function DocsIndexPage() {
+  const overview = await readDocMarkdownBySlug(["index"]);
+  const rendered = overview ? renderMarkdown(overview.raw, { baseSlug: ["index"] }) : null;
+
   return (
-    <div className="container mx-auto px-4 py-16 max-w-5xl">
-      <div className="flex items-end justify-between gap-6 flex-wrap">
-        <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-white mb-4">Documentation</h1>
-          <p className="text-gray-400 max-w-3xl leading-relaxed">
-            No accounts, no analytics. Everything runs locally. If you need seeds, use Signal bundles from a trusted
-            helper or in-person transfer. The website never hosts live proxy seeds.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/installation"
-            className="bg-gray-900 hover:bg-gray-800 text-gray-100 px-5 py-3 rounded-lg text-sm font-semibold transition-colors border border-gray-800"
-          >
-            Installation Guide
-          </Link>
-          <Link
-            href="/download"
-            className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
-          >
-            Go to Downloads
-          </Link>
-        </div>
-      </div>
+    <div className="grid gap-12">
+      <PageHeader
+        title="Documentation"
+        subtitle="Repository-backed docs for ShadowNet Agent. Local-first, no analytics, no live seed hosting."
+        actions={
+          <>
+            <Link
+              href="/download"
+              prefetch={false}
+              className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
+            >
+              Download
+            </Link>
+            <Link
+              href="/architecture"
+              prefetch={false}
+              className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+            >
+              Website architecture page
+            </Link>
+          </>
+        }
+      />
 
-      <div className="mt-10 grid md:grid-cols-2 gap-6">
-        {docs.map((d) => (
-          <Link
-            key={d.slug}
-            href={`/docs/${d.slug}`}
-            className="rounded-xl border border-gray-800 bg-gray-900/40 p-6 hover:border-gray-700 transition-colors"
-          >
-            <div className="text-white font-bold text-lg">{d.title}</div>
-            <div className="text-gray-400 text-sm mt-2 leading-relaxed">{d.desc}</div>
-          </Link>
-        ))}
-      </div>
+      {rendered ? (
+        <div className="rounded-xl border border-border bg-card/40 p-6">
+          <article className="docs-prose">{rendered.nodes}</article>
+        </div>
+      ) : null}
+
+      <section className="grid gap-6">
+        <SectionHeader
+          title="Start here"
+          subtitle="The quickest path to installing safely and understanding how Inside/Outside work together."
+        />
+        <div className="grid md:grid-cols-2 gap-4">
+          <InfoCard
+            href="/docs/install"
+            title={index.get("install")?.title ?? "Installation"}
+            description="Release artifacts, verification, and basic setup."
+          />
+          <InfoCard
+            href="/docs/user/safety"
+            title={index.get("user/safety")?.title ?? "Safety"}
+            description="Operational safety principles for high-risk environments."
+          />
+          <InfoCard
+            href="/docs/architecture"
+            title={index.get("architecture")?.title ?? "Architecture"}
+            description="Inside vs Outside, data plane vs control plane."
+          />
+          <InfoCard
+            href="/docs/outside/verification"
+            title={index.get("outside/verification")?.title ?? "Verification"}
+            description="Verify artifacts and bundles before use."
+          />
+        </div>
+      </section>
+
+      <section className="grid gap-6" lang="fa" dir="rtl">
+        <SectionHeader title="فارسی" subtitle="ترجمه فارسی برای مسیرهای اصلی نصب، ایمنی، و تأیید." />
+        <div className="grid md:grid-cols-2 gap-4">
+          <InfoCard
+            href="/docs/fa"
+            title={index.get("fa/index")?.title ?? "مستندات (فارسی)"}
+            description="فهرست مستندات فارسی و لینک به صفحات مهم."
+          />
+          <InfoCard
+            href="/docs/fa/user/safety"
+            title={index.get("fa/user/safety")?.title ?? "ایمنی"}
+            description="محدودیت‌ها و اصول ایمنی در شرایط پرریسک."
+          />
+        </div>
+      </section>
     </div>
   );
 }

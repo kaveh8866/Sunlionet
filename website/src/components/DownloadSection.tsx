@@ -1,187 +1,132 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type DetectedOS, useOsDetection } from "./useOsDetection";
+import { Callout } from "./ui/Callout";
+import { SectionHeader } from "./ui/SectionHeader";
 
 type Role = "inside" | "outside";
 
-type DownloadItem = {
-  id: string;
-  title: string;
-  description: string;
-  file?: string;
-  sha256Url?: string;
-  installCommand?: string;
-  verifyCommand?: string;
-  notes?: string[];
+type ReleaseArtifact = {
+  fileName: string;
+  href: string;
+  sizeBytes: number;
+  kind: "tar.gz" | "zip" | "bin";
+  sha256?: string;
+  sha256Href?: string;
+  role?: "inside" | "outside";
+  target?: string;
 };
 
-type PlatformCard = {
-  key: "linux" | "android" | "raspberrypi" | "windows" | "macos" | "other";
-  title: string;
-  items: DownloadItem[];
+type LocalRelease = {
+  tag: string;
+  buildRef?: string;
+  createdAtUnix?: number;
+  artifacts: ReleaseArtifact[];
 };
 
 const repoOwner = "kaveh8866";
 const repoName = "shadownet-agent";
 const githubRepo = `https://github.com/${repoOwner}/${repoName}`;
-const githubApiBase = `https://api.github.com/repos/${repoOwner}/${repoName}`;
-const defaultVersion = "v0.1.0";
+const githubReleases = `${githubRepo}/releases`;
+const githubTagTarballBase = `${githubRepo}/archive/refs/tags`;
 
-type GitHubReleaseAsset = {
-  name: string;
-  browser_download_url: string;
-  size: number;
-};
-
-type GitHubRelease = {
-  tag_name: string;
-  html_url: string;
-  assets: GitHubReleaseAsset[];
-};
-
-type ReleaseInfo = {
-  tag: string;
-  htmlUrl: string;
-  assets: Record<string, { url: string; size: number }>;
-};
-
-function githubRawPublicUrl(version: string, file: string) {
-  return `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/website/public/downloads/${version}/${file}`;
+function formatBytes(sizeBytes: number) {
+  const units = ["B", "KB", "MB", "GB"] as const;
+  let v = sizeBytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const p = i === 0 ? 0 : 1;
+  return `${v.toFixed(p)} ${units[i]}`;
 }
 
-function githubSourceBrowseUrl(version: string, file: string) {
-  return `${githubRepo}/blob/main/website/public/downloads/${version}/${file}`;
-}
-
-function toAssetsMap(assets: GitHubReleaseAsset[]): ReleaseInfo["assets"] {
-  return Object.fromEntries(assets.map((a) => [a.name, { url: a.browser_download_url, size: a.size }]));
-}
-
-async function fetchReleaseInfo(tag: "latest" | string): Promise<ReleaseInfo | null> {
+function formatDate(unix?: number) {
+  if (!unix) return null;
   try {
-    const url = tag === "latest" ? `${githubApiBase}/releases/latest` : `${githubApiBase}/releases/tags/${tag}`;
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) return null;
-    const json = (await r.json()) as GitHubRelease;
-    return { tag: json.tag_name, htmlUrl: json.html_url, assets: toAssetsMap(json.assets) };
+    return new Date(unix * 1000).toISOString().slice(0, 10);
   } catch {
     return null;
   }
 }
 
-async function fetchRecentReleaseTags(limit: number): Promise<string[]> {
-  try {
-    const r = await fetch(`${githubApiBase}/releases?per_page=${limit}`, { cache: "no-store" });
-    if (!r.ok) return [];
-    const releases = (await r.json()) as GitHubRelease[];
-    return releases.map((rel) => rel.tag_name).filter(Boolean);
-  } catch {
-    return [];
-  }
+function normalizeUA(s: string) {
+  return s.toLowerCase();
 }
 
-function fileUrl(release: ReleaseInfo | null, version: string, file: string) {
-  return release?.assets[file]?.url ?? githubRawPublicUrl(version, file);
+type DetectedArch = "amd64" | "arm64" | "unknown";
+
+function detectArchFromNavigator(): DetectedArch {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = normalizeUA(navigator.userAgent || "");
+  const platform = normalizeUA((navigator as unknown as { platform?: string }).platform || "");
+  const full = `${ua} ${platform}`;
+
+  if (full.includes("aarch64") || full.includes("arm64") || full.includes("armv8")) return "arm64";
+  if (full.includes("x86_64") || full.includes("x64") || full.includes("win64") || full.includes("amd64")) return "amd64";
+  return "unknown";
 }
 
-function sha256Url(release: ReleaseInfo | null, version: string, file: string) {
-  const shaFile = `${file}.sha256`;
-  return release?.assets[shaFile]?.url ?? githubRawPublicUrl(version, shaFile);
+function useOrigin() {
+  const [origin, setOrigin] = useState<string>("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  return origin;
 }
 
-function recommendedFor(
-  os: DetectedOS,
-  role: Role,
-  version: string,
-  getFileUrl: (file: string) => string,
-  getSha256Url: (file: string) => string,
-): DownloadItem {
-  if (os === "android") {
-    return {
-      id: "android-termux-arm64",
-      title: "Android (Termux) — arm64",
-      description: "Run ShadowNet-Inside as a CLI binary in Termux (development).",
-      file: `shadownet-inside-${version}-android-arm64`,
-      sha256Url: getSha256Url(`shadownet-inside-${version}-android-arm64`),
-      installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${getFileUrl(
-        `shadownet-inside-${version}-android-arm64`,
-      )} && wget -O shadownet-inside.sha256 ${getSha256Url(`shadownet-inside-${version}-android-arm64`)} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
-      verifyCommand: `sha256sum -c shadownet-inside.sha256`,
-      notes: [
-        "No Play Store distribution. Sideloading/VPN wrapper is a separate Android project.",
-        "Use Signal bundles for seeds (website never hosts live proxy seeds).",
-      ],
-    };
-  }
+function CommandBlock({
+  label,
+  code,
+  language,
+  note,
+}: {
+  label: string;
+  code: string;
+  language?: string;
+  note?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  }, [code]);
 
-  if (os === "windows") {
-    const file = role === "inside" ? `shadownet-inside-${version}-windows-amd64.zip` : `shadownet-outside-${version}-windows-amd64.zip`;
-    return {
-      id: `windows-${role}`,
-      title: `Windows — ${role === "inside" ? "Inside" : "Outside"} (amd64)`,
-      description: role === "inside" ? "Inside for restricted networks." : "Outside for supporters to curate and send bundles.",
-      file,
-      sha256Url: getSha256Url(file),
-      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && certutil -hashfile ${file} SHA256`,
-      verifyCommand: `Compare with ${file}.sha256`,
-      notes: ["Extract zip, run the binary. For Inside, provide SHADOWNET_MASTER_KEY env var."],
-    };
-  }
-
-  if (os === "macos") {
-    const file = role === "inside" ? `shadownet-inside-${version}-darwin-arm64.tar.gz` : `shadownet-outside-${version}-darwin-arm64.tar.gz`;
-    return {
-      id: `macos-${role}`,
-      title: `macOS — ${role === "inside" ? "Inside" : "Outside"} (arm64)`,
-      description: "Apple Silicon build.",
-      file,
-      sha256Url: getSha256Url(file),
-      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && shasum -a 256 -c ${file}.sha256 && tar -xzf ${file}`,
-      verifyCommand: `shasum -a 256 -c ${file}.sha256`,
-      notes: ["For Outside, use this machine to generate and send Signal bundles."],
-    };
-  }
-
-  if (os === "raspberrypi") {
-    const file = `shadownet-inside-${version}-linux-arm64.tar.gz`;
-    return {
-      id: "pi-inside-arm64",
-      title: "Raspberry Pi — Inside (ARM64)",
-      description: "Optimized ARM64 build suitable for an always-on gateway.",
-      file,
-      sha256Url: getSha256Url(file),
-      installCommand: `curl -LO ${getFileUrl(file)} && curl -LO ${getSha256Url(file)} && sha256sum -c ${file}.sha256 && tar -xzf ${file} && sudo ./install-linux.sh inside`,
-      verifyCommand: `sha256sum -c ${file}.sha256`,
-      notes: ["Install service file included in the tarball.", "Use ethernet when possible for stability."],
-    };
-  }
-
-  const linuxFile = role === "inside" ? `shadownet-inside-${version}-linux-amd64.tar.gz` : `shadownet-outside-${version}-linux-amd64.tar.gz`;
-  return {
-    id: `linux-${role}`,
-    title: `Linux — ${role === "inside" ? "Inside" : "Outside"} (amd64)`,
-    description: "Static binary bundle with install script and service file.",
-    file: linuxFile,
-    sha256Url: getSha256Url(linuxFile),
-    installCommand: `curl -LO ${getFileUrl(linuxFile)} && curl -LO ${getSha256Url(linuxFile)} && sha256sum -c ${linuxFile}.sha256 && tar -xzf ${linuxFile} && sudo ./install-linux.sh ${role}`,
-    verifyCommand: `sha256sum -c ${linuxFile}.sha256`,
-    notes: ["For Inside, run on the censored side. For Outside, run on stable internet and send bundles."],
-  };
-}
-
-async function fetchSha256(shaFileUrl: string): Promise<string | null> {
-  try {
-    const r = await fetch(shaFileUrl, { cache: "no-store" });
-    if (!r.ok) return null;
-    const t = await r.text();
-    const first = t.trim().split(/\s+/)[0];
-    if (!first || first.length < 32) return null;
-    return first;
-  } catch {
-    return null;
-  }
+  return (
+    <div className="rounded-xl border border-border bg-card/60 shadow-[0_0_0_1px_var(--border)] overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="px-3 py-1.5 rounded-md border border-border bg-card text-xs font-semibold text-foreground hover:opacity-90 transition-opacity"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="overflow-auto p-4">
+        <code className="text-[0.875rem] leading-relaxed font-mono text-foreground whitespace-pre">{code}</code>
+      </pre>
+      {language || note ? (
+        <div className="border-t border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="font-mono uppercase tracking-wide">{language ? language : "shell"}</span>
+            {note ? <span className="min-w-0">{note}</span> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function CodeBlock({ children }: { children: string }) {
@@ -209,472 +154,658 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-export function DownloadSection() {
+type PlatformKey = "linux-amd64" | "linux-arm64" | "raspberrypi-arm64" | "android" | "source" | "unknown";
+
+function platformLabel(k: PlatformKey) {
+  switch (k) {
+    case "linux-amd64":
+      return "Linux x86_64";
+    case "linux-arm64":
+      return "Linux arm64";
+    case "raspberrypi-arm64":
+      return "Raspberry Pi (ARM64)";
+    case "android":
+      return "Android (Termux)";
+    case "source":
+      return "Source code";
+    default:
+      return "Unknown";
+  }
+}
+
+function pickPlatform(os: DetectedOS, arch: DetectedArch): PlatformKey {
+  if (os === "android") return "android";
+  if (os === "raspberrypi") return "raspberrypi-arm64";
+  if (os === "linux") {
+    if (arch === "arm64") return "linux-arm64";
+    if (arch === "amd64") return "linux-amd64";
+    return "unknown";
+  }
+  return "unknown";
+}
+
+function findArtifact(release: LocalRelease | null, role: Role, target: string) {
+  if (!release) return null;
+  return (
+    release.artifacts.find((a) => a.role === role && a.target === target) ||
+    release.artifacts.find((a) => a.role === role && a.fileName.includes(target))
+  );
+}
+
+function supportedTargets(release: LocalRelease | null) {
+  if (!release) return [];
+  return Array.from(new Set(release.artifacts.map((a) => a.target).filter(Boolean))) as string[];
+}
+
+function releaseArtifactCount(release: LocalRelease | null) {
+  return release ? release.artifacts.length : 0;
+}
+
+export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
+  const origin = useOrigin();
   const { detection, supportsAutoRecommendation } = useOsDetection();
+  const arch = useMemo(() => detectArchFromNavigator(), []);
+
   const [role, setRole] = useState<Role>("inside");
-  const [manualOS, setManualOS] = useState<DetectedOS>("unknown");
-  const [sha, setSha] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<string>("latest");
-  const [release, setRelease] = useState<ReleaseInfo | null>(null);
-  const [recentVersions, setRecentVersions] = useState<string[]>([]);
-  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [manualPlatform, setManualPlatform] = useState<PlatformKey>("unknown");
+  const [selectedTag, setSelectedTag] = useState<string>(releases[0]?.tag ?? "");
 
-  const effectiveOS: DetectedOS = supportsAutoRecommendation ? detection.os : manualOS;
-  const effectiveVersion = selectedVersion === "latest" ? (release?.tag ?? defaultVersion) : selectedVersion;
-  const releasePageUrl =
-    selectedVersion === "latest" ? (release?.htmlUrl ?? `${githubRepo}/releases`) : `${githubRepo}/releases/tag/${effectiveVersion}`;
+  const selectedRelease = useMemo(() => releases.find((r) => r.tag === selectedTag) ?? releases[0] ?? null, [releases, selectedTag]);
+  const createdAt = formatDate(selectedRelease?.createdAtUnix) ?? "n/a";
 
-  const recommended = useMemo(
-    () =>
-      recommendedFor(
-        effectiveOS,
-        role,
-        effectiveVersion,
-        (file) => fileUrl(release, effectiveVersion, file),
-        (file) => sha256Url(release, effectiveVersion, file),
-      ),
-    [effectiveOS, role, effectiveVersion, release],
+  const autoPlatform = useMemo(
+    () => (supportsAutoRecommendation ? pickPlatform(detection.os, arch) : "unknown"),
+    [supportsAutoRecommendation, detection.os, arch],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRecentReleaseTags(8).then((tags) => {
-      if (!cancelled) setRecentVersions(tags);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const effectivePlatform: PlatformKey = manualPlatform !== "unknown" ? manualPlatform : autoPlatform;
 
-  useEffect(() => {
-    let cancelled = false;
-    setReleaseError(null);
-    void fetchReleaseInfo(selectedVersion === "latest" ? "latest" : selectedVersion).then((info) => {
-      if (cancelled) return;
-      setRelease(info);
-      if (!info) setReleaseError("Could not load live release metadata. Showing fallback links.");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedVersion]);
+  const recommendedArtifact = useMemo(() => {
+    if (!selectedRelease) return null;
+    if (effectivePlatform === "linux-amd64") return findArtifact(selectedRelease, role, "linux-amd64");
+    if (effectivePlatform === "linux-arm64") return findArtifact(selectedRelease, role, "linux-arm64");
+    if (effectivePlatform === "raspberrypi-arm64") return findArtifact(selectedRelease, role, "linux-arm64");
+    if (effectivePlatform === "android") {
+      if (role !== "inside") return null;
+      return findArtifact(selectedRelease, "inside", "android-arm64");
+    }
+    return null;
+  }, [selectedRelease, effectivePlatform, role]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setSha(null);
-    if (!recommended.sha256Url) return;
-    void fetchSha256(recommended.sha256Url).then((v) => {
-      if (!cancelled) setSha(v);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [recommended.sha256Url]);
+  const recommendedSupport: { level: "stable" | "experimental" | "planned" | "unsupported"; note: string } = useMemo(() => {
+    if (effectivePlatform === "android") {
+      if (role !== "inside") return { level: "unsupported", note: "Outside is not supported on Android. Run Outside on a separate machine." };
+      return { level: "experimental", note: "Inside runs as a Termux CLI (development). No production Android APK in this repo yet." };
+    }
+    if (effectivePlatform === "raspberrypi-arm64") {
+      return { level: "experimental", note: "Uses the Linux arm64 bundle. Treat as experimental until long-running field testing is complete." };
+    }
+    if (effectivePlatform === "linux-amd64" || effectivePlatform === "linux-arm64") {
+      return { level: "stable", note: "Linux bundles are the current MVP path (tarball + install script + systemd unit)." };
+    }
+    return { level: "unsupported", note: "Auto-detection is inconclusive. Use the platform grid and verify before running." };
+  }, [effectivePlatform, role]);
 
-  const cards: PlatformCard[] = useMemo(
+  const releasePageUrl = selectedRelease ? `${githubReleases}/tag/${selectedRelease.tag}` : githubReleases;
+  const sourceTarballUrl = selectedRelease ? `${githubTagTarballBase}/${selectedRelease.tag}.tar.gz` : `${githubRepo}/archive/refs/heads/main.tar.gz`;
+
+  const artifactUrl = useMemo(() => {
+    if (!origin || !recommendedArtifact) return null;
+    return `${origin}${recommendedArtifact.href}`;
+  }, [origin, recommendedArtifact]);
+
+  const shaUrl = useMemo(() => {
+    if (!origin || !recommendedArtifact?.sha256Href) return null;
+    return `${origin}${recommendedArtifact.sha256Href}`;
+  }, [origin, recommendedArtifact]);
+
+  const installSteps = useMemo(() => {
+    if (!recommendedArtifact || !artifactUrl) return null;
+    const file = recommendedArtifact.fileName;
+    const isTar = recommendedArtifact.kind === "tar.gz";
+    const isZip = recommendedArtifact.kind === "zip";
+
+    if (effectivePlatform === "android") {
+      return {
+        download: `pkg update -y\npkg install -y wget openssl-tool coreutils\nwget -O shadownet-inside ${artifactUrl}\nwget -O shadownet-inside.sha256 ${shaUrl ?? "<sha256-url>"}\n`,
+        verify: `sha256sum -c shadownet-inside.sha256`,
+        install: `chmod +x shadownet-inside\n./shadownet-inside`,
+      };
+    }
+
+    if (effectivePlatform === "linux-amd64" || effectivePlatform === "linux-arm64" || effectivePlatform === "raspberrypi-arm64") {
+      return {
+        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
+        verify: `sha256sum -c ${file}.sha256`,
+        install: isTar ? `tar -xzf ${file}\nsudo ./install-linux.sh ${role}` : `chmod +x ${file}\n./${file}`,
+      };
+    }
+
+    if (detection.os === "macos") {
+      return {
+        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
+        verify: `shasum -a 256 -c ${file}.sha256`,
+        install: isTar ? `tar -xzf ${file}\n./shadownet-${role}` : `./${file}`,
+      };
+    }
+
+    if (detection.os === "windows") {
+      return {
+        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
+        verify: `certutil -hashfile ${file} SHA256`,
+        install: isZip ? `tar -xf ${file}\n.\\shadownet-${role}.exe` : `.\\${file}`,
+      };
+    }
+
+    return null;
+  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, detection.os]);
+
+  const hasLocalReleases = releases.length > 0;
+
+  const recommendedHeading = useMemo(() => {
+    if (!supportsAutoRecommendation) return "Recommended download (manual selection)";
+    if (autoPlatform === "unknown") return "Recommended download (detection is uncertain)";
+    return "Recommended download";
+  }, [supportsAutoRecommendation, autoPlatform]);
+
+  const platformChoices: { key: PlatformKey; description: string; support: string; method: string; target?: string }[] = useMemo(
     () => [
       {
-        key: "linux",
-        title: "Linux",
-        items: [
-          {
-            id: "linux-amd64-inside",
-            title: "Inside (x86_64 static bundle)",
-            description: "Tarball with install script + systemd unit.",
-            file: `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
-            )} && curl -LO ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz && sudo ./install-linux.sh inside`,
-            verifyCommand: `sha256sum -c shadownet-inside-${effectiveVersion}-linux-amd64.tar.gz.sha256`,
-            notes: ["Includes: install-linux.sh, shadownet-inside.service"],
-          },
-          {
-            id: "linux-arm64-inside",
-            title: "Inside (arm64 static bundle)",
-            description: "ARM64 tarball for servers and single-board devices.",
-            file: `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            )} && curl -LO ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
-          },
-          {
-            id: "linux-deb",
-            title: ".deb package",
-            description: "Placeholder (will be added via CI release automation).",
-            notes: [`Planned filename: shadownet-inside_${effectiveVersion}_amd64.deb`, "Planned: apt install ./file.deb"],
-          },
-          {
-            id: "linux-rpm",
-            title: ".rpm package",
-            description: "Placeholder (will be added via CI release automation).",
-            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-1.x86_64.rpm`, "Planned: sudo rpm -i ./file.rpm"],
-          },
-        ],
+        key: "linux-amd64",
+        description: "Static bundle for Linux x86_64. Includes install script + systemd unit.",
+        support: "MVP path",
+        method: "Tarball + verify SHA256 + install script",
+        target: "linux-amd64",
+      },
+      {
+        key: "linux-arm64",
+        description: "Static bundle for Linux arm64 (servers, SBCs). Includes install script + systemd unit.",
+        support: "MVP path (arm64)",
+        method: "Tarball + verify SHA256 + install script",
+        target: "linux-arm64",
+      },
+      {
+        key: "raspberrypi-arm64",
+        description: "Uses the Linux arm64 Inside bundle (gateway use).",
+        support: "Experimental",
+        method: "Tarball + verify SHA256 + install script",
+        target: "linux-arm64",
       },
       {
         key: "android",
-        title: "Android",
-        items: [
-          {
-            id: "android-apk-universal",
-            title: "Universal APK",
-            description: "Placeholder (VPN wrapper app is a separate Android project).",
-            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-universal.apk`, "Sideload only."],
-          },
-          {
-            id: "android-apk-arm64",
-            title: "APK (arm64-v8a)",
-            description: "Placeholder (VPN wrapper app is a separate Android project).",
-            notes: [`Planned filename: shadownet-inside-${effectiveVersion}-arm64-v8a.apk`],
-          },
-          {
-            id: "android-termux",
-            title: "Termux binary (arm64)",
-            description: "Ready now (CLI).",
-            file: `shadownet-inside-${effectiveVersion}-android-arm64`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-android-arm64`),
-            installCommand: `pkg update -y && pkg install -y wget openssl-tool && wget -O shadownet-inside ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-android-arm64`,
-            )} && wget -O shadownet-inside.sha256 ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-android-arm64`,
-            )} && sha256sum -c shadownet-inside.sha256 && chmod +x shadownet-inside && ./shadownet-inside`,
-          },
-        ],
+        description: "Inside runs as a Termux CLI binary (development).",
+        support: "Experimental",
+        method: "Termux + verify SHA256 + run",
+        target: "android-arm64",
       },
       {
-        key: "raspberrypi",
-        title: "Raspberry Pi",
-        items: [
-          {
-            id: "pi-arm64",
-            title: "ARM64 optimized bundle",
-            description: "Use the Linux ARM64 Inside tarball.",
-            file: `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            )} && curl -LO ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz`,
-            )} && sha256sum -c shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz.sha256 && tar -xzf shadownet-inside-${effectiveVersion}-linux-arm64.tar.gz && sudo ./install-linux.sh inside`,
-          },
-        ],
-      },
-      {
-        key: "windows",
-        title: "Windows",
-        items: [
-          {
-            id: "win-inside",
-            title: "Inside (amd64)",
-            description: "Zip bundle for Windows.",
-            file: `shadownet-inside-${effectiveVersion}-windows-amd64.zip`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-windows-amd64.zip`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-windows-amd64.zip`,
-            )} && curl -LO ${sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-windows-amd64.zip`)}`,
-            notes: ["Verify SHA256 using certutil and compare to the .sha256 file."],
-          },
-          {
-            id: "win-outside",
-            title: "Outside (amd64)",
-            description: "Zip bundle for Windows supporters.",
-            file: `shadownet-outside-${effectiveVersion}-windows-amd64.zip`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-windows-amd64.zip`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-outside-${effectiveVersion}-windows-amd64.zip`,
-            )} && curl -LO ${sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-windows-amd64.zip`)}`,
-          },
-        ],
-      },
-      {
-        key: "macos",
-        title: "macOS",
-        items: [
-          {
-            id: "mac-inside",
-            title: "Inside (arm64)",
-            description: "Apple Silicon tarball.",
-            file: `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            )} && curl -LO ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            )} && shasum -a 256 -c shadownet-inside-${effectiveVersion}-darwin-arm64.tar.gz.sha256`,
-          },
-          {
-            id: "mac-outside",
-            title: "Outside (arm64)",
-            description: "Apple Silicon tarball.",
-            file: `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            sha256Url: sha256Url(release, effectiveVersion, `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`),
-            installCommand: `curl -LO ${fileUrl(
-              release,
-              effectiveVersion,
-              `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            )} && curl -LO ${sha256Url(
-              release,
-              effectiveVersion,
-              `shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz`,
-            )} && shasum -a 256 -c shadownet-outside-${effectiveVersion}-darwin-arm64.tar.gz.sha256`,
-          },
-        ],
-      },
-      {
-        key: "other",
-        title: "Other",
-        items: [
-          {
-            id: "source",
-            title: "Source code (tarball)",
-            description: "Placeholder (use GitHub Releases or git clone).",
-            notes: ["git clone https://github.com/kaveh8866/shadownet-agent.git", "go build -tags inside ./cmd/inside"],
-          },
-        ],
+        key: "source",
+        description: "Build from source (best fallback when your platform is not covered).",
+        support: "Always available",
+        method: "git clone or tag tarball + go build",
       },
     ],
-    [effectiveVersion, release],
+    [],
   );
 
-  const [activeTab, setActiveTab] = useState<PlatformCard["key"]>("linux");
-  const versionOptions = useMemo(() => Array.from(new Set([defaultVersion, ...recentVersions])), [recentVersions]);
+  const effectivePlatformLabel = effectivePlatform === "unknown" ? "Choose a platform" : platformLabel(effectivePlatform);
+  const detectionSummary = supportsAutoRecommendation
+    ? `${detection.label}${arch !== "unknown" ? ` • ${arch}` : ""}`
+    : `Unknown${arch !== "unknown" ? ` • ${arch}` : ""}`;
+
+  const hasChecksum = Boolean(recommendedArtifact?.sha256 && recommendedArtifact?.sha256Href);
 
   return (
     <section id="downloads" className="w-full">
-      <div className="flex items-end justify-between gap-6 flex-wrap">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-foreground">Downloads</h2>
-          <p className="mt-2 text-muted-foreground max-w-3xl leading-relaxed">
-            Smart recommendation based on your device. Always verify SHA256 before running. The website never hosts live proxy seeds.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedVersion}
-            onChange={(e) => setSelectedVersion(e.target.value)}
-            className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-          >
-            <option value="latest">Latest</option>
-            {versionOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <TabButton active={role === "inside"} onClick={() => setRole("inside")}>
-            Inside
-          </TabButton>
-          <TabButton active={role === "outside"} onClick={() => setRole("outside")}>
-            Outside
-          </TabButton>
-        </div>
-      </div>
+      <div className="grid gap-10">
+        {!hasLocalReleases ? (
+          <Callout title="No local release artifacts found" tone="warning">
+            This site build does not include any files under <span className="font-mono">website/public/downloads</span>. You can still download
+            from GitHub Releases and verify with published checksums when available.
+          </Callout>
+        ) : null}
 
-      <div className="mt-8 rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-        <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div>
-            <div className="text-sm text-muted-foreground">Recommended for your system</div>
-            <div className="mt-1 text-xl font-bold text-foreground">
-              {supportsAutoRecommendation ? detection.label : manualOS === "unknown" ? "Select your OS" : manualOS.toUpperCase()}
+        <Callout title="Project status" tone="warning">
+          ShadowNet Agent is currently an MVP/alpha. Linux bundles are the primary supported path. Android support is CLI via Termux (no APK
+          shipped here yet). Verification is checksum-based today; release signature workflows are documented as a roadmap but not consistently
+          published for these artifacts yet.
+        </Callout>
+
+        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+          <SectionHeader
+            title={recommendedHeading}
+            subtitle={
+              <>
+                Pick the correct artifact for your machine, verify it, then install in steps. Auto-detection is conservative and never hides other
+                options.
+              </>
+            }
+            actions={
+              <>
+                <select
+                  value={selectedTag}
+                  onChange={(e) => setSelectedTag(e.target.value)}
+                  className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+                >
+                  {releases.map((r) => (
+                    <option key={r.tag} value={r.tag}>
+                      {r.tag}
+                    </option>
+                  ))}
+                </select>
+                <TabButton active={role === "inside"} onClick={() => setRole("inside")}>
+                  Inside
+                </TabButton>
+                <TabButton active={role === "outside"} onClick={() => setRole("outside")}>
+                  Outside
+                </TabButton>
+              </>
+            }
+          />
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Detected</div>
+              <div className="mt-2 text-foreground font-semibold">{detectionSummary}</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {supportsAutoRecommendation ? (
+                  <>
+                    Confidence: <span className="font-mono">{Math.round(detection.confidence * 100)}%</span>
+                  </>
+                ) : (
+                  <>Detection is inconclusive in this environment.</>
+                )}
+              </div>
             </div>
-            <div className="mt-2 text-muted-foreground text-sm max-w-2xl">{recommended.description}</div>
-            <div className="mt-3 text-xs text-muted-foreground">
-              Release:{" "}
-              <a className="text-primary hover:opacity-90" href={releasePageUrl} target="_blank" rel="noreferrer">
-                {effectiveVersion}
-              </a>
+
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Release</div>
+              <div className="mt-2 text-foreground font-semibold font-mono">{selectedRelease ? selectedRelease.tag : "n/a"}</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Date: <span className="font-mono">{createdAt}</span>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Artifacts: <span className="font-mono">{releaseArtifactCount(selectedRelease)}</span>
+              </div>
+              <div className="mt-3 text-sm">
+                <a className="text-primary hover:opacity-90 transition-opacity" href={releasePageUrl} target="_blank" rel="noreferrer">
+                  View on GitHub
+                </a>
+              </div>
             </div>
-            {releaseError ? <div className="mt-2 text-xs text-amber-300">{releaseError}</div> : null}
-            {recommended.file ? (
-              <div className="mt-3 text-xs font-mono text-muted-foreground break-all">File: {recommended.file}</div>
-            ) : null}
-            {recommended.file ? (
-              <div className="mt-2 text-xs">
+
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Platform</div>
+              <div className="mt-2 text-foreground font-semibold">{effectivePlatformLabel}</div>
+              <div className="mt-3">
+                <select
+                  value={manualPlatform}
+                  onChange={(e) => setManualPlatform(e.target.value as PlatformKey)}
+                  className="w-full bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="unknown">{supportsAutoRecommendation ? "Auto (recommended)" : "Select…"}</option>
+                  {platformChoices.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {platformLabel(p.key)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">{recommendedSupport.note}</div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-sm font-semibold text-foreground">Recommended artifact</div>
+              {recommendedArtifact ? (
+                <>
+                  <div className="mt-2 text-xs text-muted-foreground uppercase tracking-wide">File</div>
+                  <div className="mt-1 font-mono text-sm text-foreground break-all">{recommendedArtifact.fileName}</div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Type: <span className="font-mono">{recommendedArtifact.kind}</span> • Size:{" "}
+                    <span className="font-mono">{formatBytes(recommendedArtifact.sizeBytes)}</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <a
+                      href={recommendedArtifact.href}
+                      className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
+                      download
+                    >
+                      Download
+                    </a>
+                    {recommendedArtifact.sha256Href ? (
+                      <a
+                        href={recommendedArtifact.sha256Href}
+                        className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                        download
+                      >
+                        SHA256
+                      </a>
+                    ) : null}
+                    <a
+                      href={`${githubRepo}/blob/main/website/public${recommendedArtifact.href}`}
+                      className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Browse source
+                    </a>
+                  </div>
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Verification:{" "}
+                    {hasChecksum ? (
+                      <span className="text-emerald-300">checksum available</span>
+                    ) : (
+                      <span className="text-amber-300">checksum missing</span>
+                    )}{" "}
+                    • Signature: <span className="text-amber-300">not published for this artifact</span>
+                  </div>
+                  {recommendedArtifact.sha256 ? (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      SHA256: <span className="font-mono break-all text-foreground">{recommendedArtifact.sha256}</span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  No matching artifact for this platform/role. Use source build or choose a different platform from the grid.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-sm font-semibold text-foreground">Quick install (stepwise)</div>
+              {installSteps ? (
+                <div className="mt-3 grid gap-3">
+                  <CommandBlock label="1) Download" code={installSteps.download} language="bash" note="Fetch both the artifact and its checksum file" />
+                  <CommandBlock label="2) Verify" code={installSteps.verify} language="bash" note="Fails if the download was modified or corrupted" />
+                  <CommandBlock label="3) Install / run" code={installSteps.install} language="bash" note="Installs a service on Linux bundles" />
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Select a supported platform to generate commands, or use the source build path below.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SectionHeader
+            title="Platform grid"
+            subtitle="All primary artifacts and recommended methods. Nothing is hidden; you can always override the recommendation."
+          />
+          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {platformChoices.map((p) => {
+              const a =
+                p.key === "source"
+                  ? null
+                  : p.key === "android"
+                    ? (role === "inside" ? findArtifact(selectedRelease, "inside", "android-arm64") : null)
+                    : p.key === "raspberrypi-arm64"
+                      ? findArtifact(selectedRelease, "inside", "linux-arm64")
+                      : p.target
+                        ? findArtifact(selectedRelease, role, p.target)
+                        : null;
+
+              const title = platformLabel(p.key);
+              const support = p.support;
+              const method = p.method;
+
+              return (
+                <div key={p.key} className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-foreground font-bold">{title}</div>
+                      <div className="mt-2 text-sm text-muted-foreground leading-relaxed">{p.description}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setManualPlatform(p.key)}
+                      className="px-3 py-2 rounded-md border border-border bg-card text-xs font-semibold text-foreground hover:opacity-90 transition-opacity"
+                    >
+                      Select
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Support</span>
+                      <span className="font-mono text-foreground">{support}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Method</span>
+                      <span className="font-mono text-foreground">{method}</span>
+                    </div>
+                  </div>
+
+                  {p.key === "source" ? (
+                    <div className="mt-5 grid gap-3">
+                      <a
+                        href={sourceTarballUrl}
+                        className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)] text-center"
+                      >
+                        Download source tarball
+                      </a>
+                      <a
+                        href={githubRepo}
+                        className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Repository
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid gap-3">
+                      {a ? (
+                        <>
+                          <a
+                            href={a.href}
+                            className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)] text-center"
+                            download
+                          >
+                            Download
+                          </a>
+                          <div className="text-xs text-muted-foreground break-all">
+                            <span className="font-mono">{a.fileName}</span> • <span className="font-mono">{formatBytes(a.sizeBytes)}</span>
+                          </div>
+                          {a.sha256Href ? (
+                            <a
+                              href={a.sha256Href}
+                              className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
+                              download
+                            >
+                              Verification (SHA256)
+                            </a>
+                          ) : (
+                            <div className="text-sm text-amber-300">No checksum file present for this artifact.</div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          No artifact available for this role in this release. Use source build or switch role/platform.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+          <SectionHeader
+            title="Verification"
+            subtitle={
+              <>
+                Verification protects you against corruption and tampering in transit. It does not magically make software “safe”.
+              </>
+            }
+          />
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-sm font-semibold text-foreground">What the SHA256 check gives you</div>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>- File integrity: you got exactly the bytes the publisher intended to publish.</li>
+                <li>- Tamper detection: if a mirror/CDN modifies the file, the check fails.</li>
+                <li>- A consistent hash value you can compare across mirrors and friends.</li>
+              </ul>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-sm font-semibold text-foreground">What it does not guarantee</div>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>- No guarantee of anonymity or safety in your threat model.</li>
+                <li>- No guarantee the binary is bug-free or appropriate for your local legal risk.</li>
+                <li>- If an attacker controls both the binary and checksum source, checksums alone are not enough.</li>
+              </ul>
+            </div>
+          </div>
+
+          <details className="mt-6 rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+            <summary className="cursor-pointer text-foreground font-semibold">Platform-specific commands</summary>
+            <div className="mt-4 grid gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">Linux</div>
+                <CodeBlock>{`sha256sum -c <file>.sha256`}</CodeBlock>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">macOS</div>
+                <CodeBlock>{`shasum -a 256 -c <file>.sha256`}</CodeBlock>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">Windows (PowerShell)</div>
+                <CodeBlock>{`certutil -hashfile <file> SHA256`}</CodeBlock>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                For bundle authenticity (publisher signatures enforced by the agent), see{" "}
+                <Link href="/docs/outside/verification" prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
+                  /docs/outside/verification
+                </Link>
+                .
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+          <SectionHeader title="Installation paths" subtitle="Choose the flow that matches your skill level and risk tolerance." />
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Quick path</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Use the recommended artifact and the stepwise commands above. Intended for experienced users who still verify checksums.
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Careful verified path</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Verify SHA256, cross-check the hash against a second source (GitHub + a mirror/friend), then install. Keep copies of hashes offline.
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Source build path</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Build from source if your platform is not covered. Use the repository-backed docs for build tags and Go toolchain details.
+              </div>
+              <div className="mt-4">
+                <CommandBlock
+                  label="Build (example)"
+                  language="bash"
+                  code={`git clone ${githubRepo}\ncd shadownet-agent\nmkdir -p bin\ngo build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/\ngo build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/\n`}
+                  note="Requires Go toolchain as pinned in go.mod"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+          <SectionHeader title="Limitations / readiness" subtitle="Truthful constraints so users can make informed decisions." />
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">What works today</div>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>- Linux bundles with install script + systemd service (Inside/Outside).</li>
+                <li>- Bundle signature verification and strict parsing in the agent (trust is local and explicit).</li>
+                <li>- Android (Termux) Inside CLI for development/testing.</li>
+              </ul>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">What is still experimental</div>
+              <ul className="mt-3 text-sm text-muted-foreground space-y-2">
+                <li>- Production Android APK distribution (not shipped here).</li>
+                <li>- Release signature publishing and multi-maintainer signing workflows (documented, not fully implemented).</li>
+                <li>- Platform-specific packaging (.deb/.rpm) and polished installers.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
+          <SectionHeader title="Fallback sources" subtitle="If a platform artifact or metadata is missing, these are the safe next steps." />
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Source tarball</div>
+              <div className="mt-2 text-sm text-muted-foreground">Use a tagged source tarball when binaries are not suitable.</div>
+              <div className="mt-4">
                 <a
-                  className="text-primary hover:opacity-90"
-                  href={githubSourceBrowseUrl(effectiveVersion, recommended.file)}
+                  href={sourceTarballUrl}
+                  className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)] text-center block"
+                >
+                  {selectedRelease ? `Download ${selectedRelease.tag}.tar.gz` : "Download source"}
+                </a>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Repository</div>
+              <div className="mt-2 text-sm text-muted-foreground">Canonical code and docs, mirrored and reviewable.</div>
+              <div className="mt-4">
+                <a
+                  href={githubRepo}
+                  className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center block"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  View source on GitHub
+                  GitHub repo
                 </a>
               </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-3 min-w-[260px]">
-            {supportsAutoRecommendation ? null : (
-              <select
-                value={manualOS}
-                onChange={(e) => setManualOS(e.target.value as DetectedOS)}
-                className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-              >
-                <option value="unknown">Choose OS…</option>
-                <option value="linux">Linux</option>
-                <option value="windows">Windows</option>
-                <option value="macos">macOS</option>
-                <option value="android">Android</option>
-                <option value="raspberrypi">Raspberry Pi</option>
-                <option value="ios">iOS</option>
-              </select>
-            )}
-
-            {recommended.file ? (
-              <a
-                href={fileUrl(release, effectiveVersion, recommended.file)}
-                className="bg-primary hover:opacity-90 text-primary-foreground px-5 py-3 rounded-lg font-semibold text-center transition-opacity shadow-[0_0_0_1px_var(--border)]"
-                download
-              >
-                Download Now
-              </a>
-            ) : (
-              <Link
-                href="/installation"
-                className="bg-primary hover:opacity-90 text-primary-foreground px-5 py-3 rounded-lg font-semibold text-center transition-opacity shadow-[0_0_0_1px_var(--border)]"
-              >
-                Learn Installation
-              </Link>
-            )}
-
-            {recommended.sha256Url ? (
-              <a
-                href={recommended.sha256Url}
-                className="bg-card hover:opacity-90 text-foreground px-5 py-3 rounded-lg font-semibold text-center transition-opacity border border-border"
-                download
-              >
-                Download SHA256
-              </a>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-6 grid md:grid-cols-2 gap-6">
-          <div>
-            <div className="text-sm font-semibold text-foreground mb-2">Checksum</div>
-            <div className="text-xs font-mono text-muted break-all rounded-lg border border-border bg-card p-4 shadow-[0_0_0_1px_var(--border)]">
-              {sha ? sha : recommended.sha256Url ? "Loading…" : "TBD"}
             </div>
-          </div>
-          <div>
-            <div className="text-sm font-semibold text-foreground mb-2">Verify</div>
-            <CodeBlock>{recommended.verifyCommand ? recommended.verifyCommand : "See /docs/verification"}</CodeBlock>
-          </div>
-        </div>
-
-        {recommended.installCommand ? (
-          <div className="mt-6">
-            <div className="text-sm font-semibold text-foreground mb-2">Install (one-liner)</div>
-            <CodeBlock>{recommended.installCommand}</CodeBlock>
-          </div>
-        ) : null}
-
-        {recommended.notes && recommended.notes.length ? (
-          <ul className="mt-6 text-sm text-muted space-y-2">
-            {recommended.notes.map((n) => (
-              <li key={n}>- {n}</li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="mt-10 flex flex-wrap gap-2">
-        {cards.map((c) => (
-          <TabButton key={c.key} active={activeTab === c.key} onClick={() => setActiveTab(c.key)}>
-            {c.title}
-          </TabButton>
-        ))}
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-        {cards
-          .filter((c) => c.key === activeTab)
-          .map((c) => (
-            <div key={c.key}>
-              <div className="text-foreground font-bold text-lg">{c.title}</div>
-              <div className="mt-4 grid md:grid-cols-2 gap-4">
-                {c.items.map((i) => (
-                  <div key={i.id} className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-                    <div className="text-foreground font-semibold">{i.title}</div>
-                    <div className="mt-1 text-sm text-muted-foreground leading-relaxed">{i.description}</div>
-
-                    {i.file ? (
-                      <div className="mt-3 flex items-center gap-3 flex-wrap">
-                        <a
-                          href={fileUrl(release, effectiveVersion, i.file)}
-                          className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
-                          download
-                        >
-                          Download
-                        </a>
-                        <a
-                          href={githubSourceBrowseUrl(effectiveVersion, i.file)}
-                          className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Source
-                        </a>
-                        {i.sha256Url ? (
-                          <a
-                            href={i.sha256Url}
-                            className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
-                            download
-                          >
-                            SHA256
-                          </a>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {i.installCommand ? (
-                      <div className="mt-4">
-                        <div className="text-xs font-semibold text-muted mb-2">Install</div>
-                        <CodeBlock>{i.installCommand}</CodeBlock>
-                      </div>
-                    ) : null}
-
-                    {i.notes && i.notes.length ? (
-                      <ul className="mt-4 text-sm text-muted space-y-2">
-                        {i.notes.map((n) => (
-                          <li key={n}>- {n}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ))}
+            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+              <div className="text-foreground font-semibold">Docs</div>
+              <div className="mt-2 text-sm text-muted-foreground">Installation, safety guidance, and verification details.</div>
+              <div className="mt-4 grid gap-2">
+                <Link
+                  href="/docs/install"
+                  prefetch={false}
+                  className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
+                >
+                  Install guide
+                </Link>
+                <Link
+                  href="/docs/outside/verification"
+                  prefetch={false}
+                  className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
+                >
+                  Verification guide
+                </Link>
               </div>
             </div>
-          ))}
+          </div>
+
+          <details className="mt-6 rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
+            <summary className="cursor-pointer text-foreground font-semibold">Available targets in this release</summary>
+            <div className="mt-3 text-sm text-muted-foreground">
+              {selectedRelease ? (
+                <div className="font-mono break-all">{supportedTargets(selectedRelease).join(", ") || "n/a"}</div>
+              ) : (
+                <>n/a</>
+              )}
+            </div>
+          </details>
+        </div>
       </div>
     </section>
   );

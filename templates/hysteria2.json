@@ -1,18 +1,18 @@
 {
   "type": "hysteria2",
-  "tag": "hy2-out",
-  "server": "{{.ServerIP}}",
-  "server_port": "{{.ServerPort}}",
+  "tag": "proxy",
+  "server": "{{.Endpoint.Host}}",
+  "server_port": {{.Endpoint.Port}},
   "up_mbps": 50,
   "down_mbps": 100,
-  "password": "{{.UUID}}",
+  "password": "{{.Credentials.Password}}",
   "obfs": {
     "type": "salamander",
-    "password": "{{.ShortID}}"
+    "password": "{{.Credentials.ObfsPassword}}"
   },
   "tls": {
     "enabled": true,
-    "server_name": "{{.SNI}}",
+    "server_name": "{{.Credentials.SNI}}",
     "insecure": false
   }
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 	"github.com/kaveh/shadownet-agent/pkg/bundle"
@@ -16,7 +17,7 @@ import (
 func TestOutsideToInside_BundleRoundTrip_RevocationsApplied(t *testing.T) {
 	tempDir := t.TempDir()
 	storePath := filepath.Join(tempDir, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -39,19 +40,83 @@ func TestOutsideToInside_BundleRoundTrip_RevocationsApplied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ed25519: %v", err)
 	}
+	signerKeyID := bundle.Ed25519KeyID(pub)
+	now := time.Now().Unix()
+
+	r0, err := profile.NormalizeForWire(profile.Profile{
+		ID:     "new_01",
+		Family: profile.FamilyReality,
+		Endpoint: profile.Endpoint{
+			Host: "127.0.0.1",
+			Port: 443,
+		},
+		Capabilities: profile.Capabilities{
+			Transport: "tcp",
+		},
+		Credentials: profile.Credentials{
+			UUID:            "00000000-0000-0000-0000-000000000001",
+			PublicKey:       "pk",
+			ShortID:         "sid",
+			SNI:             "sni.example.com",
+			UTLSFingerprint: "chrome",
+		},
+		Source: profile.SourceInfo{
+			Source:       "test",
+			TrustLevel:   80,
+			PublisherKey: signerKeyID,
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("normalize reality: %v", err)
+	}
+	h0, err := profile.NormalizeForWire(profile.Profile{
+		ID:     "new_02",
+		Family: profile.FamilyHysteria2,
+		Endpoint: profile.Endpoint{
+			Host: "127.0.0.1",
+			Port: 8443,
+		},
+		Capabilities: profile.Capabilities{
+			Transport: "udp",
+		},
+		Credentials: profile.Credentials{
+			Password:     "pw",
+			ObfsPassword: "obfs",
+			SNI:          "sni.example.com",
+		},
+		Source: profile.SourceInfo{
+			Source:       "test",
+			TrustLevel:   80,
+			PublisherKey: signerKeyID,
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("normalize hysteria2: %v", err)
+	}
 
 	payload := &bundle.BundlePayload{
 		SchemaVersion:   1,
 		MinAgentVersion: "1.0.0",
-		Profiles: []profile.Profile{
-			{ID: "new_01", Family: profile.FamilyReality, Enabled: true},
-			{ID: "new_02", Family: profile.FamilyHysteria2, Enabled: true},
+		Profiles:        []profile.Profile{r0, h0},
+		Revocations:     []string{"reality_01_a"},
+		Templates: map[string]bundle.Template{
+			string(profile.FamilyReality):   {TemplateText: `{"type":"direct","tag":"proxy"}`},
+			string(profile.FamilyHysteria2): {TemplateText: `{"type":"direct","tag":"proxy"}`},
 		},
-		Revocations: []string{"reality_01_a"},
-		Templates:   map[string]bundle.Template{},
+		Notes: map[string]string{
+			"issuer_key_id": signerKeyID,
+		},
 	}
 
-	bundleBytes, err := bundle.GenerateBundle(payload, recipientPub, priv, "publisher1")
+	bundleBytes, err := bundle.GenerateBundleWithOptions(payload, priv, bundle.GenerateOptions{
+		RecipientPublicKey: recipientPub,
+		AllowPlaintext:     false,
+		SignerKeyID:        signerKeyID,
+		BundleID:           "bndl_roundtrip",
+		Seq:                1,
+		CreatedAt:          now,
+		ExpiresAt:          now + 3600,
+	})
 	if err != nil {
 		t.Fatalf("generate bundle: %v", err)
 	}
@@ -88,7 +153,7 @@ func TestOutsideToInside_BundleRoundTrip_RevocationsApplied(t *testing.T) {
 func TestOutsideToInside_BundleTamper_FailsVerification(t *testing.T) {
 	tempDir := t.TempDir()
 	storePath := filepath.Join(tempDir, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -103,16 +168,58 @@ func TestOutsideToInside_BundleTamper_FailsVerification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ed25519: %v", err)
 	}
+	signerKeyID := bundle.Ed25519KeyID(trustedPub)
+	now := time.Now().Unix()
+
+	r0, err := profile.NormalizeForWire(profile.Profile{
+		ID:     "new_01",
+		Family: profile.FamilyReality,
+		Endpoint: profile.Endpoint{
+			Host: "127.0.0.1",
+			Port: 443,
+		},
+		Capabilities: profile.Capabilities{
+			Transport: "tcp",
+		},
+		Credentials: profile.Credentials{
+			UUID:            "00000000-0000-0000-0000-000000000001",
+			PublicKey:       "pk",
+			ShortID:         "sid",
+			SNI:             "sni.example.com",
+			UTLSFingerprint: "chrome",
+		},
+		Source: profile.SourceInfo{
+			Source:       "test",
+			TrustLevel:   80,
+			PublisherKey: signerKeyID,
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("normalize reality: %v", err)
+	}
 
 	payload := &bundle.BundlePayload{
 		SchemaVersion:   1,
 		MinAgentVersion: "1.0.0",
-		Profiles:        []profile.Profile{{ID: "new_01", Family: profile.FamilyReality, Enabled: true}},
+		Profiles:        []profile.Profile{r0},
 		Revocations:     nil,
-		Templates:       map[string]bundle.Template{},
+		Templates: map[string]bundle.Template{
+			string(profile.FamilyReality): {TemplateText: `{"type":"direct","tag":"proxy"}`},
+		},
+		Notes: map[string]string{
+			"issuer_key_id": signerKeyID,
+		},
 	}
 
-	bundleBytes, err := bundle.GenerateBundle(payload, recipientPub, trustedPriv, "publisher1")
+	bundleBytes, err := bundle.GenerateBundleWithOptions(payload, trustedPriv, bundle.GenerateOptions{
+		RecipientPublicKey: recipientPub,
+		AllowPlaintext:     false,
+		SignerKeyID:        signerKeyID,
+		BundleID:           "bndl_tamper",
+		Seq:                1,
+		CreatedAt:          now,
+		ExpiresAt:          now + 3600,
+	})
 	if err != nil {
 		t.Fatalf("generate bundle: %v", err)
 	}

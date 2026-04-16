@@ -66,7 +66,7 @@ fi
 
 # 5. Import Initial Seed Config
 echo -e "\n${YELLOW}[Step 4/5] Import Seed Configs (Signal / QR)${NC}"
-echo "Paste the base64 bundle string (starts with snb://v1:) provided by your trusted outside contact:"
+echo "Paste the base64 bundle string (starts with snb://v2:) provided by your trusted outside contact:"
 read -p "Bundle URI (or press enter to skip and wait for Bluetooth Mesh): " BUNDLE_URI
 
 if [ -n "$BUNDLE_URI" ]; then

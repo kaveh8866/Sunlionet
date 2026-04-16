@@ -33,7 +33,7 @@ func BenchmarkRotationManager_Rotate_Fallback(b *testing.B) {
 
 	tmp := b.TempDir()
 	storePath := filepath.Join(tmp, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		b.Fatalf("store: %v", err)
 	}

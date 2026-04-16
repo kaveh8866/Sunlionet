@@ -1,82 +1,96 @@
 import Link from "next/link";
+import { InfoCard } from "../../components/ui/InfoCard";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { SectionHeader } from "../../components/ui/SectionHeader";
 
 export const dynamic = "force-static";
 
 export default function ArchitecturePage() {
   return (
-    <div className="container mx-auto px-4 py-16 max-w-5xl">
-      <h1 className="text-4xl font-extrabold tracking-tight text-white mb-6">Architecture</h1>
-      <p className="text-gray-400 leading-relaxed mb-10 max-w-3xl">
-        ShadowNet Agent separates the data plane (sing-box) from the control plane (Detector → Policy Engine → optional
-        bounded LLM advisor). Two binaries exist: Inside (runs in restricted networks) and Outside (runs on stable
-        networks to curate and deliver seed bundles via Signal and offline transfers).
-      </p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <div className="grid gap-10">
+        <PageHeader
+          title="Architecture"
+          subtitle="ShadowNet separates the data plane (sing-box) from the local control plane (detector → policy engine → optional bounded advisor). Two binaries cooperate: Inside (restricted networks) and Outside (stable networks) for curated delivery via trusted channels."
+          actions={
+            <>
+              <Link
+                href="/docs/architecture"
+                prefetch={false}
+                className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+              >
+                Read full doc
+              </Link>
+              <Link
+                href="/download"
+                prefetch={false}
+                className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
+              >
+                Download
+              </Link>
+            </>
+          }
+        />
 
-      <div className="grid md:grid-cols-2 gap-8">
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-6">
-          <h2 className="text-xl font-bold text-white mb-3">Data Plane</h2>
-          <ul className="text-gray-300 text-sm space-y-2 leading-relaxed">
-            <li>sing-box runs the actual tunnel/outbound.</li>
-            <li>Atomic reload applies a new outbound config without losing process state.</li>
-            <li>No telemetry or external control channel required.</li>
-          </ul>
-        </div>
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-6">
-          <h2 className="text-xl font-bold text-white mb-3">Control Plane</h2>
-          <ul className="text-gray-300 text-sm space-y-2 leading-relaxed">
-            <li>Detector emits privacy-safe events (no domains, bounded buffer).</li>
-            <li>Policy Engine resolves routine cases deterministically (80–90%).</li>
-            <li>LLM advisor is invoked only for ambiguous multi-signal cases.</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-10 rounded-xl border border-gray-800 bg-gray-900/40 p-6">
-        <h2 className="text-xl font-bold text-white mb-3">Coordination</h2>
-        <ul className="text-gray-300 text-sm space-y-2 leading-relaxed">
-          <li>Signal bundles: Outside → Inside signed + encrypted profile delivery.</li>
-          <li>Offline mesh: Bluetooth / Wi‑Fi Direct for local transfer during partial outages.</li>
-          <li>No central seed API: distribution stays peer-to-peer to reduce blocking risk.</li>
-        </ul>
-      </div>
-
-      <div className="mt-12 rounded-xl border border-gray-800 bg-gray-950 p-6">
-        <h2 className="text-xl font-bold text-white mb-4">Flow</h2>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
-            <div className="font-mono text-indigo-300 mb-2">Detector</div>
-            <div className="text-gray-300">Active probes + passive stats → event stream with jitter and budgets.</div>
+        <section className="grid gap-6">
+          <SectionHeader title="Planes" subtitle="A strict separation keeps the tunnel simple and the decision logic auditable." />
+          <div className="grid md:grid-cols-2 gap-4">
+            <InfoCard
+              title="Data plane"
+              eyebrow="Network"
+              description={
+                <ul className="grid gap-2">
+                  <li>sing-box runs the tunnel/outbound.</li>
+                  <li>Atomic reload applies new config without losing process state.</li>
+                  <li>No telemetry or external control channel required.</li>
+                </ul>
+              }
+            />
+            <InfoCard
+              title="Control plane"
+              eyebrow="Local"
+              description={
+                <ul className="grid gap-2">
+                  <li>Detector emits privacy-safe events (no domains, bounded buffer).</li>
+                  <li>Policy Engine resolves routine cases deterministically.</li>
+                  <li>Advisor is invoked only for ambiguous multi-signal cases.</li>
+                </ul>
+              }
+            />
           </div>
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
-            <div className="font-mono text-cyan-300 mb-2">Policy Engine</div>
-            <div className="text-gray-300">Scores and ranks profiles, applies switch/cooldown rules and diversity.</div>
-          </div>
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
-            <div className="font-mono text-emerald-300 mb-2">Supervisor</div>
-            <div className="text-gray-300">Generates config → atomic reload → updates health metrics.</div>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <div className="mt-10 flex flex-wrap gap-3">
-        <Link
-          href="/docs"
-          className="bg-gray-900 hover:bg-gray-800 text-gray-100 px-5 py-3 rounded-lg font-semibold transition-colors border border-gray-800"
-        >
-          Read docs
-        </Link>
-        <Link
-          href="/installation"
-          className="bg-gray-900 hover:bg-gray-800 text-gray-100 px-5 py-3 rounded-lg font-semibold transition-colors border border-gray-800"
-        >
-          Installation guide
-        </Link>
-        <Link
-          href="/download"
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-lg font-semibold transition-colors"
-        >
-          Downloads
-        </Link>
+        <section className="grid gap-6">
+          <SectionHeader title="Coordination" subtitle="Distribution stays peer-to-peer to reduce blocking and central points of failure." />
+          <InfoCard
+            title="Delivery model"
+            tone="panel"
+            description={
+              <ul className="grid gap-2">
+                <li>Signal bundles: Outside → Inside signed + encrypted profile delivery.</li>
+                <li>Offline mesh: Bluetooth / Wi‑Fi Direct for local transfer during partial outages.</li>
+                <li>No central seed API: the website never hosts live proxy seeds.</li>
+              </ul>
+            }
+          />
+        </section>
+
+        <section className="grid gap-6">
+          <SectionHeader title="Flow" subtitle="Core loop: observe → decide → apply → measure." />
+          <div className="grid md:grid-cols-3 gap-4">
+            <InfoCard
+              title="Detector"
+              eyebrow="Signals"
+              description="Active probes + passive stats → event stream with jitter and budgets."
+            />
+            <InfoCard
+              title="Policy engine"
+              eyebrow="Deterministic"
+              description="Scores and ranks profiles, applies switch/cooldown rules and diversity."
+            />
+            <InfoCard title="Supervisor" eyebrow="Apply" description="Generates config → atomic reload → updates health metrics." />
+          </div>
+        </section>
       </div>
     </div>
   );

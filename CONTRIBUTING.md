@@ -4,9 +4,11 @@ This project is security-sensitive. Please keep contributions minimal, testable,
 
 ## Development
 
-- Go 1.21+
+- Go 1.25+
 - Windows: PowerShell 7+ (use [run_tests.ps1](scripts/run_tests.ps1))
 - Linux/macOS: use [run_tests.sh](scripts/run_tests.sh)
+
+This repository pins its Go toolchain in [go.mod](file:///C:/Users/Kaveh/Desktop/Iran-Agent-Vpn/go.mod) via `toolchain`. If your local Go supports toolchains, `go` will auto-download the pinned version.
 
 Before opening a PR:
 
@@ -31,4 +33,3 @@ Before opening a PR:
 
 - Persian documentation is welcome.
 - Keep translations in `README.fa.md` and `docs/fa/*`.
-

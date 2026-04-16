@@ -5,11 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	mathrand "math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"text/template"
+
+	"github.com/kaveh/shadownet-agent/pkg/profile"
 )
 
 // LLMDecision represents the structured output from the LLM
@@ -88,19 +89,27 @@ func (g *ConfigGenerator) Generate(decision LLMDecision, serverIP string, uuid s
 
 	// Generate randomizations for fingerprint defense
 	shortID := generateRandomHex(8)
-	fragLength := mathrand.Intn(100) + 100 // 100-200 bytes fragmentation
-	fragInterval := mathrand.Intn(10) + 10 // 10-20ms interval
 
-	data := map[string]interface{}{
-		"ServerIP":     serverIP,
-		"ServerPort":   decision.Parameters.Port,
-		"UUID":         uuid,
-		"PubKey":       pubKey,
-		"SNI":          decision.Parameters.SNI,
-		"UTLS":         decision.Parameters.UTLS,
-		"ShortID":      shortID,
-		"FragLength":   fragLength,
-		"FragInterval": fragInterval,
+	data := profile.Profile{
+		Family:  profile.Family(decision.Protocol),
+		Enabled: true,
+		Endpoint: profile.Endpoint{
+			Host: serverIP,
+			Port: decision.Parameters.Port,
+		},
+		Credentials: profile.Credentials{
+			UUID:            uuid,
+			Password:        uuid,
+			PublicKey:       pubKey,
+			ShortID:         shortID,
+			SNI:             decision.Parameters.SNI,
+			UTLSFingerprint: decision.Parameters.UTLS,
+			ObfsPassword:    shortID,
+		},
+		MutationPolicy: profile.MutationPolicy{
+			AllowedSets:         nil,
+			MaxMutationsPerHour: 0,
+		},
 	}
 
 	var outboundBuf bytes.Buffer

@@ -12,7 +12,7 @@ func TestStore_SaveLoad_RoundTrip(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "comms.enc")
 
-	store, err := NewStore(dbPath, "0123456789abcdef0123456789abcdef")
+	store, err := NewStore(dbPath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestStore_Save_DoesNotLeakPlaintext(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "comms.enc")
 
-	store, err := NewStore(dbPath, "0123456789abcdef0123456789abcdef")
+	store, err := NewStore(dbPath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}

@@ -1,22 +1,22 @@
 {
   "type": "vless",
-  "tag": "reality-out",
-  "server": "{{.ServerIP}}",
-  "server_port": "{{.ServerPort}}",
-  "uuid": "{{.UUID}}", 
+  "tag": "proxy",
+  "server": "{{.Endpoint.Host}}",
+  "server_port": {{.Endpoint.Port}},
+  "uuid": "{{.Credentials.UUID}}",
   "flow": "xtls-rprx-vision",
   "packet_encoding": "xudp",
   "tls": {
     "enabled": true,
-    "server_name": "{{.SNI}}",
+    "server_name": "{{.Credentials.SNI}}",
     "utls": {
       "enabled": true,
-      "fingerprint": "{{.UTLS}}"
+      "fingerprint": "{{.Credentials.UTLSFingerprint}}"
     },
     "reality": {
       "enabled": true,
-      "public_key": "{{.PubKey}}",
-      "short_id": "{{.ShortID}}"
+      "public_key": "{{.Credentials.PublicKey}}",
+      "short_id": "{{.Credentials.ShortID}}"
     }
   },
   "multiplex": {

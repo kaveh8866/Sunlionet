@@ -23,6 +23,7 @@ var (
 	llamaURL     string
 	storePath    string
 	templateDir  string
+	masterKeyArg string
 	debugMode    bool
 	batteryLevel int
 )
@@ -31,6 +32,7 @@ func init() {
 	flag.StringVar(&llamaURL, "llama-url", "http://127.0.0.1:8080", "Local llama.cpp API endpoint")
 	flag.StringVar(&storePath, "store", "/var/lib/shadownet/store.enc", "Path to AES-GCM encrypted config DB")
 	flag.StringVar(&templateDir, "templates", "/opt/shadownet/templates", "Path to sing-box JSON templates")
+	flag.StringVar(&masterKeyArg, "master-key", "", "Master key for local encrypted storage (32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable verbose logging and LLM reasoning output")
 	flag.IntVar(&batteryLevel, "battery", 100, "Simulated battery level (Android)")
 }
@@ -43,8 +45,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if masterKeyArg == "" {
+		masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+	}
+	masterKey, err := profile.ParseMasterKey(masterKeyArg)
+	if err != nil {
+		log.Fatalf("Missing or invalid master key: %v (set --master-key or SHADOWNET_MASTER_KEY)", err)
+	}
+
 	// 1. Initialize Encrypted Store
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef") // 32-byte key
+	store, err := profile.NewStore(storePath, masterKey)
 	if err != nil {
 		log.Fatalf("Failed to open encrypted store: %v", err)
 	}

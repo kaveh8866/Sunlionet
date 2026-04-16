@@ -14,24 +14,28 @@ func TestRankProfiles_FiltersCooldownAndSortsByScore(t *testing.T) {
 
 	profiles := []profile.Profile{
 		{
-			ID:     "p-cooldown",
-			Family: profile.FamilyReality,
-			Health: profile.Health{SuccessEWMA: 1.0, MedianHandshakeMs: 50, LastOkAt: now, CooldownUntil: now + 60},
+			ID:      "p-cooldown",
+			Family:  profile.FamilyReality,
+			Enabled: true,
+			Health:  profile.Health{SuccessEWMA: 1.0, MedianHandshakeMs: 50, LastOkAt: now, CooldownUntil: now + 60},
 		},
 		{
-			ID:     "p-fast",
-			Family: profile.FamilyReality,
-			Health: profile.Health{SuccessEWMA: 0.85, MedianHandshakeMs: 200, LastOkAt: now - 10, CooldownUntil: 0},
+			ID:      "p-fast",
+			Family:  profile.FamilyReality,
+			Enabled: true,
+			Health:  profile.Health{SuccessEWMA: 0.85, MedianHandshakeMs: 200, LastOkAt: now - 10, CooldownUntil: 0},
 		},
 		{
-			ID:     "p-slow",
-			Family: profile.FamilyReality,
-			Health: profile.Health{SuccessEWMA: 0.95, MedianHandshakeMs: 1500, LastOkAt: now - 10, CooldownUntil: 0},
+			ID:      "p-slow",
+			Family:  profile.FamilyReality,
+			Enabled: true,
+			Health:  profile.Health{SuccessEWMA: 0.95, MedianHandshakeMs: 1500, LastOkAt: now - 10, CooldownUntil: 0},
 		},
 		{
-			ID:     "p-stale",
-			Family: profile.FamilyReality,
-			Health: profile.Health{SuccessEWMA: 0.98, MedianHandshakeMs: 400, LastOkAt: now - 7200, CooldownUntil: 0},
+			ID:      "p-stale",
+			Family:  profile.FamilyReality,
+			Enabled: true,
+			Health:  profile.Health{SuccessEWMA: 0.98, MedianHandshakeMs: 400, LastOkAt: now - 7200, CooldownUntil: 0},
 		},
 	}
 

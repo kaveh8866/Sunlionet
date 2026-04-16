@@ -1,15 +1,15 @@
 {
   "type": "tuic",
-  "tag": "tuic-out",
+  "tag": "proxy",
   "server": "{{.Endpoint.Host}}",
   "server_port": {{.Endpoint.Port}},
-  "uuid": "tuic_uuid",
-  "password": "tuic_password",
+  "uuid": "{{.Credentials.UUID}}",
+  "password": "{{.Credentials.Password}}",
   "congestion_control": "bbr",
   "udp_relay_mode": "native",
   "tls": {
     "enabled": true,
-    "server_name": "example.com",
+    "server_name": "{{.Credentials.SNI}}",
     "alpn": ["h3", "spdy/3.1"]
   }
 }

@@ -2,16 +2,20 @@ package sbctl
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"html/template"
-	"log"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
+	"text/template"
 
 	"github.com/kaveh/shadownet-agent/pkg/profile"
 )
+
+var ErrBinaryNotFound = errors.New("sing-box binary not found")
 
 // Controller manages the sing-box process and config generation
 type Controller struct {
@@ -19,16 +23,18 @@ type Controller struct {
 	BinaryPath string
 	mu         sync.Mutex
 	cmd        *exec.Cmd
+	stdoutPath string
+	stderrPath string
 }
 
 // NewController creates a new sing-box controller
 func NewController(configDir, binaryPath string) *Controller {
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		log.Fatalf("Failed to create sbctl config dir: %v", err)
-	}
+	_ = os.MkdirAll(configDir, 0o700)
 	return &Controller{
 		ConfigDir:  configDir,
 		BinaryPath: binaryPath,
+		stdoutPath: filepath.Join(configDir, "sing-box.stdout.log"),
+		stderrPath: filepath.Join(configDir, "sing-box.stderr.log"),
 	}
 }
 
@@ -55,46 +61,15 @@ func (c *Controller) ApplyAndReload(configJSON string) error {
 
 	configPath := filepath.Join(c.ConfigDir, "config.json")
 
-	// Atomic write: write to temp file, then rename
-	tempPath := configPath + ".tmp"
-	if err := os.WriteFile(tempPath, []byte(configJSON), 0600); err != nil {
-		return fmt.Errorf("failed to write temp config: %w", err)
+	if err := writeAtomic(configPath, []byte(configJSON), 0o600); err != nil {
+		return err
 	}
 
-	// Basic validation could happen here before renaming
-	// e.g. running `sing-box check -c tempPath`
-
-	if err := os.Rename(tempPath, configPath); err != nil {
-		return fmt.Errorf("failed to commit config: %w", err)
+	if err := c.ValidateConfig(configPath); err != nil {
+		return err
 	}
 
-	// If sing-box is running, try to reload. Otherwise start it.
-	if c.cmd != nil && c.cmd.Process != nil {
-		log.Println("sbctl: Reloading sing-box config...")
-		// In a real scenario, sing-box supports hot-reloading via SIGHUP on Linux
-		// or an API call. For simplicity here, we'll restart the process.
-		if err := c.cmd.Process.Kill(); err != nil {
-			log.Printf("sbctl: Warning: failed to kill old process: %v", err)
-		}
-		c.cmd.Wait()
-	}
-
-	log.Println("sbctl: Starting sing-box...")
-	// We mock the actual execution if the binary doesn't exist for local dev
-	if _, err := os.Stat(c.BinaryPath); os.IsNotExist(err) {
-		log.Printf("sbctl: [MOCK] sing-box binary not found at %s, simulating run", c.BinaryPath)
-		return nil
-	}
-
-	c.cmd = exec.Command(c.BinaryPath, "run", "-c", configPath)
-	c.cmd.Stdout = os.Stdout
-	c.cmd.Stderr = os.Stderr
-
-	if err := c.cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start sing-box: %w", err)
-	}
-
-	return nil
+	return c.reloadOrRestartLocked(configPath)
 }
 
 // Stop gracefully shuts down sing-box
@@ -103,12 +78,85 @@ func (c *Controller) Stop() error {
 	defer c.mu.Unlock()
 
 	if c.cmd != nil && c.cmd.Process != nil {
-		log.Println("sbctl: Stopping sing-box...")
 		if err := c.cmd.Process.Kill(); err != nil {
 			return err
 		}
 		c.cmd.Wait()
 		c.cmd = nil
+	}
+	return nil
+}
+
+func (c *Controller) PID() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cmd == nil || c.cmd.Process == nil {
+		return 0
+	}
+	return c.cmd.Process.Pid
+}
+
+func (c *Controller) ValidateConfig(configPath string) error {
+	bin := c.BinaryPath
+	if bin == "" {
+		looked, err := exec.LookPath("sing-box")
+		if err != nil {
+			return ErrBinaryNotFound
+		}
+		bin = looked
+	}
+	if _, err := os.Stat(bin); err != nil {
+		return ErrBinaryNotFound
+	}
+	cmd := exec.Command(bin, "check", "-c", configPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("sing-box check failed: %w: %s", err, string(out))
+	}
+	return nil
+}
+
+func (c *Controller) reloadOrRestartLocked(configPath string) error {
+	bin := c.BinaryPath
+	if bin == "" {
+		looked, err := exec.LookPath("sing-box")
+		if err != nil {
+			return ErrBinaryNotFound
+		}
+		bin = looked
+	}
+	if _, err := os.Stat(bin); err != nil {
+		return ErrBinaryNotFound
+	}
+
+	if c.cmd != nil && c.cmd.Process != nil {
+		_ = c.cmd.Process.Signal(syscall.SIGHUP)
+		return nil
+	}
+
+	stdoutFile, _ := os.OpenFile(c.stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	stderrFile, _ := os.OpenFile(c.stderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+
+	c.cmd = exec.Command(bin, "run", "-c", configPath)
+	c.cmd.Stdout = io.MultiWriter(os.Stdout, stdoutFile)
+	c.cmd.Stderr = io.MultiWriter(os.Stderr, stderrFile)
+	if err := c.cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start sing-box: %w", err)
+	}
+	return nil
+}
+
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return fmt.Errorf("failed to write temp config: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("failed to commit config: %w", err)
 	}
 	return nil
 }

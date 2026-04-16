@@ -36,7 +36,7 @@ func newRotationManagerForPerf(t *testing.T) *policy.RotationManager {
 	tmp := t.TempDir()
 
 	storePath := filepath.Join(tmp, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}

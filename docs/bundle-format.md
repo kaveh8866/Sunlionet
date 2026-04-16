@@ -20,16 +20,21 @@ Where `wrapper_json` is:
     "magic": "SNB1",
     "bundle_id": "bndl_...",
     "publisher_key_id": "key-1",
-    "recipient_key_id": "default",
+    "recipient_key_id": "age-x25519:<fingerprint16>" ,
     "seq": 1,
     "created_at": 1713100000,
     "expires_at": 1713700000,
     "cipher": "age-x25519",
-    "signature": "base64url(ed25519_signature)"
+    "sig": "base64url(ed25519_signature)"
   },
   "ciphertext": "base64url(age_encrypted_payload_bytes)"
 }
 ```
+
+Plaintext (signed, unencrypted) bundles are also supported when explicitly allowed at generation time:
+
+- `cipher = "none"`
+- `recipient_key_id = "none"`
 
 Signature input:
 

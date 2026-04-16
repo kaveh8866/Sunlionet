@@ -1,0 +1,9 @@
+{
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "proxy"
+    }
+  ]
+}
+

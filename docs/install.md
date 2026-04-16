@@ -10,10 +10,18 @@ This repository currently targets:
 - Inside: `-tags inside`
 - Outside: `-tags outside`
 
+## Linux MVP quick path
+
+For the full Linux-first MVP flow (bundle import, profile selection, config render, sing-box validation/launch), use:
+
+- [Linux MVP Install + Run](install/linux-mvp.md)
+- [Linux Smoke Test](dev/linux-smoke-test.md)
+
 ## Development prerequisites
 
-- Go 1.22+
+- Go 1.25+
 
+This repository pins its Go toolchain in [go.mod](file:///C:/Users/Kaveh/Desktop/Iran-Agent-Vpn/go.mod) via `toolchain`. If your local Go supports toolchains, `go` will auto-download the pinned version.
 
 Optional tools:
 

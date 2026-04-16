@@ -1,15 +1,34 @@
-# نصب و راه‌اندازی (توسعه)
+# راهنمای نصب
 
-این پروژه دو باینری تولید می‌کند:
+این مخزن در حال حاضر روی این سناریوها تمرکز دارد:
 
-- ShadowNet-Inside: برای داخل ایران (با تگ `inside`)
-- ShadowNet-Outside: برای خارج از ایران (با تگ `outside`)
+- **ShadowNet-Inside**: لینوکس (x86_64 یا arm64) و اندروید (Termux برای توسعه)
+- **ShadowNet-Outside**: هر سیستم‌عامل با اینترنت پایدار (Linux/macOS/Windows)
 
-## پیش‌نیازها
+## برچسب‌های build
 
-- Go نسخه 1.22 به بالا
+- Inside: `-tags inside`
+- Outside: `-tags outside`
 
-## بیلد
+## مسیر پیشنهادی برای لینوکس (MVP)
+
+برای مسیر کامل MVP روی لینوکس (وارد کردن bundle، انتخاب پروفایل، ساخت کانفیگ، اعتبارسنجی/اجرای sing-box):
+
+- [Linux MVP Install + Run](../install/linux-mvp.md)
+- [Linux Smoke Test](../dev/linux-smoke-test.md)
+
+## پیش‌نیازهای توسعه
+
+- Go 1.25+
+
+این مخزن نسخه ابزار Go را در `go.mod` از طریق `toolchain` پین می‌کند. اگر Go شما از toolchain پشتیبانی کند، `go` نسخه پین‌شده را خودکار دانلود می‌کند.
+
+ابزارهای اختیاری:
+
+- `sing-box` (برای اجرای واقعی اتصال)
+- یک runtime محلی LLM (مثل llama.cpp) برای مسیر advisor محدود
+
+## ساخت (Build)
 
 ```bash
 mkdir -p bin
@@ -32,6 +51,15 @@ go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
   ./scripts/run_tests.sh
   ```
 
+## بوت‌استرپ اولیه seed برای Inside
+
+Inside از یک API مرکزی دانلود نمی‌کند. seed اولیه از مسیرهای زیر می‌آید:
+
+1. Signal از یک کمک‌کننده مورد اعتماد که Outside را اجرا می‌کند (`snb://v2:` bundle)
+2. QR code (حضوری)
+3. Bluetooth mesh (از دستگاه‌های Inside نزدیک در زمان blackout)
+
 ## نکات اندروید
 
-در حال حاضر این مخزن یک APK آمادهٔ تولید ارائه نمی‌دهد. برای توسعه می‌توانید نسخهٔ Inside را در Termux (به‌صورت CLI) اجرا کنید و پروژهٔ «VPN/Foreground Service» را به‌صورت یک پروژهٔ جداگانهٔ اندرویدی نگه دارید.
+این مخزن فعلاً **APK تولیدی اندروید** منتشر نمی‌کند. برای توسعه، Inside را به‌صورت CLI در Termux اجرا کنید و wrapper (VPN/foreground-service) را یک پروژه جداگانه اندروید در نظر بگیرید.
+

@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { InfoCard } from "../../components/ui/InfoCard";
+import { PageHeader } from "../../components/ui/PageHeader";
+
 export const dynamic = "force-static";
 
 const items = [
@@ -21,22 +25,28 @@ const items = [
 
 export default function RoadmapPage() {
   return (
-    <div className="container mx-auto px-4 py-16 max-w-4xl">
-      <h1 className="text-4xl font-extrabold tracking-tight text-white mb-4">Roadmap</h1>
-      <p className="text-gray-400 leading-relaxed max-w-3xl">
-        ShadowNet is designed to be practical for solo development while remaining resilient under 2026 DPI conditions.
-        This roadmap focuses on features that increase safety, uptime, and offline survivability.
-      </p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <div className="grid gap-10">
+        <PageHeader
+          title="Roadmap"
+          subtitle="Near-term work that improves safety, uptime, verification, and offline survivability."
+          actions={
+            <Link
+              href="/docs/governance/model"
+              prefetch={false}
+              className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+            >
+              Governance model
+            </Link>
+          }
+        />
 
-      <div className="mt-10 grid gap-4">
-        {items.map((i) => (
-          <div key={i.title} className="rounded-xl border border-gray-800 bg-gray-900/40 p-6">
-            <div className="text-white font-bold">{i.title}</div>
-            <div className="text-gray-400 text-sm mt-2 leading-relaxed">{i.desc}</div>
-          </div>
-        ))}
+        <div className="grid gap-4">
+          {items.map((i) => (
+            <InfoCard key={i.title} title={i.title} description={i.desc} />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
-

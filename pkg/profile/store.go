@@ -4,12 +4,15 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -55,7 +58,40 @@ func (s *Store) WipeOnSuspicion() error {
 	return nil
 }
 
-func NewStore(dbPath string, masterKey string) (*Store, error) {
+func ParseMasterKey(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, errors.New("missing master key")
+	}
+	if len(s) == 32 {
+		return []byte(s), nil
+	}
+
+	hexS := s
+	if strings.HasPrefix(hexS, "0x") || strings.HasPrefix(hexS, "0X") {
+		hexS = hexS[2:]
+	}
+	if len(hexS) == 64 {
+		if b, err := hex.DecodeString(hexS); err == nil && len(b) == 32 {
+			return b, nil
+		}
+	}
+
+	for _, enc := range []*base64.Encoding{
+		base64.RawURLEncoding,
+		base64.URLEncoding,
+		base64.RawStdEncoding,
+		base64.StdEncoding,
+	} {
+		if b, err := enc.DecodeString(s); err == nil && len(b) == 32 {
+			return b, nil
+		}
+	}
+
+	return nil, errors.New("invalid master key: expected 32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes")
+}
+
+func NewStore(dbPath string, masterKey []byte) (*Store, error) {
 	if len(masterKey) != 32 {
 		return nil, errors.New("masterKey must be 32 bytes for AES-256")
 	}
@@ -67,7 +103,7 @@ func NewStore(dbPath string, masterKey string) (*Store, error) {
 
 	return &Store{
 		dbPath: dbPath,
-		key:    []byte(masterKey),
+		key:    append([]byte(nil), masterKey...),
 	}, nil
 }
 

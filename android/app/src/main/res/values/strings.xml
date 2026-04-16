@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ShadowNet</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="import_bundle">Import Bundle</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="profile_none">Profile: -</string>
+    <string name="action_none">Last action: -</string>
+    <string name="logs">Logs</string>
+    <string name="notif_channel_agent">ShadowNet Agent</string>
+    <string name="notif_channel_vpn">ShadowNet VPN</string>
+</resources>
+

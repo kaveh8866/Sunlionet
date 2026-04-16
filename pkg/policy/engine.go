@@ -27,6 +27,12 @@ const (
 	recentSuccessWindowSec = int64(3600)
 	highLatencyMs          = 1000
 	lowLatencyMs           = 300
+	trustWeight            = 0.2
+	freshImportWindowSec   = int64(7 * 24 * 3600)
+	freshImportBonus       = 3.0
+	consecutiveFailPenalty = 15.0
+	failCountPenalty       = 1.0
+	tcpBonus               = 1.0
 )
 
 // Action is the output of the policy engine or LLM advisor
@@ -60,6 +66,12 @@ func (e *Engine) RankProfiles(profiles []profile.Profile) []profile.Profile {
 	now := time.Now().Unix()
 	var available []profile.Profile
 	for _, p := range profiles {
+		if !p.Enabled {
+			continue
+		}
+		if p.ManualDisabled {
+			continue
+		}
 		if p.Health.CooldownUntil > now {
 			continue
 		}
@@ -78,6 +90,22 @@ func (e *Engine) RankProfiles(profiles []profile.Profile) []profile.Profile {
 		// Reward recently successful profiles
 		if now-p.Health.LastOkAt < recentSuccessWindowSec {
 			score += recentSuccessBonus
+		}
+
+		if p.Source.TrustLevel == 0 {
+			p.Source.TrustLevel = 50
+		}
+		score += float64(p.Source.TrustLevel) * trustWeight
+
+		if p.Source.ImportedAt > 0 && now-p.Source.ImportedAt < freshImportWindowSec {
+			score += freshImportBonus
+		}
+
+		score -= float64(p.Health.ConsecutiveFails) * consecutiveFailPenalty
+		score -= float64(p.Health.FailureCount) * failCountPenalty
+
+		if p.Capabilities.Transport == "tcp" {
+			score += tcpBonus
 		}
 
 		p.Health.Score = score

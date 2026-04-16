@@ -1,14 +1,16 @@
-# مستندات ShadowNet
+# مستندات (فارسی)
 
-این سایت مستندات پروژه ShadowNet است (دو نسخه Inside و Outside).
+این وب‌سایت فایل‌های markdown داخل مخزن را مستقیماً نمایش می‌دهد.
 
-- English: [Home](../index.md)
+## شروع سریع
 
-## بخش‌ها
+- [نصب](install.md)
+- [راهنمای ایمنی](user/safety.md)
+- [تأیید صحت (Outside)](outside/verification.md)
 
-- معماری: [architecture.md](../architecture.md)
-- نصب و راه‌اندازی: [install.md](install.md)
-- فرمت بسته‌ها: [bundle-format.md](../bundle-format.md)
-- پروتکل Signal: [signal.md](../signal.md)
-- مدل تهدید: [threat-model.md](../threat-model.md)
+## نکته مهم
+
+- ShadowNet **گمنامی را تضمین نمی‌کند**.
+- ShadowNet **جایگزین تحلیل تهدید شخصی شما نیست**.
+- همیشه فایل‌های دانلودی را قبل از اجرا با checksum بررسی کنید.
 

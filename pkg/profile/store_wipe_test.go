@@ -9,7 +9,7 @@ import (
 func TestStore_WipeOnSuspicion_RemovesEncryptedStore(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "store.enc")
-	masterKey := "0123456789abcdef0123456789abcdef"
+	masterKey := []byte("0123456789abcdef0123456789abcdef")
 
 	store, err := NewStore(dbPath, masterKey)
 	if err != nil {

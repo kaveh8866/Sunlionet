@@ -31,10 +31,25 @@ else
     exit 1
 fi
 
+echo -e "\n${YELLOW}Running Go Unit Tests (outside tag)...${NC}"
+go test -v -tags outside ./...
+if [ $? -eq 0 ]; then
+    echo -e "\n${GREEN}✓ Outside-tag tests passed successfully!${NC}"
+else
+    echo -e "\n${RED}✗ Outside-tag tests failed. Check the output above.${NC}"
+    exit 1
+fi
+
 echo -e "\n${YELLOW}Running Go Linter (go vet)...${NC}"
 go vet ./...
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ No suspicious constructs found.${NC}"
+fi
+
+echo -e "\n${YELLOW}Running Go Linter (go vet, outside tag)...${NC}"
+go vet -tags outside ./...
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ No suspicious constructs found (outside).${NC}"
 fi
 
 echo -e "\n${YELLOW}Checking code formatting...${NC}"

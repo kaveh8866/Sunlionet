@@ -37,7 +37,7 @@ func TestRotationManager_EndToEndFallbackCycle_WritesConfig(t *testing.T) {
 
 	tmp := t.TempDir()
 	storePath := filepath.Join(tmp, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRotationManager_LLMClientInvalidJSON_FallbackStillAppliesConfig(t *test
 
 	tmp := t.TempDir()
 	storePath := filepath.Join(tmp, "store.enc")
-	store, err := profile.NewStore(storePath, "0123456789abcdef0123456789abcdef")
+	store, err := profile.NewStore(storePath, []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}

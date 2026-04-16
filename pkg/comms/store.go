@@ -21,7 +21,7 @@ type Store struct {
 	mu     sync.RWMutex
 }
 
-func NewStore(dbPath string, masterKey string) (*Store, error) {
+func NewStore(dbPath string, masterKey []byte) (*Store, error) {
 	if len(masterKey) != 32 {
 		return nil, errors.New("masterKey must be 32 bytes for AES-256")
 	}
@@ -30,7 +30,7 @@ func NewStore(dbPath string, masterKey string) (*Store, error) {
 	}
 	return &Store{
 		dbPath: dbPath,
-		key:    []byte(masterKey),
+		key:    append([]byte(nil), masterKey...),
 	}, nil
 }
 

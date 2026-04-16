@@ -29,10 +29,25 @@ if ($LASTEXITCODE -eq 0) {
     exit 1
 }
 
+Write-Host "`nRunning Go Unit Tests (outside tag)..." -ForegroundColor Yellow
+go test -v -tags outside ./...
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n✓ Outside-tag tests passed successfully!" -ForegroundColor Green
+} else {
+    Write-Host "`n✗ Outside-tag tests failed. Check the output above." -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "`nRunning Go Linter (go vet)..." -ForegroundColor Yellow
 go vet ./...
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✓ No suspicious constructs found." -ForegroundColor Green
+}
+
+Write-Host "`nRunning Go Linter (go vet, outside tag)..." -ForegroundColor Yellow
+go vet -tags outside ./...
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✓ No suspicious constructs found (outside)." -ForegroundColor Green
 }
 
 Write-Host "`nChecking code formatting..." -ForegroundColor Yellow
