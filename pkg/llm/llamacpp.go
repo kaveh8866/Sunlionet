@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"text/template"
 	"time"
 
 	"github.com/kaveh/shadownet-agent/pkg/detector"
@@ -124,7 +125,7 @@ ws ::= [ \t\n]*
 	// 3. Parse into sbctl.LLMDecision
 	var decision sbctl.LLMDecision
 	if err := json.Unmarshal([]byte(rawOutput), &decision); err != nil {
-		return policy.Action{}, fmt.Errorf("failed to parse LLM JSON: %w (raw: %s)", err, rawOutput)
+		return policy.Action{}, fmt.Errorf("failed to parse LLM JSON: %w", err)
 	}
 
 	// Convert LLMDecision to generic policy.Action (mock mapping for interface compatibility)
@@ -142,8 +143,34 @@ func (c *LocalLlamaCPPClient) buildPrompt(
 	candidates []profile.Profile,
 	recentEvents []detector.Event,
 ) (string, error) {
-	// (Reusing the template execution logic from the previous advisor.go)
-	// For brevity in this file, we return a mock string.
-	// In the real system, this calls tmpl.Execute()
-	return "<INST> " + sysPrompt + " </INST>\nAssistant: {", nil
+	tmpl, err := template.New("prompt").Parse(sysPrompt)
+	if err != nil {
+		return "", err
+	}
+
+	data := struct {
+		Fingerprint    string
+		CurrentProfile profile.Profile
+		Candidates     []profile.Profile
+		RecentEvents   []detector.Event
+		CPU            int
+		RAM            int
+		Battery        int
+	}{
+		Fingerprint:    "redacted",
+		CurrentProfile: currentProfile,
+		Candidates:     candidates,
+		RecentEvents:   recentEvents,
+		CPU:            0,
+		RAM:            0,
+		Battery:        0,
+	}
+
+	var promptBuf bytes.Buffer
+	if err := tmpl.Execute(&promptBuf, data); err != nil {
+		return "", err
+	}
+
+	_ = fingerprint
+	return promptBuf.String(), nil
 }

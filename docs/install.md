@@ -2,8 +2,12 @@
 
 This repository currently targets:
 
-- ShadowNet-Inside: Linux laptops and Android (Termux for development)
-- ShadowNet-Outside: any OS with stable internet (Linux/macOS/Windows)
+- ShadowNet Inside: Linux + Android (signed APK and Termux CLI path)
+- ShadowNet Outside: any OS with stable internet (Linux/macOS/Windows)
+
+If you are installing for the first time, start here:
+
+- [Getting Started](getting-started.md)
 
 ## Build tags
 
@@ -15,7 +19,13 @@ This repository currently targets:
 For the full Linux-first MVP flow (bundle import, profile selection, config render, sing-box validation/launch), use:
 
 - [Linux MVP Install + Run](install/linux-mvp.md)
+- [Linux Install Paths](install/linux.md)
+- [Artifact Verification](install/verification.md)
 - [Linux Smoke Test](dev/linux-smoke-test.md)
+
+## Android install path
+
+- [Android Install (APK)](install/android.md)
 
 ## Development prerequisites
 
@@ -33,8 +43,8 @@ Optional tools:
 ```bash
 mkdir -p bin
 
-go build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/
-go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
+go build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-inside ./cmd/inside/
+go build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-outside ./cmd/outside/
 ```
 
 ## Run tests
@@ -61,4 +71,4 @@ Inside does not fetch from a central API. Initial seeds arrive via:
 
 ## Android notes
 
-This repository does not currently ship a production Android APK. For development, run the Inside agent in Termux (CLI) and keep the VPN/foreground-service wrapper as a separate Android project.
+The release pipeline can publish a signed `app-release.apk`. For high-risk environments, verify `checksums.txt` and `checksums.sig` before sideloading.

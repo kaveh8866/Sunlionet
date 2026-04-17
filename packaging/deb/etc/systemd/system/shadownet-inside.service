@@ -1,0 +1,14 @@
+[Unit]
+Description=ShadowNet Agent (Inside)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/shadownet/inside.env
+ExecStart=/usr/local/bin/shadownet-inside
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

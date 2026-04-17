@@ -17,8 +17,8 @@ export default async function Home() {
           title="ShadowNet Agent"
           subtitle={
             <>
-              ShadowNet is split into two cooperating binaries: ShadowNet-Inside (runs on the censored device and manages the data plane) and
-              ShadowNet-Outside (runs by supporters to generate signed and encrypted configuration bundles). No analytics, no seed hosting, and a
+              ShadowNet is split into two cooperating binaries: ShadowNet Inside (runs on the censored device and manages the data plane) and
+              ShadowNet Outside (runs by supporters to generate signed and encrypted configuration bundles). No analytics, no seed hosting, and a
               bias toward offline operation.
             </>
           }
@@ -65,12 +65,12 @@ export default async function Home() {
           <div className="grid md:grid-cols-2 gap-4">
             <InfoCard
               eyebrow="On-device"
-              title="ShadowNet-Inside"
+              title="ShadowNet Inside"
               description="Detector → deterministic policy engine → sing-box reload. Operates locally and prioritizes predictable behavior."
             />
             <InfoCard
               eyebrow="Supporter node"
-              title="ShadowNet-Outside"
+              title="ShadowNet Outside"
               description="Discovery → validation → signed+encrypted bundles. Produces artifacts intended for controlled delivery (e.g., Signal)."
             />
           </div>
@@ -102,7 +102,7 @@ export default async function Home() {
         <section className="grid gap-6">
           <SectionHeader title="Contribute & cooperate" subtitle="Keep changes small, reviewable, and privacy-preserving. No personal data required." />
           <div className="grid md:grid-cols-2 gap-4">
-            <InfoCard title="Run Outside and deliver bundles" description="Supporters can run ShadowNet-Outside and transfer artifacts through trusted channels." />
+            <InfoCard title="Run Outside and deliver bundles" description="Supporters can run ShadowNet Outside and transfer artifacts through trusted channels." />
             <InfoCard title="Report field observations" description="Share anonymized notes about new blocks/resets without linking personal identifiers." />
             <InfoCard title="Contribute code (AGPL-3.0)" description="Anonymous GitHub contributions are welcome. Prefer incremental PRs with tests." />
             <InfoCard href="/support" title="Support" description="Anonymous donation options and other low-risk ways to help." />

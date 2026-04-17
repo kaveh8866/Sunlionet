@@ -1,0 +1,5 @@
+Package: shadownet
+Version: 0.1.0
+Architecture: amd64
+Maintainer: ShadowNet
+Description: ShadowNet agent

@@ -2,8 +2,10 @@ package com.shadownet.agent
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.net.VpnService
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,10 +18,13 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private lateinit var repo: StateRepository
+    private lateinit var secure: SecureStore
+    private lateinit var statusDot: View
     private lateinit var textStatus: TextView
     private lateinit var textProfile: TextView
     private lateinit var textAction: TextView
-    private lateinit var textLogs: TextView
+    private lateinit var textError: TextView
+    private lateinit var buttonToggle: Button
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -59,25 +64,33 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         repo = StateRepository(this)
+        secure = SecureStore(this)
+        statusDot = findViewById(R.id.statusDot)
         textStatus = findViewById(R.id.textStatus)
         textProfile = findViewById(R.id.textProfile)
         textAction = findViewById(R.id.textAction)
-        textLogs = findViewById(R.id.textLogs)
+        textError = findViewById(R.id.textError)
+        buttonToggle = findViewById(R.id.buttonToggle)
 
-        findViewById<Button>(R.id.buttonConnect).setOnClickListener { requestVpnAndConnect() }
-        findViewById<Button>(R.id.buttonDisconnect).setOnClickListener { disconnect() }
+        buttonToggle.setOnClickListener {
+            if (secure.isDesiredConnected()) {
+                disconnect()
+            } else {
+                requestVpnAndConnect()
+            }
+        }
         findViewById<Button>(R.id.buttonImport).setOnClickListener {
             importLauncher.launch(arrayOf("*/*"))
         }
 
-        Logs.observe { text -> runOnUiThread { textLogs.text = text } }
         render(repo.load())
 
         lifecycleScope.launch {
             while (isActive) {
                 val st = repo.load()
                 render(st)
-                delay(1000)
+                val d = if (st.status == "Connected") 1000L else 3000L
+                delay(d)
             }
         }
     }
@@ -92,6 +105,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRuntime() {
+        secure.setDesiredConnected(true)
         val vpnIntent = Intent(this, ShadowNetVpnService::class.java).apply {
             action = ShadowNetVpnService.ACTION_START
         }
@@ -105,6 +119,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disconnect() {
+        secure.setDesiredConnected(false)
         startService(Intent(this, AgentService::class.java).apply { action = AgentService.ACTION_STOP })
         startService(Intent(this, ShadowNetVpnService::class.java).apply { action = ShadowNetVpnService.ACTION_STOP })
         repo.save(UiState(status = "Disconnected", currentProfile = "-", lastAction = "manual stop"))
@@ -112,14 +127,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render(st: UiState) {
-        val status = if (st.lastError.isBlank()) st.status else "Error"
+        val showError = st.lastError.isNotBlank()
+        val status = if (showError) "Error" else st.status
+        val dotColor = if (showError) {
+            Color.parseColor("#ef4444")
+        } else if (st.status == "Connected") {
+            Color.parseColor("#10b981")
+        } else {
+            Color.parseColor("#f59e0b")
+        }
+
+        statusDot.setBackgroundColor(dotColor)
         textStatus.text = "Status: $status"
         textProfile.text = "Profile: ${st.currentProfile}"
-        textAction.text = if (st.lastError.isBlank()) {
-            "Last action: ${st.lastAction}"
-        } else {
-            "Error: ${st.lastError}"
-        }
+        textAction.text = "Last action: ${st.lastAction}"
+        textError.text = "Last error: ${st.lastError.ifBlank { "-" }}"
+        textError.visibility = if (showError) View.VISIBLE else View.GONE
+        buttonToggle.text = if (secure.isDesiredConnected()) getString(R.string.disconnect) else getString(R.string.connect)
     }
 }
-

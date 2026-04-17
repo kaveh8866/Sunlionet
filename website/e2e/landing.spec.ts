@@ -13,8 +13,9 @@ test("download section recommends Android when UA indicates Android", async ({ b
   });
   const page = await context.newPage();
   await page.goto("/download");
-  await expect(page.getByText("Recommended for your system")).toBeVisible();
-  await expect(page.getByText(/shadownet-inside-v0\.1\.0-android-arm64/i).first()).toBeVisible();
+  await expect(page.getByText("Recommended download")).toBeVisible();
+  await expect(page.getByText("Android (Termux)").first()).toBeVisible();
+  await expect(page.getByText(/android-arm64/i).first()).toBeVisible();
   await context.close();
 });
 

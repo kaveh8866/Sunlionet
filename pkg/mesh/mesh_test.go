@@ -7,13 +7,13 @@ import (
 
 func TestEncryptAndDecryptOffer(t *testing.T) {
 	// Initialize Alice
-	alice, err := NewMeshManager()
+	alice, err := NewCrypto()
 	if err != nil {
 		t.Fatalf("Failed to initialize Alice: %v", err)
 	}
 
 	// Initialize Bob
-	bob, err := NewMeshManager()
+	bob, err := NewCrypto()
 	if err != nil {
 		t.Fatalf("Failed to initialize Bob: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestEncryptAndDecryptOffer(t *testing.T) {
 	}
 
 	// Alice encrypts offer with Bob's public key
-	msg, err := alice.EncryptOffer(offer, &bob.pubKey)
+	msg, err := alice.EncryptOffer(offer, bob.PublicKey())
 	if err != nil {
 		t.Fatalf("Failed to encrypt offer: %v", err)
 	}
@@ -41,14 +41,14 @@ func TestEncryptAndDecryptOffer(t *testing.T) {
 }
 
 func TestHandleIncomingMessage_InvalidKey(t *testing.T) {
-	alice, _ := NewMeshManager()
-	bob, _ := NewMeshManager()
-	eve, _ := NewMeshManager()
+	alice, _ := NewCrypto()
+	bob, _ := NewCrypto()
+	eve, _ := NewCrypto()
 
 	offer := ProxyOffer{Timestamp: time.Now().Unix(), HopCount: 1}
 
 	// Alice encrypts for Bob
-	msg, _ := alice.EncryptOffer(offer, &bob.pubKey)
+	msg, _ := alice.EncryptOffer(offer, bob.PublicKey())
 
 	// Eve tries to decrypt (should fail)
 	if _, err := eve.DecryptOffer(msg); err == nil {
@@ -57,17 +57,17 @@ func TestHandleIncomingMessage_InvalidKey(t *testing.T) {
 }
 
 func TestForwardMessage_HopByHopForwarding(t *testing.T) {
-	alice, _ := NewMeshManager()
-	relay, _ := NewMeshManager()
-	carol, _ := NewMeshManager()
+	alice, _ := NewCrypto()
+	relay, _ := NewCrypto()
+	carol, _ := NewCrypto()
 
 	offer := ProxyOffer{Timestamp: time.Now().Unix(), Config: "cfg", HopCount: 1}
-	msgToRelay, err := alice.EncryptOffer(offer, &relay.pubKey)
+	msgToRelay, err := alice.EncryptOffer(offer, relay.PublicKey())
 	if err != nil {
 		t.Fatalf("encrypt to relay: %v", err)
 	}
 
-	msgToCarol, err := relay.ForwardMessage(msgToRelay, &carol.pubKey)
+	msgToCarol, err := relay.ForwardMessage(msgToRelay, carol.PublicKey())
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}

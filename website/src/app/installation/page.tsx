@@ -32,14 +32,13 @@ export default async function InstallationPage() {
   const githubDownloads = `${githubRepo}/tree/main/website/public/downloads/${tag}`;
 
   const linuxAmd64 = `shadownet-inside-${tag}-linux-amd64.tar.gz`;
-  const androidArm64 = `shadownet-inside-${tag}-android-arm64`;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="grid gap-10">
         <PageHeader
           title="Installation"
-          subtitle="Common install paths for ShadowNet-Inside and ShadowNet-Outside. Always verify checksums before running."
+          subtitle="Common install paths for ShadowNet Inside and ShadowNet Outside. Always verify checksums before running."
           actions={
             <>
               <Link
@@ -108,29 +107,18 @@ sudo systemctl enable --now shadownet-inside.service`}
             </div>
           </Step>
 
-          <Step n="3" title="Install (Android / Termux)">
-            Install the Termux binary and run it:
-            <div className="mt-4">
-              <CodeBlockShell
-                language="bash"
-                code={`pkg update -y
-pkg install -y wget openssl-tool coreutils
-wget -O shadownet-inside "$BASE_URL/downloads/${tag}/${androidArm64}"
-wget -O shadownet-inside.sha256 "$BASE_URL/downloads/${tag}/${androidArm64}.sha256"
-sha256sum -c shadownet-inside.sha256
-chmod +x shadownet-inside
-./shadownet-inside`}
-              />
+          <Step n="3" title="Install (Android app)">
+            Install ShadowNet App as a signed APK from GitHub Releases, then import a trusted bundle and connect.
+            <div className="mt-4 text-sm text-muted-foreground">
+              Follow:{" "}
+              <Link href="/docs/install/android" prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
+                /docs/install/android
+              </Link>
+              .
             </div>
           </Step>
 
-          <Step n="4" title="Install (iOS / Network Extension)">
-            iOS requires a dedicated wrapper app using a Packet Tunnel Provider for system-wide tunneling. The core agent in this repo is
-            portable, but a production iOS wrapper should be maintained as a separate Xcode project. Assume VPN indicators and Settings entries
-            are OS-controlled and visible.
-          </Step>
-
-          <Step n="5" title="Seeds via Signal (trusted contact)">
+          <Step n="4" title="Seeds via Signal (trusted contact)">
             Ask a trusted supporter to run Outside and send you signed + encrypted bundles via Signal. Inside accepts bundles only from
             explicitly trusted publisher keys. No domains are stored, and only a bounded event buffer is retained locally.
           </Step>

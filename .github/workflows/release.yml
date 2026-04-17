@@ -12,7 +12,8 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
 
 jobs:
   resolve:
@@ -35,8 +36,8 @@ jobs:
     uses: ./.github/workflows/reusable-build-release.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      enable_packages: false
-      enable_android_apk: false
+      enable_packages: true
+      enable_android_apk: true
     secrets: inherit
 
   verify:

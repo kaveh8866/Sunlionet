@@ -144,7 +144,7 @@ func TestProposeAction_InvalidJSON(t *testing.T) {
 }
 
 func TestProposeAction_DoesNotLeakSecretsInPrompt(t *testing.T) {
-	const secret = "SHADOWNET_MASTER_KEY=super-secret-material"
+	const secret = "TEST_SECRET=redacted-test-value"
 
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req LlamaRequest

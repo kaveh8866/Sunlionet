@@ -20,6 +20,13 @@ export type LocalRelease = {
   buildRef?: string;
   createdAtUnix?: number;
   artifacts: ReleaseArtifact[];
+  verification?: {
+    checksumsHref?: string;
+    signatureHref?: string;
+    keyHref?: string;
+    keyFingerprint?: string;
+    keyFingerprintHref?: string;
+  };
 };
 
 function parseSemver(version: string) {
@@ -113,6 +120,7 @@ export const getLocalReleases = cache(async (): Promise<LocalRelease[]> => {
       for (const f of files) {
         if (!f.isFile()) continue;
         if (f.name === "VERSION.txt") continue;
+        if (f.name === "checksums.txt" || f.name === "checksums.sig" || f.name === "checksums.pub" || f.name === "checksums.pub.sha256") continue;
         if (f.name.endsWith(".sha256")) continue;
 
         const p = path.join(dir, f.name);
@@ -130,7 +138,28 @@ export const getLocalReleases = cache(async (): Promise<LocalRelease[]> => {
         });
       }
 
-      releases.push({ tag, buildRef, createdAtUnix, artifacts });
+      let keyFingerprint: string | undefined = undefined;
+      try {
+        const raw = (await readFile(path.join(dir, "checksums.pub.sha256"), "utf8")).trim();
+        const m = /^([a-fA-F0-9]{64})\s+(\S+)$/.exec(raw.split(/\r?\n/)[0]?.trim() ?? "");
+        keyFingerprint = m?.[1]?.toLowerCase();
+      } catch {
+        keyFingerprint = undefined;
+      }
+
+      releases.push({
+        tag,
+        buildRef,
+        createdAtUnix,
+        artifacts,
+        verification: {
+          checksumsHref: files.some((f) => f.isFile() && f.name === "checksums.txt") ? `/downloads/${tag}/checksums.txt` : undefined,
+          signatureHref: files.some((f) => f.isFile() && f.name === "checksums.sig") ? `/downloads/${tag}/checksums.sig` : undefined,
+          keyHref: files.some((f) => f.isFile() && f.name === "checksums.pub") ? `/downloads/${tag}/checksums.pub` : undefined,
+          keyFingerprint,
+          keyFingerprintHref: files.some((f) => f.isFile() && f.name === "checksums.pub.sha256") ? `/downloads/${tag}/checksums.pub.sha256` : undefined,
+        },
+      });
     }
 
     return releases.sort((a, b) => compareReleaseAsc(a.tag, b.tag)).reverse();
@@ -138,4 +167,3 @@ export const getLocalReleases = cache(async (): Promise<LocalRelease[]> => {
     return [];
   }
 });
-

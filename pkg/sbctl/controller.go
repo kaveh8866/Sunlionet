@@ -96,6 +96,14 @@ func (c *Controller) PID() int {
 	return c.cmd.Process.Pid
 }
 
+func (c *Controller) StdoutPath() string {
+	return c.stdoutPath
+}
+
+func (c *Controller) StderrPath() string {
+	return c.stderrPath
+}
+
 func (c *Controller) ValidateConfig(configPath string) error {
 	bin := c.BinaryPath
 	if bin == "" {

@@ -12,11 +12,35 @@ import androidx.core.app.NotificationCompat
 
 class ShadowNetVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
+    private lateinit var repo: StateRepository
+    private lateinit var secure: SecureStore
+    private var state: State = State.IDLE
+
+    enum class State {
+        IDLE,
+        STARTING,
+        RUNNING,
+        ERROR,
+        STOPPED,
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        repo = StateRepository(this)
+        secure = SecureStore(this)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startVpn()
             ACTION_STOP -> stopVpn()
+            else -> {
+                if (secure.isDesiredConnected()) {
+                    startVpn()
+                } else {
+                    stopSelf()
+                }
+            }
         }
         return START_STICKY
     }
@@ -26,10 +50,23 @@ class ShadowNetVpnService : VpnService() {
         super.onDestroy()
     }
 
+    override fun onRevoke() {
+        Logs.w("vpn", "revoked by system")
+        secure.setDesiredConnected(false)
+        stopVpn()
+        super.onRevoke()
+    }
+
     private fun startVpn() {
         if (vpnInterface != null) {
             return
         }
+        if (!secure.isDesiredConnected()) {
+            stopSelf()
+            return
+        }
+        state = State.STARTING
+        repo.save(UiState(status = "Connecting", currentProfile = repo.load().currentProfile, lastAction = "vpn starting"))
         startForeground(NOTIF_ID, buildNotification("VPN connecting"))
 
         val builder = Builder()
@@ -41,11 +78,14 @@ class ShadowNetVpnService : VpnService() {
 
         vpnInterface = builder.establish()
         if (vpnInterface == null) {
-            Logs.add("[vpn] failed to establish tun")
+            state = State.ERROR
+            Logs.e("vpn", "failed to establish tun")
+            repo.save(UiState(status = "Error", lastError = "VPN failed to establish"))
             stopSelf()
             return
         }
-        Logs.add("[vpn] tun established")
+        state = State.RUNNING
+        Logs.i("vpn", "tun established")
         startForeground(NOTIF_ID, buildNotification("VPN active"))
     }
 
@@ -55,7 +95,8 @@ class ShadowNetVpnService : VpnService() {
         } catch (_: Exception) {
         } finally {
             vpnInterface = null
-            Logs.add("[vpn] stopped")
+            state = State.STOPPED
+            Logs.i("vpn", "stopped")
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -94,4 +135,3 @@ class ShadowNetVpnService : VpnService() {
         private const val NOTIF_ID = 1101
     }
 }
-

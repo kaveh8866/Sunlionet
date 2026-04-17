@@ -19,11 +19,38 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+        go-version: ['1.22.5', '1.23.0']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v4
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go-version }}
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+      - name: go version
+        run: go version
+      - name: validate go version
+        shell: bash
+        run: |
+          goversion="$(go env GOVERSION)"
+          echo "Detected: ${goversion}"
+          expected="go${{ matrix.go-version }}"
+          if [ "${goversion}" != "${expected}" ]; then
+            echo "Expected ${expected}, got ${goversion}"
+            exit 1
+          fi
+      - name: go mod tidy
+        run: go mod tidy
+      - name: Verify tidy is clean
+        shell: bash
+        run: git diff --exit-code go.mod go.sum
+      - name: go build
+        run: go build ./...
       - name: go test
         run: go test ./...
       - name: go test (outside tag)
@@ -75,9 +102,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v4
         with:
-          go-version-file: go.mod
+          go-version: '1.22.5'
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-1.22.5-${{ hashFiles('**/go.sum') }}
+      - name: go version
+        run: go version
+      - name: validate go version
+        shell: bash
+        run: |
+          goversion="$(go env GOVERSION)"
+          echo "Detected: ${goversion}"
+          case "${goversion}" in
+            go1.22.5) ;;
+            *)
+              echo "Expected Go 1.22.5, got ${goversion}"
+              exit 1
+              ;;
+          esac
       - name: Run censorship matrix
         run: go test ./tests/simulation -run TestCensorshipSimulationScenarioMatrix_64Scenarios -count=1
       - name: Run latency and stability gates

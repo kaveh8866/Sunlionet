@@ -1,0 +1,14 @@
+[Unit]
+Description=ShadowNet Agent (Outside)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/shadownet/outside.env
+ExecStart=/usr/local/bin/shadownet-outside
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

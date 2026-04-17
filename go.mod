@@ -1,13 +1,10 @@
 module github.com/kaveh/shadownet-agent
 
-go 1.25.0
+go 1.22
 
 require (
-	filippo.io/age v1.3.1
-	golang.org/x/crypto v0.45.0
+	filippo.io/age v1.2.1
+	golang.org/x/crypto v0.25.0
 )
 
-require (
-	filippo.io/hpke v0.4.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-)
+require golang.org/x/sys v0.22.0 // indirect

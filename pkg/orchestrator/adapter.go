@@ -84,6 +84,11 @@ func EnforceSafety(current profile.Profile, candidates []profile.Profile, req De
 	if err := ValidateResponse(req, resp); err != nil {
 		return DecisionResponse{}, err
 	}
+	if resp.Action == ActionSwitchProfile && req.Constraints.MaxSwitchRate > 0 {
+		if len(req.History.RecentSwitches) >= req.Constraints.MaxSwitchRate {
+			return DecisionResponse{}, fmt.Errorf("switch rate limit exceeded")
+		}
+	}
 
 	if resp.Action == ActionSwitchProfile || resp.Action == ActionCooldownProfile {
 		target, ok := findProfileByID(candidates, resp.ProfileID)

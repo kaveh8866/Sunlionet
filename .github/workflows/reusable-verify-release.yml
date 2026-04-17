@@ -41,10 +41,10 @@ jobs:
           VERSION="${{ inputs.version }}"
           cd dist
 
-          rm -f checksums.sha256 checksums.sha512 release-manifest.json
-          touch checksums.sha256 checksums.sha512
+          rm -f checksums.txt checksums.sig checksums.pem checksums.pub checksums.pub.sha256 release.json
+          touch checksums.txt
 
-          files="$(ls -1 | grep -vE '^(checksums\.sha(256|512)|release-manifest\.json)$')"
+          files="$(ls -1 | grep -vE '^(checksums\.txt|checksums\.(sig|pem|pub)|checksums\.pub\.sha256|release\.json|.*\.(sha256|sha512))$' || true)"
           if [ -z "$files" ]; then
             echo "no artifacts found in dist/"
             exit 1
@@ -52,29 +52,32 @@ jobs:
 
           for f in $files; do
             sha256sum "$f" > "${f}.sha256"
-            sha512sum "$f" > "${f}.sha512"
-            cat "${f}.sha256" >> checksums.sha256
-            cat "${f}.sha512" >> checksums.sha512
+            cat "${f}.sha256" >> checksums.txt
           done
 
           python3 - <<'PY'
           import glob, json, os
           version = os.environ["VERSION"]
+          checksums = {}
+          with open("checksums.txt", "r", encoding="utf-8") as f:
+              for line in f:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  parts = line.split()
+                  if len(parts) >= 2:
+                      checksums[parts[-1]] = parts[0]
           artifacts = []
           for path in sorted([p for p in glob.glob("*") if os.path.isfile(p)]):
             if path.endswith((".sha256", ".sha512", ".sig", ".pem")):
               continue
-            if path in ("checksums.sha256", "checksums.sha512", "release-manifest.json"):
+            if path in ("checksums.txt", "checksums.sig", "checksums.pem", "checksums.pub", "checksums.pub.sha256", "release.json"):
               continue
-            sha256_path = path + ".sha256"
-            sha512_path = path + ".sha512"
-            sha256 = open(sha256_path, "r", encoding="utf-8").read().split()[0] if os.path.exists(sha256_path) else None
-            sha512 = open(sha512_path, "r", encoding="utf-8").read().split()[0] if os.path.exists(sha512_path) else None
+            sha256 = checksums.get(path)
             artifacts.append(
               {
                 "name": path,
                 "sha256": sha256,
-                "sha512": sha512,
                 "size": os.path.getsize(path),
               }
             )
@@ -82,8 +85,14 @@ jobs:
             "schema": "shadownet.release-manifest.v1",
             "version": version,
             "artifacts": artifacts,
+            "verification": {
+              "checksums": "checksums.txt",
+              "signature": "checksums.sig",
+              "public_key": "checksums.pub",
+              "public_key_fingerprint": "checksums.pub.sha256"
+            }
           }
-          with open("release-manifest.json", "w", encoding="utf-8") as f:
+          with open("release.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
             f.write("\n")
           PY
@@ -93,29 +102,32 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign artifacts (keyless)
+      - name: Sign checksum bundle
         shell: bash
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           set -euo pipefail
           cd dist
-          export COSIGN_EXPERIMENTAL=1
-
-          to_sign="$(ls -1 | grep -vE '\\.(sig|pem)$')"
-          for f in $to_sign; do
-            cosign sign-blob --yes --output-signature "${f}.sig" --output-certificate "${f}.pem" "$f"
-          done
+          if [ -z "${COSIGN_PRIVATE_KEY:-}" ] || [ -z "${COSIGN_PUBLIC_KEY:-}" ]; then
+            echo "Missing cosign keys. Expected COSIGN_PRIVATE_KEY and COSIGN_PUBLIC_KEY secrets."
+            exit 1
+          fi
+          printf "%s" "${COSIGN_PRIVATE_KEY}" > cosign.key
+          printf "%s" "${COSIGN_PUBLIC_KEY}" > checksums.pub
+          chmod 0600 cosign.key
+          cosign sign-blob --yes --key cosign.key --output-signature checksums.sig checksums.txt
+          sha256sum checksums.pub > checksums.pub.sha256
+          rm -f cosign.key
 
       - name: Verify signatures
         shell: bash
         run: |
           set -euo pipefail
           cd dist
-          export COSIGN_EXPERIMENTAL=1
-
-          to_verify="$(ls -1 | grep -vE '\\.(sig|pem)$')"
-          for f in $to_verify; do
-            cosign verify-blob --certificate "${f}.pem" --signature "${f}.sig" "$f" >/dev/null
-          done
+          cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt >/dev/null
 
       - uses: actions/upload-artifact@v4
         with:

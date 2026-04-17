@@ -44,7 +44,7 @@ function Build-GoBinary {
   $env:GOARCH = $GoArch
   $env:CGO_ENABLED = "0"
 
-  & $goExe build -trimpath -tags $Tags -ldflags "-s -w" -o $OutPath $Pkg | Out-Null
+  & $goExe build -trimpath -tags $Tags -ldflags "-s -w -X main.version=$Version" -o $OutPath $Pkg | Out-Null
   if (!(Test-Path $OutPath)) {
     throw "build failed: $Name ($GoOS/$GoArch)"
   }

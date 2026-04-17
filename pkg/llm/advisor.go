@@ -1,11 +1,7 @@
 package llm
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"log"
-	"text/template"
 
 	"github.com/kaveh/shadownet-agent/pkg/detector"
 	"github.com/kaveh/shadownet-agent/pkg/policy"
@@ -72,67 +68,9 @@ func (a *LocalGGUFAdvisor) ProposeAction(
 	candidates []profile.Profile,
 	recentEvents []detector.Event,
 ) (policy.Action, error) {
-
-	// 1. Construct the prompt
-	tmpl, err := template.New("prompt").Parse(sysPrompt)
-	if err != nil {
-		return policy.Action{}, err
-	}
-
-	data := struct {
-		Fingerprint    string
-		CurrentProfile profile.Profile
-		Candidates     []profile.Profile
-		RecentEvents   []detector.Event
-		CPU            int
-		RAM            int
-		Battery        int
-	}{
-		Fingerprint:    fingerprint,
-		CurrentProfile: currentProfile,
-		Candidates:     candidates,
-		RecentEvents:   recentEvents,
-		CPU:            45, // Mocked for demonstration
-		RAM:            60, // Mocked for demonstration
-		Battery:        80, // Mocked for demonstration
-	}
-
-	var promptBuf bytes.Buffer
-	if err := tmpl.Execute(&promptBuf, data); err != nil {
-		return policy.Action{}, err
-	}
-
-	log.Printf("llm: Generated Prompt:\n%s", promptBuf.String())
-
-	// 2. Invoke local CGO/llama.cpp binding (mocked here)
-	// In a real system, you would pass `promptBuf.String()` to llama.cpp with a JSON grammar constraint.
-
-	// Example mock output that the LLM should generate:
-	mockJSONOutput := `{
-		"action": "SWITCH_PROFILE",
-		"target_profile_id": "tuic_02_b",
-		"mutation_set": "tuic_sni_port_rotate_1",
-		"cooldown_sec": 900,
-		"reason_code": "udp_ok_hysteria_degraded",
-		"confidence": 0.82
-	}`
-
-	var act policy.Action
-	if err := json.Unmarshal([]byte(mockJSONOutput), &act); err != nil {
-		return policy.Action{}, fmt.Errorf("llm produced invalid json: %w", err)
-	}
-
-	// Validate the LLM choice is within candidates
-	valid := false
-	for _, c := range candidates {
-		if c.ID == act.TargetProfile {
-			valid = true
-			break
-		}
-	}
-	if !valid {
-		return policy.Action{}, fmt.Errorf("llm hallucinated profile: %s", act.TargetProfile)
-	}
-
-	return act, nil
+	_ = fingerprint
+	_ = currentProfile
+	_ = candidates
+	_ = recentEvents
+	return policy.Action{}, fmt.Errorf("llm: gguf advisor not implemented")
 }

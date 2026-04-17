@@ -1,15 +1,29 @@
-# ShadowNet Agent (Inside + Outside)
+# ShadowNet Agent
 
-ShadowNet is an offline-first censorship-circumvention agent designed for high-risk DPI environments (e.g., Iran). The project builds two tightly coordinated binaries from the same codebase:
+ShadowNet is an offline-first, bundle-based censorship-resilience system designed for high-risk DPI environments (e.g., Iran).
 
-- ShadowNet-Inside (Iran): runs on end-user devices inside Iran and keeps connectivity alive by detecting interference and rotating local sing-box configurations.
-- ShadowNet-Outside (Exile/Helper): runs outside Iran and acts as a config factory to generate, validate, and distribute signed/encrypted seed bundles to Inside users (primarily via Signal).
+It ships as:
+
+- ShadowNet Inside: runs on end-user devices in censored networks and keeps connectivity alive by detecting interference and rotating local sing-box configurations.
+- ShadowNet Outside: runs by supporters to generate, validate, and distribute signed/encrypted seed bundles to Inside users (primarily via Signal).
+- ShadowNet App: the Android wrapper for ShadowNet Inside (VPN integration + bundle import UI).
+- ShadowNet Dashboard: the web UI for operator visibility (including local runtime status via localhost-only APIs).
 
 Documentation site (GitHub Pages): https://kaveh8866.github.io/shadownet-agent/ (enable Pages to serve from `/docs` on `main`).
 
 Persian: see [README.fa.md](README.fa.md).
 
 ---
+
+## Getting Started (MVP)
+
+Start here: [docs/getting-started.md](docs/getting-started.md).
+
+It covers the three first-time paths:
+
+- Linux: Download → Verify → Install → Import bundle → Connect
+- Android: Install APK → Import bundle → Connect → Monitor
+- Web: Open ShadowNet Dashboard → Detect local runtime → Show status
 
 ## Quick Start (Development)
 
@@ -68,7 +82,7 @@ go run ./cmd/inside \
 
 This repository produces two binaries using Go build tags.
 
-### ShadowNet-Inside (Iran)
+### ShadowNet Inside
 
 ```bash
 go build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/
@@ -78,7 +92,7 @@ go build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/
 ./bin/shadownet-inside
 ```
 
-### ShadowNet-Outside (Exile/Helper)
+### ShadowNet Outside
 
 ```bash
 go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
@@ -124,7 +138,7 @@ For the detailed threat model and dual-agent design, see `/docs`.
 - [Linux Smoke Test](docs/dev/linux-smoke-test.md)
 - [راهنمای نصب (Persian)](docs/fa/install.md)
 
-## ShadowNet-Outside (MVP usage)
+## ShadowNet Outside (MVP usage)
 
 Generate keys:
 

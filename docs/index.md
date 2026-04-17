@@ -7,7 +7,7 @@ ShadowNet is an offline-first censorship-circumvention agent built for high-risk
 
 ## Inside vs Outside
 
-| | ShadowNet-Inside (Iran) | ShadowNet-Outside (Exile/Helper) |
+| | ShadowNet Inside (Iran) | ShadowNet Outside (Exile/Helper) |
 |---|---|---|
 | Primary role | Maintain connectivity locally | Generate and distribute fresh seeds |
 | Network access | Restricted/unstable | Unrestricted |
@@ -18,6 +18,7 @@ ShadowNet is an offline-first censorship-circumvention agent built for high-risk
 
 ## Key documents
 
+- Getting started: [getting-started.md](getting-started.md)
 - Architecture: [architecture.md](architecture.md)
 - Installation: [install.md](install.md)
 - sing-box profiles & mutation strategy: [profiles.md](profiles.md)

@@ -24,6 +24,13 @@ type LocalRelease = {
   buildRef?: string;
   createdAtUnix?: number;
   artifacts: ReleaseArtifact[];
+  verification?: {
+    checksumsHref?: string;
+    signatureHref?: string;
+    keyHref?: string;
+    keyFingerprint?: string;
+    keyFingerprintHref?: string;
+  };
 };
 
 const repoOwner = "kaveh8866";
@@ -227,7 +234,10 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
     if (effectivePlatform === "raspberrypi-arm64") return findArtifact(selectedRelease, role, "linux-arm64");
     if (effectivePlatform === "android") {
       if (role !== "inside") return null;
-      return findArtifact(selectedRelease, "inside", "android-arm64");
+      return (
+        selectedRelease.artifacts.find((a) => a.fileName === "app-release.apk" || a.fileName.endsWith("-app-release.apk")) ??
+        findArtifact(selectedRelease, "inside", "android-arm64")
+      );
     }
     return null;
   }, [selectedRelease, effectivePlatform, role]);
@@ -235,7 +245,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
   const recommendedSupport: { level: "stable" | "experimental" | "planned" | "unsupported"; note: string } = useMemo(() => {
     if (effectivePlatform === "android") {
       if (role !== "inside") return { level: "unsupported", note: "Outside is not supported on Android. Run Outside on a separate machine." };
-      return { level: "experimental", note: "Inside runs as a Termux CLI (development). No production Android APK in this repo yet." };
+      return { level: "experimental", note: "Inside runs as a Termux CLI binary and release APK. Verify checksums/signature before sideloading." };
     }
     if (effectivePlatform === "raspberrypi-arm64") {
       return { level: "experimental", note: "Uses the Linux arm64 bundle. Treat as experimental until long-running field testing is complete." };
@@ -259,24 +269,33 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
     return `${origin}${recommendedArtifact.sha256Href}`;
   }, [origin, recommendedArtifact]);
 
+  const verificationFiles = selectedRelease?.verification;
+
   const installSteps = useMemo(() => {
     if (!recommendedArtifact || !artifactUrl) return null;
     const file = recommendedArtifact.fileName;
     const isTar = recommendedArtifact.kind === "tar.gz";
-    const isZip = recommendedArtifact.kind === "zip";
+    const sigReady = Boolean(verificationFiles?.checksumsHref && verificationFiles?.signatureHref && verificationFiles?.keyHref);
 
     if (effectivePlatform === "android") {
       return {
-        download: `pkg update -y\npkg install -y wget openssl-tool coreutils\nwget -O shadownet-inside ${artifactUrl}\nwget -O shadownet-inside.sha256 ${shaUrl ?? "<sha256-url>"}\n`,
-        verify: `sha256sum -c shadownet-inside.sha256`,
-        install: `chmod +x shadownet-inside\n./shadownet-inside`,
+        download: `wget -O app-release.apk ${artifactUrl}\nwget -O app-release.apk.sha256 ${shaUrl ?? "<sha256-url>"}\n${
+          verificationFiles?.checksumsHref ? `wget -O checksums.txt ${origin}${verificationFiles.checksumsHref}\n` : ""
+        }${verificationFiles?.signatureHref ? `wget -O checksums.sig ${origin}${verificationFiles.signatureHref}\n` : ""}${
+          verificationFiles?.keyHref ? `wget -O checksums.pub ${origin}${verificationFiles.keyHref}\n` : ""
+        }`,
+        verify: `sha256sum -c app-release.apk.sha256${sigReady ? `\ncosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt` : ""}`,
+        install: `adb install -r app-release.apk`,
       };
     }
 
     if (effectivePlatform === "linux-amd64" || effectivePlatform === "linux-arm64" || effectivePlatform === "raspberrypi-arm64") {
+      const checksumsCmd = verificationFiles?.checksumsHref ? `curl -fL -O ${origin}${verificationFiles.checksumsHref}` : "curl -fL -O <checksums-url>";
+      const signatureCmd = verificationFiles?.signatureHref ? `curl -fL -O ${origin}${verificationFiles.signatureHref}` : "curl -fL -O <signature-url>";
+      const keyCmd = verificationFiles?.keyHref ? `curl -fL -O ${origin}${verificationFiles.keyHref}` : "curl -fL -O <cosign-pubkey-url>";
       return {
-        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
-        verify: `sha256sum -c ${file}.sha256`,
+        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n${checksumsCmd}\n${signatureCmd}\n${keyCmd}\n`,
+        verify: `sha256sum -c ${file}.sha256\ncosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`,
         install: isTar ? `tar -xzf ${file}\nsudo ./install-linux.sh ${role}` : `chmod +x ${file}\n./${file}`,
       };
     }
@@ -289,16 +308,8 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
       };
     }
 
-    if (detection.os === "windows") {
-      return {
-        download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
-        verify: `certutil -hashfile ${file} SHA256`,
-        install: isZip ? `tar -xf ${file}\n.\\shadownet-${role}.exe` : `.\\${file}`,
-      };
-    }
-
     return null;
-  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, detection.os]);
+  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, detection.os, origin, verificationFiles]);
 
   const hasLocalReleases = releases.length > 0;
 
@@ -333,10 +344,9 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
       },
       {
         key: "android",
-        description: "Inside runs as a Termux CLI binary (development).",
+        description: "Inside supports a signed APK sideload flow and a Termux CLI fallback.",
         support: "Experimental",
-        method: "Termux + verify SHA256 + run",
-        target: "android-arm64",
+        method: "APK + verify SHA256/signature + sideload",
       },
       {
         key: "source",
@@ -354,6 +364,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
     : `Unknown${arch !== "unknown" ? ` • ${arch}` : ""}`;
 
   const hasChecksum = Boolean(recommendedArtifact?.sha256 && recommendedArtifact?.sha256Href);
+  const hasSignature = Boolean(verificationFiles?.checksumsHref && verificationFiles?.signatureHref && verificationFiles?.keyHref);
 
   return (
     <section id="downloads" className="w-full">
@@ -366,9 +377,8 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
         ) : null}
 
         <Callout title="Project status" tone="warning">
-          ShadowNet Agent is currently an MVP/alpha. Linux bundles are the primary supported path. Android support is CLI via Termux (no APK
-          shipped here yet). Verification is checksum-based today; release signature workflows are documented as a roadmap but not consistently
-          published for these artifacts yet.
+          ShadowNet Agent is currently an MVP/alpha. Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a
+          signed release APK. Always verify checksums and the signed checksum bundle before installing.
         </Callout>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
@@ -483,6 +493,24 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
                         SHA256
                       </a>
                     ) : null}
+                    {verificationFiles?.signatureHref ? (
+                      <a
+                        href={verificationFiles.signatureHref}
+                        className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                        download
+                      >
+                        Signature
+                      </a>
+                    ) : null}
+                    {verificationFiles?.keyHref ? (
+                      <a
+                        href={verificationFiles.keyHref}
+                        className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                        download
+                      >
+                        Cosign key
+                      </a>
+                    ) : null}
                     <a
                       href={`${githubRepo}/blob/main/website/public${recommendedArtifact.href}`}
                       className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
@@ -499,11 +527,18 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
                     ) : (
                       <span className="text-amber-300">checksum missing</span>
                     )}{" "}
-                    • Signature: <span className="text-amber-300">not published for this artifact</span>
+                    • Signature:{" "}
+                    {hasSignature ? <span className="text-emerald-300">published (cosign)</span> : <span className="text-amber-300">missing</span>}
                   </div>
                   {recommendedArtifact.sha256 ? (
                     <div className="mt-2 text-xs text-muted-foreground">
                       SHA256: <span className="font-mono break-all text-foreground">{recommendedArtifact.sha256}</span>
+                    </div>
+                  ) : null}
+                  {verificationFiles?.keyFingerprint ? (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Cosign key fingerprint:{" "}
+                      <span className="font-mono break-all text-foreground">{verificationFiles.keyFingerprint}</span>
                     </div>
                   ) : null}
                 </>
@@ -542,7 +577,13 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
                 p.key === "source"
                   ? null
                   : p.key === "android"
-                    ? (role === "inside" ? findArtifact(selectedRelease, "inside", "android-arm64") : null)
+                    ? (
+                        role === "inside"
+                          ? (selectedRelease?.artifacts.find(
+                              (artifact) => artifact.fileName === "app-release.apk" || artifact.fileName.endsWith("-app-release.apk"),
+                            ) ?? findArtifact(selectedRelease, "inside", "android-arm64"))
+                          : null
+                      )
                     : p.key === "raspberrypi-arm64"
                       ? findArtifact(selectedRelease, "inside", "linux-arm64")
                       : p.target
@@ -652,6 +693,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
                 <li>- File integrity: you got exactly the bytes the publisher intended to publish.</li>
                 <li>- Tamper detection: if a mirror/CDN modifies the file, the check fails.</li>
                 <li>- A consistent hash value you can compare across mirrors and friends.</li>
+                <li>- Signature validation (`cosign verify-blob`) confirms checksums were signed by a trusted release key.</li>
               </ul>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
@@ -669,7 +711,8 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
             <div className="mt-4 grid gap-4">
               <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">Linux</div>
-                <CodeBlock>{`sha256sum -c <file>.sha256`}</CodeBlock>
+                <CodeBlock>{`sha256sum -c <file>.sha256
+cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}</CodeBlock>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">macOS</div>
@@ -702,7 +745,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
               <div className="text-foreground font-semibold">Careful verified path</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Verify SHA256, cross-check the hash against a second source (GitHub + a mirror/friend), then install. Keep copies of hashes offline.
+                Verify SHA256, verify `checksums.txt` signature with cosign, and cross-check key fingerprint from a second trusted channel.
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
@@ -714,7 +757,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
                 <CommandBlock
                   label="Build (example)"
                   language="bash"
-                  code={`git clone ${githubRepo}\ncd shadownet-agent\nmkdir -p bin\ngo build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/\ngo build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/\n`}
+                  code={`git clone ${githubRepo}\ncd shadownet-agent\nmkdir -p bin\ngo build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-inside ./cmd/inside/\ngo build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-outside ./cmd/outside/\n`}
                   note="Requires Go toolchain as pinned in go.mod"
                 />
               </div>
@@ -729,16 +772,17 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
               <div className="text-foreground font-semibold">What works today</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
                 <li>- Linux bundles with install script + systemd service (Inside/Outside).</li>
+                <li>- Linux `.deb` packaging for amd64 hosts.</li>
                 <li>- Bundle signature verification and strict parsing in the agent (trust is local and explicit).</li>
-                <li>- Android (Termux) Inside CLI for development/testing.</li>
+                <li>- Android signed release APK and Android/Termux Inside CLI path.</li>
               </ul>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
               <div className="text-foreground font-semibold">What is still experimental</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>- Production Android APK distribution (not shipped here).</li>
-                <li>- Release signature publishing and multi-maintainer signing workflows (documented, not fully implemented).</li>
-                <li>- Platform-specific packaging (.deb/.rpm) and polished installers.</li>
+                <li>- Optional RPM packaging (builds only when rpm tooling is available).</li>
+                <li>- Full multi-maintainer release-signing policy and rotation tooling.</li>
+                <li>- Broader cross-device Android validation across OEMs/ROM variants.</li>
               </ul>
             </div>
           </div>

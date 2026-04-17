@@ -1,0 +1,84 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestRuntimeEventsStreamSSE(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := newRuntimeStore("real")
+	srv, err := startRuntimeAPIServer(ctx, "127.0.0.1:0", store)
+	if err != nil {
+		t.Fatalf("startRuntimeAPIServer: %v", err)
+	}
+	defer func() {
+		cancel()
+		_ = srv.Close()
+	}()
+
+	req, err := http.NewRequest(http.MethodGet, "http://"+srv.Addr+"/api/events/stream", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatalf("GET stream: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		store.addEvent("PROFILE_SWITCH", "Selected profile reality-1", map[string]interface{}{"selected": "reality-1"})
+		store.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": "reality-1", "reason": "DNS_FAILURE"})
+	}()
+
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 0, 1024), 1024*1024)
+
+	want := []string{"PROFILE_SWITCH", "CONNECTION_FAIL"}
+	got := make([]string, 0, len(want))
+
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+
+	for len(got) < len(want) {
+		select {
+		case <-deadline.C:
+			t.Fatalf("timeout waiting for events, got=%v", got)
+		default:
+		}
+		if !sc.Scan() {
+			if err := sc.Err(); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			t.Fatalf("stream closed early, got=%v", got)
+		}
+		line := sc.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		raw := strings.TrimPrefix(line, "data: ")
+		var ev RuntimeEvent
+		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+			t.Fatalf("unmarshal event: %v raw=%q", err, raw)
+		}
+		got = append(got, ev.Type)
+	}
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order mismatch: got=%v want=%v", got, want)
+		}
+	}
+}

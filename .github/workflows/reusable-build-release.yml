@@ -31,12 +31,29 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Java (Android)
+        if: ${{ inputs.enable_android_apk }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle (Android)
+        if: ${{ inputs.enable_android_apk }}
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build artifacts
         shell: bash
+        env:
+          ANDROID_RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
           VERSION="${{ inputs.version }}"
+          LDFLAGS="-s -w -X main.version=${VERSION}"
           DIST="dist"
           rm -rf "$DIST"
           mkdir -p "$DIST"
@@ -101,7 +118,7 @@ jobs:
             local pkg="./cmd/${mode}"
 
             env GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-              go build -trimpath -tags "$tags" -ldflags "-s -w" -o "$out" "$pkg"
+              go build -trimpath -tags "$tags" -ldflags "$LDFLAGS" -o "$out" "$pkg"
           }
 
           package_targz() {
@@ -160,6 +177,15 @@ jobs:
             build_bin "$mode" "$tags" "$goos" "$goarch" "$out"
           }
 
+          build_raw_named() {
+            local mode="$1"
+            local tags="$2"
+            local goos="$3"
+            local goarch="$4"
+            local out="${DIST}/shadownet-${mode}"
+            build_bin "$mode" "$tags" "$goos" "$goarch" "$out"
+          }
+
           build_bundle inside inside linux amd64 targz
           build_bundle inside inside linux arm64 targz
           build_bundle inside inside darwin arm64 targz
@@ -171,18 +197,92 @@ jobs:
           build_bundle outside outside darwin arm64 targz
           build_bundle outside outside windows amd64 zip
 
+          # Linux baseline binaries and combined tarball for quick installs.
+          build_raw_named inside inside linux amd64
+          build_raw_named outside outside linux amd64
+          work_linux="$(mktemp -d)"
+          cp -f "${DIST}/shadownet-inside" "${work_linux}/shadownet-inside"
+          cp -f "${DIST}/shadownet-outside" "${work_linux}/shadownet-outside"
+          cp -f "${DIST}/install-linux.sh" "${work_linux}/install-linux.sh"
+          cp -f "${DIST}/shadownet-inside.service" "${work_linux}/shadownet-inside.service"
+          cp -f "${DIST}/shadownet-outside.service" "${work_linux}/shadownet-outside.service"
+          tar -czf "${DIST}/shadownet-linux-amd64.tar.gz" -C "${work_linux}" .
+          rm -rf "${work_linux}"
+
           cp -f "${DIST}/shadownet-inside-${VERSION}-linux-arm64" "${DIST}/shadownet-inside-${VERSION}-raspberrypi-arm64"
 
           git archive --format=tar.gz -o "${DIST}/shadownet-agent-${VERSION}-source.tar.gz" HEAD
 
           if [ "${{ inputs.enable_packages }}" = "true" ]; then
-            echo "enable_packages=true set, but package builds are not implemented yet."
-            exit 1
+            DEB_VERSION="${VERSION#v}"
+            deb_root="$(mktemp -d)"
+            mkdir -p "${deb_root}/DEBIAN" "${deb_root}/usr/local/bin" "${deb_root}/etc/systemd/system"
+            cp -f "${DIST}/shadownet-inside" "${deb_root}/usr/local/bin/shadownet-inside"
+            cp -f "${DIST}/shadownet-outside" "${deb_root}/usr/local/bin/shadownet-outside"
+            cp -f "${DIST}/shadownet-inside.service" "${deb_root}/etc/systemd/system/shadownet-inside.service"
+            cp -f "${DIST}/shadownet-outside.service" "${deb_root}/etc/systemd/system/shadownet-outside.service"
+            chmod 0755 "${deb_root}/usr/local/bin/shadownet-inside" "${deb_root}/usr/local/bin/shadownet-outside"
+            chmod 0644 "${deb_root}/etc/systemd/system/shadownet-inside.service" "${deb_root}/etc/systemd/system/shadownet-outside.service"
+
+            cat > "${deb_root}/DEBIAN/control" <<CONTROL
+Package: shadownet
+Version: ${DEB_VERSION}
+Architecture: amd64
+Maintainer: ShadowNet
+Description: ShadowNet agent
+CONTROL
+
+            cat > "${deb_root}/DEBIAN/postinst" <<'POSTINST'
+#!/bin/sh
+set -e
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+fi
+POSTINST
+
+            cat > "${deb_root}/DEBIAN/postrm" <<'POSTRM'
+#!/bin/sh
+set -e
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+fi
+POSTRM
+            chmod 0755 "${deb_root}/DEBIAN/postinst" "${deb_root}/DEBIAN/postrm"
+
+            dpkg-deb --build "${deb_root}" "${DIST}/shadownet_${DEB_VERSION}_amd64.deb"
+
+            if command -v fpm >/dev/null 2>&1; then
+              fpm -s dir -t rpm -n shadownet -v "${DEB_VERSION}" -a x86_64 \
+                --description "ShadowNet agent" --maintainer "ShadowNet" \
+                -C "${deb_root}" usr/local/bin/shadownet-inside usr/local/bin/shadownet-outside \
+                etc/systemd/system/shadownet-inside.service etc/systemd/system/shadownet-outside.service \
+                -p "${DIST}/shadownet-${DEB_VERSION}.x86_64.rpm"
+            else
+              echo "fpm not available; skipping optional rpm build."
+            fi
+            rm -rf "${deb_root}"
           fi
 
           if [ "${{ inputs.enable_android_apk }}" = "true" ]; then
-            echo "enable_android_apk=true set, but android/ project is not implemented yet."
-            exit 1
+            if [ -z "${ANDROID_RELEASE_KEYSTORE_B64:-}" ] || [ -z "${ANDROID_RELEASE_KEYSTORE_PASSWORD:-}" ] || [ -z "${ANDROID_RELEASE_KEY_ALIAS:-}" ] || [ -z "${ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
+              echo "Missing Android signing secrets. Expected ANDROID_RELEASE_KEYSTORE_B64 / ANDROID_RELEASE_KEYSTORE_PASSWORD / ANDROID_RELEASE_KEY_ALIAS / ANDROID_RELEASE_KEY_PASSWORD."
+              exit 1
+            fi
+            keystore_path="${RUNNER_TEMP}/android-release.keystore"
+            echo "${ANDROID_RELEASE_KEYSTORE_B64}" | base64 -d > "${keystore_path}"
+            export RELEASE_KEYSTORE="${keystore_path}"
+            export RELEASE_KEYSTORE_PASSWORD="${ANDROID_RELEASE_KEYSTORE_PASSWORD}"
+            export RELEASE_KEY_ALIAS="${ANDROID_RELEASE_KEY_ALIAS}"
+            export RELEASE_KEY_PASSWORD="${ANDROID_RELEASE_KEY_PASSWORD}"
+
+            if [ -x "./android/gradlew" ]; then
+              (cd android && ./gradlew --no-daemon assembleRelease)
+            else
+              (cd android && gradle --no-daemon assembleRelease)
+            fi
+
+            cp -f "android/app/build/outputs/apk/release/app-release.apk" "${DIST}/app-release.apk"
+            cp -f "android/app/build/outputs/apk/release/app-release.apk" "${DIST}/shadownet-android-${VERSION}-app-release.apk"
           fi
 
       - uses: actions/upload-artifact@v4

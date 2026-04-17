@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardSnapshot, DashboardView, RegionAggregate } from "../../lib/dashboard/types";
 import { fetchDashboardSnapshot, connectDashboardStream } from "../../lib/dashboard/fetch-dashboard-data";
-import { buildMockSnapshot } from "../../lib/dashboard/mock-data";
 import { applyPrivacyFilter } from "../../lib/dashboard/privacy-filter";
 import { ActivityFeed } from "./ActivityFeed";
 import { DashboardFilters, type DashboardFiltersState } from "./DashboardFilters";
@@ -40,10 +39,10 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
     severity: "all",
   });
 
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot>(() => buildMockSnapshot(view, 20));
-  const [status, setStatus] = useState<{ mode: "demo" | "poll" | "sse" | "off"; note: string }>({
-    mode: "demo",
-    note: "demo snapshot",
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
+  const [status, setStatus] = useState<{ mode: "poll" | "sse" | "off"; note: string }>({
+    mode: "off",
+    note: "not connected",
   });
   const [error, setError] = useState<string | null>(null);
   const [selectedRegionName, setSelectedRegionName] = useState<string | null>(null);
@@ -52,24 +51,22 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
   const sseRef = useRef<EventSource | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
-  const privacyThreshold = snapshot.privacyThreshold ?? 20;
+  const privacyThreshold = snapshot?.privacyThreshold ?? 20;
 
   const canUseStream = useMemo(() => typeof window !== "undefined" && !!streamBaseUrl, []);
   const canUseSnapshotUrl = useMemo(() => typeof window !== "undefined" && !!snapshotBaseUrl, []);
 
-  const displaySnapshot = useMemo(
-    () =>
-      applyPrivacyFilter(snapshot, {
-        mode: filters.privacyMode ? "public" : "trusted",
-      }),
-    [filters.privacyMode, snapshot],
-  );
+  const displaySnapshot = useMemo(() => {
+    if (!snapshot) return null;
+    return applyPrivacyFilter(snapshot, { mode: filters.privacyMode ? "public" : "trusted" });
+  }, [filters.privacyMode, snapshot]);
 
   const selectedRegion: RegionAggregate | null = useMemo(() => {
     if (!selectedRegionName) return null;
+    if (!displaySnapshot) return null;
     const hit = displaySnapshot.regions.find((r) => r.countryName === selectedRegionName);
     return hit ?? null;
-  }, [displaySnapshot.regions, selectedRegionName]);
+  }, [displaySnapshot, selectedRegionName]);
 
   const stopAll = useCallback(() => {
     if (pollTimerRef.current) {
@@ -88,10 +85,9 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
 
   const loadOnce = useCallback(async (reason: string) => {
     if (!canUseSnapshotUrl) {
-      const next = buildMockSnapshot(view, privacyThreshold);
-      setSnapshot(next);
-      setStatus({ mode: "demo", note: reason });
-      setError(null);
+      setError("snapshot url not configured");
+      setStatus({ mode: "off", note: "no live feed configured" });
+      setSnapshot(null);
       return;
     }
 
@@ -114,16 +110,15 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "snapshot fetch failed";
       setError(msg);
-      const next = buildMockSnapshot(view, privacyThreshold);
-      setSnapshot(next);
-      setStatus({ mode: "demo", note: "fallback to demo snapshot" });
+      setSnapshot(null);
+      setStatus({ mode: "off", note: "live feed unavailable" });
     }
   }, [canUseSnapshotUrl, privacyThreshold, view]);
 
   useEffect(() => {
     stopAll();
     setError(null);
-    setSnapshot(buildMockSnapshot(view, privacyThreshold));
+    setSnapshot(null);
 
     const mode: LiveMode = filters.liveMode;
     if (mode === "off") {
@@ -181,12 +176,7 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
         startPoll("polling");
         return () => stopAll();
       }
-
-      const timer = window.setInterval(() => {
-        setSnapshot(buildMockSnapshot(view, privacyThreshold));
-        setStatus({ mode: "demo", note: "demo replay" });
-      }, 5000);
-      pollTimerRef.current = timer;
+      setStatus({ mode: "off", note: "no live feed configured" });
       return () => stopAll();
     }
 
@@ -203,7 +193,9 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
             <div className="text-xs font-mono px-2 py-1 rounded border border-border bg-card/60 text-muted-foreground">
               {status.mode} • {status.note}
             </div>
-            <div className="text-xs font-mono text-muted-foreground">updated {formatUnixAgo(snapshot.generatedAtUnix)}</div>
+            <div className="text-xs font-mono text-muted-foreground">
+              updated {snapshot ? formatUnixAgo(snapshot.generatedAtUnix) : "—"}
+            </div>
           </div>
           <div className="mt-2 text-sm text-muted-foreground max-w-3xl">
             All values are coarse, bucketed, privacy-thresholded, and safe for public viewing by default.
@@ -216,11 +208,23 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
         </div>
       </div>
 
-      <SummaryCards snapshot={displaySnapshot} />
+      {displaySnapshot ? <SummaryCards snapshot={displaySnapshot} /> : null}
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
+        <div className="lg:col-span-3 grid gap-6">
+          <DashboardFilters value={filters} onChange={setFilters} />
+          <StatusLegend />
+          <RegionDetailCard region={selectedRegion} />
+          {displaySnapshot ? <HelperNodePanel snapshot={displaySnapshot} /> : null}
+        </div>
+
         <div className="lg:col-span-9 grid gap-6">
-          {view === "protocols" ? (
+          {!displaySnapshot ? (
+            <div className="rounded-xl border border-border bg-card/60 p-4 text-sm text-muted-foreground">
+              No live dashboard feed detected. Configure NEXT_PUBLIC_SHADOWNET_DASHBOARD_SNAPSHOT_URL or
+              NEXT_PUBLIC_SHADOWNET_DASHBOARD_STREAM_URL to enable operator snapshots.
+            </div>
+          ) : view === "protocols" ? (
             <div className="grid md:grid-cols-2 gap-6">
               <ProtocolHealthPanelInner snapshot={displaySnapshot} protocol={filters.protocol} />
               <ReleaseHealthCard snapshot={displaySnapshot} />
@@ -240,17 +244,12 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
             />
           )}
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <MeshActivityCard snapshot={displaySnapshot} />
-            <ActivityFeed snapshot={displaySnapshot} severity={filters.severity} timeWindow={filters.timeWindow} />
-          </div>
-        </div>
-
-        <div className="lg:col-span-3 grid gap-6">
-          <DashboardFilters value={filters} onChange={setFilters} />
-          <StatusLegend />
-          <RegionDetailCard region={selectedRegion} />
-          <HelperNodePanel snapshot={displaySnapshot} />
+          {displaySnapshot ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              <MeshActivityCard snapshot={displaySnapshot} />
+              <ActivityFeed snapshot={displaySnapshot} severity={filters.severity} timeWindow={filters.timeWindow} />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

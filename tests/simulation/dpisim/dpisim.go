@@ -98,6 +98,34 @@ func StartUDPEcho() (net.PacketConn, error) {
 	return pc, nil
 }
 
+func StartUDPEchoProfile(delay time.Duration, dropEvery int) (net.PacketConn, error) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		buf := make([]byte, 2048)
+		var nrecv int
+		for {
+			n, addr, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			nrecv++
+			if dropEvery > 0 && nrecv%dropEvery == 0 {
+				continue
+			}
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+			_, _ = pc.WriteTo(buf[:n], addr)
+		}
+	}()
+
+	return pc, nil
+}
+
 func StartUDPSink() (net.PacketConn, error) {
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {

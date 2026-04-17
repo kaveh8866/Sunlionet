@@ -8,7 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os/exec"
+	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -181,21 +182,51 @@ func CheckUDPBlockedWith(ctx context.Context, dialer Dialer, echoServer string) 
 // PassiveTCPStats reads /proc/net/snmp or uses 'ss' to check system-wide TCP retransmissions
 // High retransmissions relative to segments sent indicates throttling or packet loss.
 func PassiveTCPStats() (float64, error) {
-	// Minimal privilege check: run 'ss -s' and parse TCP stats
-	out, err := exec.Command("ss", "-s").Output()
+	b, err := os.ReadFile("/proc/net/snmp")
 	if err != nil {
-		return 0.0, err
+		return 0, err
 	}
 
-	// E.g., output contains: TCP: 12 (estab 2, closed 0, orphaned 0, synrecv 0, timewait 0/0), ports 0
-	// For deeper stats (retrans), parsing /proc/net/snmp is better, but 'ss -ti' shows per-socket retrans.
-	// Returning a mock high retransmission ratio for demonstration.
-	outStr := string(out)
-	if strings.Contains(outStr, "TCP") {
-		// Mock calculation
-		return 0.15, nil // 15% retrans ratio
+	lines := strings.Split(string(b), "\n")
+	for i := 0; i+1 < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], "Tcp:") || !strings.HasPrefix(lines[i+1], "Tcp:") {
+			continue
+		}
+		header := strings.Fields(lines[i])
+		values := strings.Fields(lines[i+1])
+		if len(header) < 2 || len(values) < 2 || len(header) != len(values) {
+			continue
+		}
+
+		var retransSegs uint64
+		var outSegs uint64
+		var haveRetrans bool
+		var haveOut bool
+		for j := 1; j < len(header); j++ {
+			v, err := strconv.ParseUint(values[j], 10, 64)
+			if err != nil {
+				continue
+			}
+			switch header[j] {
+			case "RetransSegs":
+				retransSegs = v
+				haveRetrans = true
+			case "OutSegs":
+				outSegs = v
+				haveOut = true
+			}
+		}
+
+		if !haveRetrans || !haveOut {
+			return 0, fmt.Errorf("tcp stats unavailable")
+		}
+		if outSegs == 0 {
+			return 0, fmt.Errorf("tcp stats unavailable")
+		}
+		return float64(retransSegs) / float64(outSegs), nil
 	}
-	return 0.0, nil
+
+	return 0, fmt.Errorf("tcp stats unavailable")
 }
 
 // CheckConnectivityBaseline compares ping to a known-allowed domain vs blocked domain

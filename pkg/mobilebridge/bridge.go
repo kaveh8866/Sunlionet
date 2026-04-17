@@ -282,6 +282,14 @@ func runOnce(cfg AgentConfig) {
 		selected = res.SelectedProfile
 		reason = fmt.Sprintf("%s source=%s", res.Reason, res.Source)
 	}
+	known := make(map[string]struct{}, len(ranked))
+	for _, p := range ranked {
+		known[p.ID] = struct{}{}
+	}
+	if err := validateAction("switch_profile", selected.ID, known, len(recent)+1, 6); err != nil {
+		updateError(fmt.Sprintf("action rejected: %v", err))
+		return
+	}
 
 	templateText, err := resolveTemplateText(selected, templateStore, cfg.TemplatesDir)
 	if err != nil {
@@ -311,6 +319,19 @@ func runOnce(cfg AgentConfig) {
 		UpdatedAtUnix:  time.Now().Unix(),
 	}
 	state.mu.Unlock()
+}
+
+func validateAction(action string, profileID string, known map[string]struct{}, switchCount int, maxPerMinute int) error {
+	if strings.TrimSpace(action) == "" {
+		return fmt.Errorf("missing action")
+	}
+	if _, ok := known[profileID]; !ok {
+		return fmt.Errorf("unknown profile")
+	}
+	if maxPerMinute > 0 && switchCount > maxPerMinute {
+		return fmt.Errorf("rate limit exceeded")
+	}
+	return nil
 }
 
 func resolveTemplateText(p profile.Profile, store *profile.TemplateStore, templatesDir string) (string, error) {

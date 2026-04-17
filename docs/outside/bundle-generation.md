@@ -1,6 +1,6 @@
 # Outside: Bundle Generation
 
-ShadowNet-Outside curates a set of seed profiles, applies strict normalization, embeds the required sing-box outbound templates, then produces a signed bundle (optionally encrypted to an Inside recipient).
+ShadowNet Outside curates a set of seed profiles, applies strict normalization, embeds the required sing-box outbound templates, then produces a signed bundle (optionally encrypted to an Inside recipient).
 
 Outputs are designed to be safely distributed as:
 
@@ -77,4 +77,3 @@ If the bundle URI is too large for a messaging channel, Outside can prepare a ch
 - the receiver can reconstruct the original URI by concatenating the chunk data in order
 
 This is preparation only; ShadowNet does not automatically send via third-party messengers yet.
-

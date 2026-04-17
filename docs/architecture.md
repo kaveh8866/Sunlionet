@@ -2,7 +2,7 @@
 
 ShadowNet is split into two coordinated agents compiled from one codebase.
 
-## ShadowNet-Inside (Iran)
+## ShadowNet Inside (Iran)
 
 Inside runs on the user device and owns all real-time decisions. It is designed to be lightweight, seizure-resistant, and able to operate during partial or total blackouts.
 
@@ -17,7 +17,7 @@ Inside runs on the user device and owns all real-time decisions. It is designed 
 - Bluetooth Mesh: local sharing of working seeds during blackout
 - Signal Receiver: receive-only by default
 
-## ShadowNet-Outside (Exile/Helper)
+## ShadowNet Outside (Exile/Helper)
 
 Outside runs in a safer jurisdiction. It continuously generates and tests new seed profiles and distributes bundles to Inside users via a one-way channel.
 
