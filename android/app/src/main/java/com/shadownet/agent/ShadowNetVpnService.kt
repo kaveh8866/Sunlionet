@@ -26,6 +26,7 @@ class ShadowNetVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        RuntimeSignals.init(this)
         repo = StateRepository(this)
         secure = SecureStore(this)
     }
@@ -52,6 +53,7 @@ class ShadowNetVpnService : VpnService() {
 
     override fun onRevoke() {
         Logs.w("vpn", "revoked by system")
+        RuntimeSignals.onRuntimeEvent("VPN_DISCONNECT")
         secure.setDesiredConnected(false)
         stopVpn()
         super.onRevoke()
@@ -61,6 +63,7 @@ class ShadowNetVpnService : VpnService() {
         if (vpnInterface != null) {
             return
         }
+        RuntimeSignals.onRuntimeEvent("VPN_RESTART")
         if (!secure.isDesiredConnected()) {
             stopSelf()
             return
@@ -90,6 +93,7 @@ class ShadowNetVpnService : VpnService() {
     }
 
     private fun stopVpn() {
+        val wasRunning = vpnInterface != null
         try {
             vpnInterface?.close()
         } catch (_: Exception) {
@@ -97,6 +101,9 @@ class ShadowNetVpnService : VpnService() {
             vpnInterface = null
             state = State.STOPPED
             Logs.i("vpn", "stopped")
+            if (wasRunning && secure.isDesiredConnected()) {
+                RuntimeSignals.onRuntimeEvent("VPN_DISCONNECT")
+            }
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -122,7 +129,7 @@ class ShadowNetVpnService : VpnService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ShadowNet VPN")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_sys_vpn_ic)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pi)
             .setOngoing(true)
             .build()

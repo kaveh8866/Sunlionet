@@ -20,10 +20,13 @@ object Logs {
 
     private val ipPattern = Pattern.compile("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b")
     private val secretPattern = Pattern.compile("(?i)(age-secret-key-[a-z0-9]+|[a-f0-9]{64})")
+    private val urlPattern = Pattern.compile("https?://\\S+")
+    private val domainPattern = Pattern.compile("\\b(?:[a-z0-9-]+\\.)+[a-z]{2,}\\b", Pattern.CASE_INSENSITIVE)
+    private val pathPattern = Pattern.compile("([a-zA-Z]:\\\\[^\\s]+|/[^\\s]+)")
 
     @Synchronized
     fun add(msg: String) {
-        if (!BuildConfig.DEBUG) {
+        if (!BuildConfig.DEBUG && !BuildConfig.TESTER_MODE) {
             return
         }
         val line = "${ts.format(Date())} ${sanitize(msg)}"
@@ -39,18 +42,19 @@ object Logs {
     fun dump(): String = lines.joinToString("\n")
 
     fun i(component: String, msg: String) {
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.DEBUG && !BuildConfig.TESTER_MODE) return
         add("[${component.lowercase()}][${Level.INFO}] $msg")
     }
 
     fun w(component: String, msg: String) {
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.DEBUG && !BuildConfig.TESTER_MODE) return
         add("[${component.lowercase()}][${Level.WARN}] $msg")
     }
 
     fun e(component: String, msg: String) {
+        RuntimeSignals.onError(component, msg)
         val line = "[${component.lowercase()}][${Level.ERROR}] $msg"
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG || BuildConfig.TESTER_MODE) {
             add(line)
             return
         }
@@ -76,6 +80,9 @@ object Logs {
     private fun sanitize(input: String): String {
         var out = input.trim()
         out = ipPattern.matcher(out).replaceAll("x.x.x.x")
+        out = urlPattern.matcher(out).replaceAll("[url-redacted]")
+        out = domainPattern.matcher(out).replaceAll("[domain-redacted]")
+        out = pathPattern.matcher(out).replaceAll("[path-redacted]")
         out = secretPattern.matcher(out).replaceAll("[redacted]")
         if (out.length > 240) {
             out = out.take(240) + "…"

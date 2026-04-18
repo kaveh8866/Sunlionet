@@ -26,6 +26,20 @@
 
 ## Distribution Strategy
 
+### Controlled Rollout (Phase 2)
+
+- Start with a trusted cohort of `5-20` testers only.
+- Use trusted contacts and encrypted transfer channels.
+- Keep distribution closed until repeated failures are classified and fixed.
+- Do not publish mass-download links during controlled rollout.
+
+Operational controls:
+
+1. Ship a clearly marked tester build (`ShadowNet (Test Build)`).
+2. Collect only manual, user-controlled feedback exports (`logs.json`).
+3. Aggregate only high-level failure categories (no sensitive endpoints).
+4. Patch and redeploy in short cycles (`24-72` hours).
+
 ### Direct Channel
 
 - GitHub Releases + static website release page.
@@ -45,6 +59,7 @@
 
 - Session, SimpleX, Briar as transport for APK/update/bundle artifacts.
 - Use detached signatures and chunked transfer for large files.
+- During controlled rollout, prefer encrypted one-to-one delivery instead of public channels.
 
 ## Stealth Packaging
 
@@ -89,6 +104,8 @@ Offline update is first-class via local file import.
 - Local-only.
 - Rotated/bounded.
 - No remote crash-reporting backend.
+- Diagnostics are opt-in and disabled by default.
+- Never collect IP address, domain names, full configs, bundle contents, or user identity.
 
 ## Deployment Checklist
 
@@ -97,4 +114,5 @@ Offline update is first-class via local file import.
 - Verify signatures from clean environment.
 - Confirm installer/import/update paths in offline mode.
 - Ensure at least two mirrors and one peer channel ready.
-
+- Confirm tester mode flags/version labels are visible in-app.
+- Confirm `logs.json` export and local `last_errors.json` diagnostics are functional.

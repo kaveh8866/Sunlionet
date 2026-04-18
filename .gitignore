@@ -10,3 +10,16 @@
 /.vercel/
 /.vercel-global/
 
+# Android / Gradle build artifacts
+/android/.gradle/
+/android/**/build/
+/android/**/.cxx/
+/android/**/.kotlin/
+/android/**/local.properties
+*.apk
+*.aab
+
+# IDE
+/.idea/
+*.iml
+

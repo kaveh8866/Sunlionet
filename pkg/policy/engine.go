@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -58,10 +59,17 @@ type Advisor interface {
 // Engine evaluates events deterministically before calling the LLM
 type Engine struct {
 	MaxBurstFailures int
+	AdaptiveState    *AdaptiveState
 }
 
 // RankProfiles sorts profiles by health score, prioritizing high-success, low-cooldown profiles
 func (e *Engine) RankProfiles(profiles []profile.Profile) []profile.Profile {
+	if e != nil && e.AdaptiveState != nil {
+		if ranked, _ := e.AdaptiveState.SelectProfile(profiles, time.Now()); len(ranked) > 0 {
+			return ranked
+		}
+	}
+
 	// Filter out profiles currently in cooldown
 	now := time.Now().Unix()
 	var available []profile.Profile
@@ -118,6 +126,30 @@ func (e *Engine) RankProfiles(profiles []profile.Profile) []profile.Profile {
 	})
 
 	return available
+}
+
+func (e *Engine) SelectProfile(profiles []profile.Profile) (profile.Profile, Decision, []profile.Profile) {
+	decision := Decision{}
+	if e != nil && e.AdaptiveState != nil && e.AdaptiveState.Enabled {
+		ranked, d := e.AdaptiveState.SelectProfile(profiles, time.Now())
+		if len(ranked) > 0 {
+			return ranked[0], d, ranked
+		}
+		decision = d
+	}
+
+	ranked := e.RankProfiles(profiles)
+	if len(ranked) == 0 {
+		decision.Reason = "no viable profiles after deterministic ranking"
+		return profile.Profile{}, decision, ranked
+	}
+	decision.Selected = ranked[0].ID
+	decision.Reason = fmt.Sprintf("deterministic fallback score=%.1f", ranked[0].Health.Score)
+	decision.Scores = make([]ScoredProfile, 0, len(ranked))
+	for _, p := range ranked {
+		decision.Scores = append(decision.Scores, ScoredProfile{ProfileID: p.ID, Score: p.Health.Score})
+	}
+	return ranked[0], decision, ranked
 }
 
 // Evaluate applies hardcoded deterministic rules

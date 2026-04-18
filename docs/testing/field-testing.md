@@ -2,7 +2,7 @@
 
 ## Principles
 
-- No telemetry, no background uploads, no identifiers.
+- No automatic telemetry uploads, no identifiers, no hidden background reporting.
 - Assume hostile environment: DPI, inspection, blocked platforms.
 - Protect testers: minimize exposure, clear panic procedures.
 - Prefer reproducible scenarios over raw logs.
@@ -25,7 +25,7 @@ Goals:
 
 Feedback:
 
-- Manual reports using `report.json` + short checklist.
+- Manual reports using `logs.json` export + short checklist.
 - No screenshots by default.
 
 ### Stage 2: Semi-Open Testing (Limited Public)
@@ -42,7 +42,7 @@ Goals:
 
 Feedback:
 
-- Optional manual report export.
+- Optional manual log export.
 - Structured issue templates (copy/paste) for non-technical users.
 
 ### Stage 3: Open Deployment
@@ -104,9 +104,36 @@ Feedback:
 - Battery impact (manual): “low/medium/high” perception over 30–60 min.
 - Crash frequency: none / once / repeated.
 
+Failure categories:
+
+- `DNS_BLOCKED`
+- `TCP_RESET`
+- `TLS_BLOCKED`
+- `TIMEOUT`
+- `NO_ROUTE`
+- `UNKNOWN`
+
+Android runtime event categories:
+
+- `APP_KILLED`
+- `APP_CRASH`
+- `VPN_RESTART`
+- `VPN_DISCONNECT`
+- `NETWORK_SWITCH`
+- `BATTERY_RESTRICTED`
+
+## Closed Feedback Loop (24-72h)
+
+1. Tester hits an issue in real network conditions.
+2. Tester taps `Export Logs` and reviews `logs.json`.
+3. Tester sends the file manually to trusted coordinator.
+4. Team groups failures by category and release version.
+5. Team patches and ships a new tester build.
+6. Cycle repeats in `24-72` hours.
+
 ## Safety Procedures
 
 - Prefer neutral app naming and minimal logs in high-risk contexts.
 - Do not share raw configs, endpoints, or profile IDs.
 - In panic situations: disconnect first, then clear app data if needed.
-
+- Keep diagnostics toggle OFF unless explicitly needed for troubleshooting.

@@ -32,6 +32,7 @@ type AgentConfig struct {
 	PiEndpoint           string `json:"pi_endpoint"`
 	PiCommand            string `json:"pi_command"`
 	PiTimeoutMS          int    `json:"pi_timeout_ms"`
+	AdaptiveMode         bool   `json:"adaptive_mode"`
 }
 
 type AgentStatus struct {
@@ -56,9 +57,14 @@ var state = &runtimeState{}
 
 func StartAgent(config string) {
 	var cfg AgentConfig
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(config), &raw)
 	if err := json.Unmarshal([]byte(config), &cfg); err != nil {
 		setError(fmt.Sprintf("invalid config: %v", err))
 		return
+	}
+	if _, ok := raw["adaptive_mode"]; !ok {
+		cfg.AdaptiveMode = true
 	}
 	if err := validateConfig(&cfg); err != nil {
 		setError(err.Error())
@@ -165,6 +171,24 @@ func ImportBundle(path string) error {
 	return importer.ProcessAndStore(payload)
 }
 
+func ResetLearning() error {
+	state.mu.Lock()
+	cfg := state.cfg
+	state.mu.Unlock()
+	if err := validateConfig(&cfg); err != nil {
+		return err
+	}
+	masterKey, err := profile.ParseMasterKey(cfg.MasterKey)
+	if err != nil {
+		return fmt.Errorf("invalid master_key: %w", err)
+	}
+	adaptiveStore, err := policy.NewAdaptiveStore(filepath.Join(cfg.StateDir, "adaptive.enc"), masterKey)
+	if err != nil {
+		return err
+	}
+	return adaptiveStore.Reset()
+}
+
 func GetStatus() string {
 	state.mu.Lock()
 	defer state.mu.Unlock()
@@ -246,21 +270,38 @@ func runOnce(cfg AgentConfig) {
 	}
 
 	engine := policy.Engine{MaxBurstFailures: 3}
-	ranked := engine.RankProfiles(candidates)
+	adaptiveStore, err := policy.NewAdaptiveStore(filepath.Join(cfg.StateDir, "adaptive.enc"), masterKey)
+	if err != nil {
+		updateError(fmt.Sprintf("adaptive store: %v", err))
+		return
+	}
+	adaptiveState, err := adaptiveStore.Load()
+	if err != nil {
+		updateError(fmt.Sprintf("adaptive state: %v", err))
+		return
+	}
+	adaptiveState.SetEnabled(cfg.AdaptiveMode)
+	engine.AdaptiveState = adaptiveState
+	selected, decision, ranked := engine.SelectProfile(candidates)
 	if len(ranked) == 0 {
 		updateError("no viable profiles after cooldown filters")
 		return
 	}
-
-	selected := ranked[0]
-	reason := fmt.Sprintf("policy score=%.1f", selected.Health.Score)
+	reason := decision.Reason
+	if strings.TrimSpace(reason) == "" {
+		reason = fmt.Sprintf("policy score=%.1f", selected.Health.Score)
+	}
 
 	state.mu.Lock()
 	pi := state.pi
 	recent := append([]string(nil), state.history...)
 	state.mu.Unlock()
 
-	if pi != nil && len(ranked) > 1 {
+	if pi != nil && len(ranked) > 1 && decision.UseOrchestrator {
+		hints := make([]orchestrator.ScoreHint, 0, len(decision.Scores))
+		for _, s := range decision.Scores {
+			hints = append(hints, orchestrator.ScoreHint{ProfileID: s.ProfileID, Score: s.Score})
+		}
 		req := orchestrator.BuildRequest(
 			time.Now().Unix(),
 			ranked,
@@ -268,6 +309,10 @@ func runOnce(cfg AgentConfig) {
 			orchestrator.GuardConfig{MaxSwitchRate: 3, NoUDP: false},
 			orchestrator.NetworkState{},
 		)
+		req.Adaptive = orchestrator.AdaptiveInput{
+			Scores:         hints,
+			RecentFailures: decision.RecentFailures,
+		}
 		res := orchestrator.DecideWithFallback(
 			context.Background(),
 			pi,
@@ -288,12 +333,16 @@ func runOnce(cfg AgentConfig) {
 	}
 	if err := validateAction("switch_profile", selected.ID, known, len(recent)+1, 6); err != nil {
 		updateError(fmt.Sprintf("action rejected: %v", err))
+		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "UNKNOWN", time.Now())
+		_ = adaptiveStore.Save(adaptiveState)
 		return
 	}
 
 	templateText, err := resolveTemplateText(selected, templateStore, cfg.TemplatesDir)
 	if err != nil {
 		updateError(err.Error())
+		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
+		_ = adaptiveStore.Save(adaptiveState)
 		return
 	}
 
@@ -303,8 +352,19 @@ func runOnce(cfg AgentConfig) {
 	}
 	if _, err := sbctl.RenderConfigToFile(selected, templateText, configPath); err != nil {
 		updateError(fmt.Sprintf("render config: %v", err))
+		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
+		_ = adaptiveStore.Save(adaptiveState)
 		return
 	}
+	adaptiveState.RecordSelection(selected.ID)
+	adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{
+		LatencyMS:    0,
+		ConnectOK:    true,
+		DNSOK:        true,
+		TCPHandshake: true,
+		TLSSuccess:   true,
+	}, "", time.Now())
+	_ = adaptiveStore.Save(adaptiveState)
 
 	state.mu.Lock()
 	state.history = append(state.history, selected.ID)

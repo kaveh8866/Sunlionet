@@ -7,6 +7,17 @@ type DecisionRequest struct {
 	Profiles    []ProfileSnapshot `json:"profiles"`
 	History     DecisionHistory   `json:"history"`
 	Constraints Constraints       `json:"constraints"`
+	Adaptive    AdaptiveInput     `json:"adaptive,omitempty"`
+}
+
+type AdaptiveInput struct {
+	Scores         []ScoreHint `json:"scores,omitempty"`
+	RecentFailures []string    `json:"recent_failures,omitempty"`
+}
+
+type ScoreHint struct {
+	ProfileID string  `json:"profile_id"`
+	Score     float64 `json:"score"`
 }
 
 type NetworkState struct {

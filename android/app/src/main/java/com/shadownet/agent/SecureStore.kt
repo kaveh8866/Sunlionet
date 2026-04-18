@@ -23,6 +23,14 @@ class SecureStore(context: Context) {
         throw IllegalStateException("secure storage initialization failed", err)
     }
 
+    fun ensureDefaultTrustAnchors() {
+        if (getTrustedSignerKeysCSV().isBlank()) {
+            setTrustedSignerKeysCSV(DEFAULT_TRUSTED_SIGNER_PUB_B64URL)
+        }
+        getOrCreateAgeIdentity()
+        getOrCreateMasterKeyB64Url()
+    }
+
     fun getOrCreateMasterKeyB64Url(): String {
         val existing = prefs.getString("master_key_b64url", null)
         if (!existing.isNullOrBlank()) {
@@ -61,6 +69,14 @@ class SecureStore(context: Context) {
         return prefs.getBoolean("desired_connected", false)
     }
 
+    fun isAdvancedModeEnabled(): Boolean {
+        return prefs.getBoolean("advanced_mode", false)
+    }
+
+    fun setAdvancedModeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("advanced_mode", enabled).apply()
+    }
+
     fun setLastError(msg: String) {
         prefs.edit().putString("last_error", msg).apply()
     }
@@ -87,6 +103,10 @@ class SecureStore(context: Context) {
         val recipient = Bech32.encode("age", Bech32.convertBits(pub, 8, 5, true))
         prefs.edit().putString("age_recipient", recipient).apply()
         return secret.uppercase()
+    }
+
+    companion object {
+        private const val DEFAULT_TRUSTED_SIGNER_PUB_B64URL = "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
     }
 
     private object Bech32 {

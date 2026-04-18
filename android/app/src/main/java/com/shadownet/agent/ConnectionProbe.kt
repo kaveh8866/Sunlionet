@@ -31,7 +31,10 @@ object ConnectionProbe {
                     instanceFollowRedirects = true
                     requestMethod = "GET"
                 }
-                conn.inputStream.use { it.readBytes(64 * 1024) }
+                conn.inputStream.use { input ->
+                    val buf = ByteArray(64 * 1024)
+                    input.read(buf)
+                }
                 conn.responseCode
             }
             if (code in 200..399) {
@@ -68,14 +71,15 @@ object ConnectionProbe {
     private fun classify(e: Exception): String {
         val msg = (e.message ?: "").lowercase()
         return when {
-            e is java.net.UnknownHostException -> "DNS_FAILURE"
-            msg.contains("no such host") -> "DNS_FAILURE"
+            e is java.net.UnknownHostException -> "DNS_BLOCKED"
+            msg.contains("no such host") -> "DNS_BLOCKED"
+            msg.contains("tls") && (msg.contains("handshake") || msg.contains("certificate")) -> "TLS_BLOCKED"
+            msg.contains("connection reset") || msg.contains("broken pipe") -> "TCP_RESET"
+            msg.contains("network is unreachable") || msg.contains("no route to host") -> "NO_ROUTE"
             msg.contains("timeout") -> "TIMEOUT"
             e is java.net.SocketTimeoutException -> "TIMEOUT"
-            e is IOException && msg.contains("refused") -> "NETWORK_BLOCKED"
-            e is IOException && msg.contains("unreachable") -> "NETWORK_BLOCKED"
+            e is IOException && msg.contains("refused") -> "TCP_RESET"
             else -> "UNKNOWN"
         }
     }
 }
-

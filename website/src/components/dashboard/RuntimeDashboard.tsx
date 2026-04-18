@@ -164,34 +164,20 @@ export function RuntimeDashboard() {
           </div>
 
           <div className="md:col-span-3 rounded-xl border border-border bg-card/60 p-4">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">Failures</div>
-                <div className="mt-2 text-sm text-muted-foreground">
-                  {state.failures.length ? `${state.failures.length} recent` : "none"}
-                </div>
-              </div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider">Last Event</div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              {events.length ? `${formatUnixAgo(events[0].timestamp)} • ${events[0].message}` : "—"}
             </div>
-            {state.failures.length ? (
-              <div className="mt-3 grid gap-2">
-                {state.failures
-                  .slice(-5)
-                  .reverse()
-                  .map((f) => (
-                    <div
-                      key={`${f.timestamp}-${f.reason}`}
-                      className="text-xs font-mono px-3 py-2 rounded border border-border bg-background/40"
-                    >
-                      {formatUnixAgo(f.timestamp)} • {f.reason}
-                    </div>
-                  ))}
-              </div>
-            ) : null}
           </div>
         </div>
       )}
 
-      <EventTimeline events={events} limit={100} />
+      <details className="rounded-xl border border-border bg-card/60 p-4">
+        <summary className="cursor-pointer text-foreground font-semibold">Show activity</summary>
+        <div className="mt-4">
+          <EventTimeline events={events} limit={100} />
+        </div>
+      </details>
     </div>
   );
 }

@@ -5,9 +5,38 @@
     android:orientation="vertical"
     android:padding="16dp">
 
+    <TextView
+        android:id="@+id/textAppLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textStyle="bold"
+        android:textSize="20sp" />
+
+    <TextView
+        android:id="@+id/textVersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/textSafety"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/tester_safety_message" />
+
+    <TextView
+        android:id="@+id/textHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/hint_welcome"
+        android:textSize="14sp" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -27,18 +56,11 @@
     </LinearLayout>
 
     <TextView
-        android:id="@+id/textProfile"
+        android:id="@+id/textStatusDetail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/profile_none" />
-
-    <TextView
-        android:id="@+id/textAction"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="@string/action_none" />
+        android:text="@string/status_detail_disconnected" />
 
     <TextView
         android:id="@+id/textError"
@@ -51,15 +73,98 @@
     <Button
         android:id="@+id/buttonToggle"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="72dp"
         android:layout_marginTop="16dp"
-        android:text="@string/connect" />
+        android:text="@string/connect"
+        android:textSize="22sp" />
 
-    <Button
-        android:id="@+id/buttonImport"
+    <LinearLayout
+        android:id="@+id/sectionImport"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical">
+
+        <Button
+            android:id="@+id/buttonImport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/import_configuration" />
+
+        <Button
+            android:id="@+id/buttonScanQr"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/scan_qr" />
+
+        <Button
+            android:id="@+id/buttonPasteLink"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/paste_link" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/buttonAdvanced"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/show_advanced" />
+
+    <LinearLayout
+        android:id="@+id/panelAdvanced"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="8dp"
-        android:text="@string/import_bundle" />
+        android:visibility="gone"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textProfile"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/profile_none" />
+
+        <TextView
+            android:id="@+id/textAction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/action_none" />
+
+        <Switch
+            android:id="@+id/switchDiagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/share_anonymous_diagnostics" />
+
+        <Button
+            android:id="@+id/buttonExportLogs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/export_logs" />
+
+        <Button
+            android:id="@+id/buttonReportIssue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/report_issue" />
+
+        <TextView
+            android:id="@+id/textDebugPanel"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1"
+            android:background="#11000000"
+            android:padding="8dp"
+            android:textSize="12sp" />
+    </LinearLayout>
 
 </LinearLayout>

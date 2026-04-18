@@ -1,11 +1,25 @@
 package com.shadownet.agent
 
 import android.content.Context
-import com.shadownet.mobile.Mobile
 import org.json.JSONObject
 import java.io.File
 
 object Bridge {
+    private fun mobileClass(): Class<*> = Class.forName("com.shadownet.mobile.Mobile")
+
+    private fun callMobile(methodName: String, argTypes: Array<Class<*>>, args: Array<Any?>) {
+        val cls = mobileClass()
+        val method = cls.getMethod(methodName, *argTypes)
+        method.invoke(null, *args)
+    }
+
+    private fun callMobileString(methodName: String): String {
+        val cls = mobileClass()
+        val method = cls.getMethod(methodName)
+        val out = method.invoke(null)
+        return out as? String ?: ""
+    }
+
     fun startAgent(context: Context, usePi: Boolean = false): Result<Unit> = runCatching {
         val secure = SecureStore(context)
         val cfg = JSONObject().apply {
@@ -20,25 +34,25 @@ object Bridge {
             put("trusted_signer_pub_b64url", secure.getTrustedSignerKeysCSV())
             put("age_identity", secure.getOrCreateAgeIdentity())
         }.toString()
-        Mobile.StartAgent(cfg)
+        callMobile("StartAgent", arrayOf(String::class.java), arrayOf(cfg))
         Logs.i("bridge", "agent started")
     }
 
     fun stopAgent(): Result<Unit> = runCatching {
-        Mobile.StopAgent()
+        callMobile("StopAgent", emptyArray(), emptyArray())
         Logs.i("bridge", "agent stopped")
     }
 
     fun importBundle(path: String): Result<Unit> {
         return runCatching {
-            Mobile.ImportBundle(path)
+            callMobile("ImportBundle", arrayOf(String::class.java), arrayOf(path))
             Logs.i("bridge", "import bundle: $path")
         }
     }
 
     fun getStatus(): String {
         return try {
-            Mobile.GetStatus()
+            callMobileString("GetStatus")
         } catch (e: Throwable) {
             """{"running":false,"last_error":"${e.message ?: "bridge unavailable"}"}"""
         }

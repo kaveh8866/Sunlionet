@@ -41,6 +41,21 @@ import (
 )
 
 var version = "dev"
+var simpleConnectOutput = false
+
+func uiPrintf(format string, args ...interface{}) {
+	if simpleConnectOutput {
+		return
+	}
+	fmt.Printf(format, args...)
+}
+
+func uiPrintln(msg string) {
+	if simpleConnectOutput {
+		return
+	}
+	fmt.Println(msg)
+}
 
 type userError struct {
 	Message string
@@ -118,10 +133,20 @@ type options struct {
 	MaxAttempts          int
 	RuntimeAPIAddr       string
 	RuntimeAPIKeepAlive  bool
+	AdaptiveMode         bool
 }
 
 func run() error {
-	fmt.Printf("ShadowNet Inside %s\n", version)
+	if len(os.Args) > 1 && strings.EqualFold(strings.TrimSpace(os.Args[1]), "reset-learning") {
+		return runResetLearning(os.Args[2:])
+	}
+	if len(os.Args) > 1 && strings.EqualFold(strings.TrimSpace(os.Args[1]), "connect") {
+		simpleConnectOutput = true
+		fmt.Println("Connecting…")
+		return runConnect(os.Args[2:])
+	}
+
+	uiPrintf("ShadowNet Inside %s\n", version)
 
 	var opts options
 	flag.StringVar(&opts.StateDir, "state-dir", "", "State directory")
@@ -146,6 +171,7 @@ func run() error {
 	flag.IntVar(&opts.MaxAttempts, "max-attempts", 3, "Maximum profiles to try before failing")
 	flag.StringVar(&opts.RuntimeAPIAddr, "runtime-api-addr", "", "Optional local runtime API listen address (localhost only), e.g. 127.0.0.1:8080")
 	flag.BoolVar(&opts.RuntimeAPIKeepAlive, "runtime-api-keepalive", false, "If set, keep the agent process running to serve the runtime API until interrupted")
+	flag.BoolVar(&opts.AdaptiveMode, "adaptive-mode", true, "Enable adaptive local network learning and dynamic fallback rules")
 	flag.Parse()
 
 	if opts.StateDir == "" {
@@ -186,6 +212,9 @@ func run() error {
 		log.SetFlags(log.LstdFlags)
 	}
 	log.SetPrefix("[ShadowNet Inside] ")
+	if simpleConnectOutput && !opts.Verbose {
+		log.SetOutput(io.Discard)
+	}
 
 	log.Printf("state_dir=%s templates_dir=%s render_only=%v validate_only=%v probe=%v", opts.StateDir, opts.TemplatesDir, opts.RenderOnly, opts.ValidateOnly, opts.ProbeURL != "")
 
@@ -193,6 +222,87 @@ func run() error {
 	if err != nil {
 		return userError{Message: "Invalid runtime mode. Expected: real or simulation", Err: err}
 	}
+	return runWithResolved(opts, masterKey, mode)
+}
+
+func runConnect(args []string) error {
+	var opts options
+	fs := flag.NewFlagSet("connect", flag.ContinueOnError)
+	fs.StringVar(&opts.StateDir, "state-dir", "", "State directory")
+	fs.StringVar(&opts.ImportPath, "import", "", "Import a signed/encrypted bundle file from disk")
+	fs.StringVar(&opts.MasterKey, "master-key", "", "Master key for local encrypted storage (32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes)")
+	fs.StringVar(&opts.TemplatesDir, "templates-dir", "", "Directory containing outbound templates")
+	fs.StringVar(&opts.TrustedSignerPubsB64, "trusted-signer-pub-b64url", "", "Trusted signer ed25519 public keys (base64url), comma-separated")
+	fs.StringVar(&opts.AgeIdentity, "age-identity", "", "age X25519 identity for bundle decryption")
+	fs.StringVar(&opts.SingBoxBin, "sing-box-bin", "", "Path to sing-box binary (optional; falls back to PATH)")
+	fs.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose logging")
+	fs.BoolVar(&opts.UsePi, "use-pi", false, "Enable optional Pi orchestrator (never blocks; falls back to deterministic policy)")
+	fs.StringVar(&opts.PiEndpoint, "pi-endpoint", "", "Optional Pi TCP endpoint (host:port). If empty, uses a child process over stdin/stdout")
+	fs.IntVar(&opts.PiTimeoutMS, "pi-timeout-ms", 1200, "Pi decision timeout in milliseconds")
+	fs.StringVar(&opts.PiCmd, "pi-cmd", "pi", "Pi command to run when using stdin/stdout mode")
+	fs.StringVar(&opts.Mode, "mode", string(runtimecfg.ModeReal), "Runtime mode: real or simulation")
+	fs.StringVar(&opts.ProbeURL, "probe-url", "https://example.com", "HTTP probe URL (default: https://example.com)")
+	fs.StringVar(&opts.ProbeProxyAddr, "probe-proxy-addr", "127.0.0.1:18080", "Local sing-box proxy listen address for probes (host:port)")
+	fs.IntVar(&opts.ProbeTimeoutMS, "probe-timeout-ms", 10_000, "Probe timeout in milliseconds")
+	fs.IntVar(&opts.MaxAttempts, "max-attempts", 3, "Maximum profiles to try before failing")
+	fs.StringVar(&opts.RuntimeAPIAddr, "runtime-api-addr", "", "Optional local runtime API listen address (localhost only), e.g. 127.0.0.1:8080")
+	fs.BoolVar(&opts.RuntimeAPIKeepAlive, "runtime-api-keepalive", false, "If set, keep the agent process running to serve the runtime API until interrupted")
+	fs.BoolVar(&opts.AdaptiveMode, "adaptive-mode", true, "Enable adaptive local network learning and dynamic fallback rules")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if opts.StateDir == "" {
+		opts.StateDir = os.Getenv("SHADOWNET_STATE_DIR")
+	}
+	if opts.StateDir == "" {
+		opts.StateDir = defaultStateDir()
+	}
+	if opts.MasterKey == "" {
+		opts.MasterKey = os.Getenv("SHADOWNET_MASTER_KEY")
+	}
+	masterKey, err := profile.ParseMasterKey(opts.MasterKey)
+	if err != nil {
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SHADOWNET_MASTER_KEY)", err)
+	}
+	if opts.TemplatesDir == "" {
+		opts.TemplatesDir = os.Getenv("SHADOWNET_TEMPLATES_DIR")
+	}
+	if opts.TemplatesDir == "" {
+		opts.TemplatesDir = filepath.Join(".", "templates")
+	}
+	if opts.TrustedSignerPubsB64 == "" {
+		opts.TrustedSignerPubsB64 = os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+	}
+	if opts.AgeIdentity == "" {
+		opts.AgeIdentity = os.Getenv("SHADOWNET_AGE_IDENTITY")
+	}
+	if opts.SingBoxBin == "" {
+		opts.SingBoxBin = os.Getenv("SHADOWNET_SINGBOX_BIN")
+	}
+	if opts.RuntimeAPIAddr == "" {
+		opts.RuntimeAPIAddr = os.Getenv("SHADOWNET_RUNTIME_API_ADDR")
+	}
+
+	if opts.Verbose {
+		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	} else {
+		log.SetFlags(log.LstdFlags)
+	}
+	log.SetPrefix("[ShadowNet Inside] ")
+
+	mode, err := runtimecfg.ParseRuntimeMode(opts.Mode)
+	if err != nil {
+		return userError{Message: "Invalid runtime mode. Expected: real or simulation", Err: err}
+	}
+	err = runWithResolved(opts, masterKey, mode)
+	if err == nil {
+		fmt.Println("Connected.")
+	}
+	return err
+}
+
+func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode) error {
 	rcfg := runtimecfg.RuntimeConfig{Mode: mode}
 	log.Printf("mode=%s", rcfg.Mode)
 	rt := buildRuntime(rcfg)
@@ -219,6 +329,7 @@ func run() error {
 
 	storePath := filepath.Join(opts.StateDir, "profiles.enc")
 	templatesPath := filepath.Join(opts.StateDir, "templates.enc")
+	adaptivePath := filepath.Join(opts.StateDir, "adaptive.enc")
 	statePath := filepath.Join(opts.StateDir, "state.json")
 	configPath := filepath.Join(runtimeDir, "config.json")
 
@@ -230,18 +341,32 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to create template store: %w", err)
 	}
+	adaptiveStore, err := policy.NewAdaptiveStore(adaptivePath, masterKey)
+	if err != nil {
+		return fmt.Errorf("failed to create adaptive store: %w", err)
+	}
+	adaptiveState, err := adaptiveStore.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load adaptive state: %w", err)
+	}
+	adaptiveState.SetEnabled(opts.AdaptiveMode)
+	defer func() {
+		if err := adaptiveStore.Save(adaptiveState); err != nil {
+			log.Printf("adaptive state save failed: %v", err)
+		}
+	}()
 
 	if opts.ReportOut != "" {
 		r := report.Generate(opts.StateDir, masterKey)
 		if err := report.WriteFile(opts.ReportOut, r); err != nil {
 			return userError{Message: "Failed to write report file", Err: err}
 		}
-		fmt.Printf("[ShadowNet] Report written: %s\n", opts.ReportOut)
+		uiPrintf("[ShadowNet] Report written: %s\n", opts.ReportOut)
 		return nil
 	}
 
 	if opts.ImportPath != "" {
-		fmt.Printf("[ShadowNet] Importing bundle: %s\n", filepath.Base(opts.ImportPath))
+		uiPrintf("[ShadowNet] Importing bundle: %s\n", filepath.Base(opts.ImportPath))
 		ageIdentity, err := loadAgeIdentity(opts.AgeIdentity, filepath.Join(keysDir, "age_identity.txt"))
 		if err != nil {
 			return userError{Message: "Missing or invalid age identity (required to decrypt bundles)", Err: err}
@@ -258,7 +383,7 @@ func run() error {
 		if err := importer.ProcessAndStore(payload); err != nil {
 			return userError{Message: "Bundle store failed", Err: err}
 		}
-		fmt.Printf("[Bundle] Import OK: profiles=%d templates=%d\n", len(payload.Profiles), len(payload.Templates))
+		uiPrintf("[Bundle] Import OK: profiles=%d templates=%d\n", len(payload.Profiles), len(payload.Templates))
 		log.Printf("import ok profiles=%d revocations=%d templates=%d", len(payload.Profiles), len(payload.Revocations), len(payload.Templates))
 	}
 
@@ -288,14 +413,17 @@ func run() error {
 		}
 	}
 
-	engine := policy.Engine{MaxBurstFailures: 3}
-	ranked := engine.RankProfiles(candidates)
+	engine := policy.Engine{MaxBurstFailures: 3, AdaptiveState: adaptiveState}
+	selected, adaptiveDecision, ranked := engine.SelectProfile(candidates)
 	if len(ranked) == 0 {
 		return userError{Message: "No viable profiles (all are in cooldown due to repeated failures). Try again later or import a fresh bundle.", Err: nil}
 	}
 
-	selected := ranked[0]
-	policyReason := fmt.Sprintf("score=%.1f ewma=%.2f cooldown_until=%d", selected.Health.Score, selected.Health.SuccessEWMA, selected.Health.CooldownUntil)
+	policyReason := adaptiveDecision.Reason
+	if strings.TrimSpace(policyReason) == "" {
+		policyReason = fmt.Sprintf("score=%.1f ewma=%.2f cooldown_until=%d", selected.Health.Score, selected.Health.SuccessEWMA, selected.Health.CooldownUntil)
+	}
+	log.Printf("[decision] selected=%s reason=%s", selected.ID, policyReason)
 	policyConfidence := 1.0
 	if len(ranked) > 1 {
 		diff := ranked[0].Health.Score - ranked[1].Health.Score
@@ -329,6 +457,8 @@ func run() error {
 		"fallbacks":   fallbackCandidates,
 		"max_burst":   engine.MaxBurstFailures,
 		"profile_cnt": len(candidates),
+		"scores":      adaptiveDecision.Scores,
+		"adaptive":    opts.AdaptiveMode,
 	})
 
 	finalSelected := selected
@@ -336,7 +466,7 @@ func run() error {
 	finalConfidence := policyConfidence
 	finalSource := "policy"
 
-	shouldInvokePi := opts.UsePi || (policyConfidence < 0.6 && len(ranked) > 1)
+	shouldInvokePi := opts.UsePi || (adaptiveDecision.UseOrchestrator && len(ranked) > 1)
 	var piClient orchestrator.Client
 	if shouldInvokePi {
 		cfg := orchestrator.Config{
@@ -359,7 +489,15 @@ func run() error {
 		log.Printf("[orchestrator] invoked")
 		now := time.Now().Unix()
 		history := orchestrator.DecisionHistory{RecentSwitches: nil, FailRate: 1 - selected.Health.SuccessEWMA}
+		hints := make([]orchestrator.ScoreHint, 0, len(adaptiveDecision.Scores))
+		for _, s := range adaptiveDecision.Scores {
+			hints = append(hints, orchestrator.ScoreHint{ProfileID: s.ProfileID, Score: s.Score})
+		}
 		req := orchestrator.BuildRequest(now, ranked, history, orchestrator.GuardConfig{MaxSwitchRate: 3, NoUDP: false}, orchestrator.NetworkState{})
+		req.Adaptive = orchestrator.AdaptiveInput{
+			Scores:         hints,
+			RecentFailures: adaptiveDecision.RecentFailures,
+		}
 		res := orchestrator.DecideWithFallback(
 			context.Background(),
 			piClient,
@@ -387,7 +525,8 @@ func run() error {
 	}
 
 	log.Printf("select ok: profile=%s source=%s confidence=%.2f reason=%s fallbacks=%v", finalSelected.ID, finalSource, finalConfidence, finalReason, fallbackCandidates)
-	fmt.Printf("[Profile] Selected: %s\n", finalSelected.ID)
+	adaptiveState.RecordSelection(finalSelected.ID)
+	uiPrintf("[Profile] Selected: %s\n", finalSelected.ID)
 	rts.setStatus("connecting")
 	rts.setActiveProfile(finalSelected.ID)
 	rts.addEvent("PROFILE_SWITCH", "Selected profile "+finalSelected.ID, map[string]interface{}{
@@ -451,7 +590,7 @@ func run() error {
 		}
 		rts.setActiveProfile(p.ID)
 		if i > 0 {
-			fmt.Printf("[Profile] Fallback: %s\n", p.ID)
+			uiPrintf("[Profile] Fallback: %s\n", p.ID)
 			rts.addEvent("PROFILE_SWITCH", "Trying fallback profile "+p.ID, map[string]interface{}{
 				"from":    prevProfileID,
 				"to":      p.ID,
@@ -460,7 +599,7 @@ func run() error {
 			})
 		}
 		prevProfileID = p.ID
-		fmt.Printf("[ShadowNet] Starting agent... (attempt %d/%d)\n", i+1, maxAttempts)
+		uiPrintf("[ShadowNet] Starting agent... (attempt %d/%d)\n", i+1, maxAttempts)
 
 		templateText, err := resolveTemplateText(p, templateStore, opts.TemplatesDir)
 		if err != nil {
@@ -479,7 +618,7 @@ func run() error {
 		})
 
 		if opts.RenderOnly {
-			fmt.Printf("[Config] Rendered: %s\n", rendered.ConfigPath)
+			uiPrintf("[Config] Rendered: %s\n", rendered.ConfigPath)
 			st := agentState{
 				StateDir:           opts.StateDir,
 				ProfilesLoaded:     len(allProfiles),
@@ -497,7 +636,7 @@ func run() error {
 		}
 
 		if opts.ValidateOnly {
-			fmt.Printf("[Config] Validating: %s\n", rendered.ConfigPath)
+			uiPrintf("[Config] Validating: %s\n", rendered.ConfigPath)
 			st := agentState{
 				StateDir:           opts.StateDir,
 				ProfilesLoaded:     len(allProfiles),
@@ -524,7 +663,7 @@ func run() error {
 		}
 
 		log.Printf("[sing-box] starting attempt=%d profile=%s", i+1, p.ID)
-		fmt.Printf("[Connection] Starting...\n")
+		uiPrintf("[Connection] Starting...\n")
 		rts.addEvent("SINGBOX_START", "Starting sing-box", map[string]interface{}{"profile": p.ID, "attempt": i + 1})
 		if err := ctrl.ApplyAndReload(string(rendered.ConfigBytes)); err != nil {
 			if errors.Is(err, sbctl.ErrBinaryNotFound) {
@@ -544,6 +683,7 @@ func run() error {
 				_ = writeState(statePath, st)
 				rts.addEvent("SINGBOX_START_FAILED", "sing-box binary missing", map[string]interface{}{"profile": p.ID, "reason": "BINARY_MISSING"})
 				rts.addEvent("CONNECTION_FAIL", "sing-box binary missing", map[string]interface{}{"profile": p.ID, "reason": "BINARY_MISSING"})
+				adaptiveState.RecordAttempt(p.ID, signalForFailure(0, e2e.ReasonBinaryMissing), string(e2e.ReasonBinaryMissing), time.Now())
 				return userError{Message: "sing-box binary not found.\n→ Install sing-box or set --sing-box-bin to its path.", Err: err}
 			}
 			tail := readTailBytes(ctrl.StderrPath(), 64*1024)
@@ -569,6 +709,7 @@ func run() error {
 			rts.addFailure(string(reason))
 			rts.addEvent("SINGBOX_START_FAILED", "sing-box start failed: "+string(reason), map[string]interface{}{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
 			rts.addEvent("CONNECTION_FAIL", "sing-box start failed", map[string]interface{}{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
+			adaptiveState.RecordAttempt(p.ID, signalForFailure(0, reason), string(reason), time.Now())
 			_ = ctrl.Stop()
 			lastState = agentState{
 				StateDir:           opts.StateDir,
@@ -594,7 +735,7 @@ func run() error {
 
 		probe := e2e.ProbeResult{Status: "skipped", Reason: e2e.ReasonUnknown, TargetURL: opts.ProbeURL, ProxyURL: probeProxyURL, ObservedAt: time.Now().Unix()}
 		if probeEnabled {
-			fmt.Printf("[Connection] Testing...\n")
+			uiPrintf("[Connection] Testing...\n")
 			waitCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			waitErr := waitForTCPListen(waitCtx, opts.ProbeProxyAddr)
 			cancel()
@@ -612,6 +753,7 @@ func run() error {
 				rts.addFailure(string(probe.Reason))
 				rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
 				rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
+				adaptiveState.RecordAttempt(p.ID, signalForFailure(0, probe.Reason), string(probe.Reason), time.Now())
 			} else {
 				log.Printf("[probe] start target=%s via=%s", opts.ProbeURL, probeProxyURL)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(opts.ProbeTimeoutMS)*time.Millisecond)
@@ -624,16 +766,33 @@ func run() error {
 					rts.addFailure(string(probe.Reason))
 					rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
 					rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
+					adaptiveState.RecordAttempt(p.ID, signalForFailure(probe.DurationMS, probe.Reason), string(probe.Reason), time.Now())
 				} else {
 					log.Printf("[probe] ok status=%d duration_ms=%d", probe.HTTPStatus, probe.DurationMS)
 					log.Printf("[network] outbound connected")
-					fmt.Printf("[Connection] SUCCESS\n")
+					uiPrintf("[Connection] SUCCESS\n")
 					rts.setLatencyMs(probe.DurationMS)
 					rts.setStatus("connected")
 					rts.addEvent("PROBE_OK", fmt.Sprintf("HTTP probe ok status=%d latency_ms=%d", probe.HTTPStatus, probe.DurationMS), map[string]interface{}{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
 					rts.addEvent("CONNECTION_SUCCESS", "Connection validated by HTTP probe", map[string]interface{}{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
+					adaptiveState.RecordAttempt(p.ID, policy.AttemptSignal{
+						LatencyMS:    int(probe.DurationMS),
+						ConnectOK:    true,
+						DNSOK:        true,
+						TCPHandshake: true,
+						TLSSuccess:   true,
+					}, "", time.Now())
 				}
 			}
+		}
+		if !probeEnabled {
+			adaptiveState.RecordAttempt(p.ID, policy.AttemptSignal{
+				LatencyMS:    0,
+				ConnectOK:    true,
+				DNSOK:        true,
+				TCPHandshake: true,
+				TLSSuccess:   true,
+			}, "", time.Now())
 		}
 
 		attempts = append(attempts, attemptState{
@@ -685,7 +844,11 @@ func run() error {
 			return nil
 		}
 		rts.addEvent("AGENT_HOLD", "Keeping agent alive for runtime API", map[string]interface{}{"addr": strings.TrimSpace(opts.RuntimeAPIAddr)})
-		fmt.Printf("[ShadowNet Dashboard] Listening on http://%s\n", strings.TrimSpace(opts.RuntimeAPIAddr))
+		if simpleConnectOutput {
+			fmt.Printf("Dashboard: http://%s\n", strings.TrimSpace(opts.RuntimeAPIAddr))
+		} else {
+			fmt.Printf("[ShadowNet Dashboard] Listening on http://%s\n", strings.TrimSpace(opts.RuntimeAPIAddr))
+		}
 		log.Printf("[api] keepalive enabled; press Ctrl+C to stop")
 		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		<-sigCtx.Done()
@@ -775,6 +938,65 @@ func loadAgeIdentity(value string, fallbackPath string) (*age.X25519Identity, er
 		return nil, fmt.Errorf("invalid age identity: %w", err)
 	}
 	return ageIdentity, nil
+}
+
+func runResetLearning(args []string) error {
+	var stateDir string
+	var masterKeyArg string
+	fs := flag.NewFlagSet("reset-learning", flag.ContinueOnError)
+	fs.StringVar(&stateDir, "state-dir", "", "State directory")
+	fs.StringVar(&masterKeyArg, "master-key", "", "Master key for adaptive store decryption")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(stateDir) == "" {
+		stateDir = os.Getenv("SHADOWNET_STATE_DIR")
+	}
+	if strings.TrimSpace(stateDir) == "" {
+		stateDir = defaultStateDir()
+	}
+	if strings.TrimSpace(masterKeyArg) == "" {
+		masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+	}
+	masterKey, err := profile.ParseMasterKey(masterKeyArg)
+	if err != nil {
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SHADOWNET_MASTER_KEY)", err)
+	}
+
+	adaptiveStore, err := policy.NewAdaptiveStore(filepath.Join(stateDir, "adaptive.enc"), masterKey)
+	if err != nil {
+		return err
+	}
+	if err := adaptiveStore.Reset(); err != nil {
+		return err
+	}
+	fmt.Println("[Adaptive] Learning state reset.")
+	return nil
+}
+
+func signalForFailure(latencyMS int64, reason e2e.FailureReason) policy.AttemptSignal {
+	signal := policy.AttemptSignal{
+		LatencyMS:    int(latencyMS),
+		ConnectOK:    false,
+		DNSOK:        true,
+		TCPHandshake: true,
+		TLSSuccess:   false,
+	}
+	switch reason {
+	case e2e.ReasonDNSFailure:
+		signal.DNSOK = false
+		signal.TCPHandshake = false
+	case e2e.ReasonTimeout:
+		signal.TCPHandshake = false
+	case e2e.ReasonNetworkBlocked:
+		signal.TCPHandshake = false
+	case e2e.ReasonBinaryMissing, e2e.ReasonConfigError:
+		signal.DNSOK = true
+		signal.TCPHandshake = false
+	default:
+		// Leave generic failure signal defaults.
+	}
+	return signal
 }
 
 func resolveTemplateText(p profile.Profile, store *profile.TemplateStore, templatesDir string) (string, error) {

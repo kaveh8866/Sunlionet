@@ -9,6 +9,7 @@
 ## File Name
 
 - `report.json`
+- `logs.json` (tester build manual export)
 
 ## Schema
 
@@ -64,3 +65,49 @@
   - country/region only if safe
   - scenario (DPI/heavy blocking/offline)
 
+## Tester Build Log Export (`logs.json`)
+
+Used for controlled rollout triage. Generated only when the tester explicitly taps `Export Logs`.
+
+### Minimal Schema (Example)
+
+```json
+{
+  "schema": "shadownet.logs.v1",
+  "version": "v0.1.0-test3",
+  "tester_mode": true,
+  "share_anonymous_diagnostics": false,
+  "generated_at": "2026-04-18T13:00:00Z",
+  "events": [
+    {
+      "event": "connection_fail",
+      "reason": "DNS_FAILURE",
+      "retry_count": 2,
+      "success": false,
+      "ts": "2026-04-18T12:58:00Z"
+    },
+    {
+      "event": "NETWORK_SWITCH",
+      "ts": "2026-04-18T12:59:00Z"
+    }
+  ],
+  "last_errors": [
+    {
+      "component": "agent",
+      "reason": "DNS_BLOCKED",
+      "ts": "2026-04-18T12:58:00Z"
+    }
+  ],
+  "logs": [
+    "12:58:00 [connection][WARN] failed reason=DNS_BLOCKED",
+    "12:59:00 [network][INFO] switch detected"
+  ]
+}
+```
+
+### Hard Exclusions
+
+- Never include IP addresses.
+- Never include domain names or endpoint URLs.
+- Never include full runtime configs or bundle contents.
+- Never include personal identity fields.

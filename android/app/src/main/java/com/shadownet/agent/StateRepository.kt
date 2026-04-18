@@ -7,7 +7,8 @@ data class UiState(
     val status: String = "Disconnected",
     val currentProfile: String = "-",
     val lastAction: String = "-",
-    val lastError: String = ""
+    val lastError: String = "",
+    val lastErrorDetails: String = "",
 )
 
 class StateRepository(context: Context) {
@@ -19,6 +20,7 @@ class StateRepository(context: Context) {
             .putString("profile", state.currentProfile)
             .putString("action", state.lastAction)
             .putString("error", state.lastError)
+            .putString("error_details", state.lastErrorDetails)
             .apply()
     }
 
@@ -28,6 +30,7 @@ class StateRepository(context: Context) {
             currentProfile = prefs.getString("profile", "-") ?: "-",
             lastAction = prefs.getString("action", "-") ?: "-",
             lastError = prefs.getString("error", "") ?: "",
+            lastErrorDetails = prefs.getString("error_details", "") ?: "",
         )
     }
 
@@ -40,10 +43,10 @@ class StateRepository(context: Context) {
                 currentProfile = obj.optString("current_profile", "-"),
                 lastAction = obj.optString("last_action", "-"),
                 lastError = obj.optString("last_error", ""),
+                lastErrorDetails = "",
             )
         } catch (_: Exception) {
             UiState(status = "Error", lastError = "Invalid bridge status")
         }
     }
 }
-
