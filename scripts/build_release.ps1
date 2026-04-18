@@ -54,11 +54,11 @@ $installLinux = @'
 #!/usr/bin/env sh
 set -eu
 mode="${1:-inside}"
-bin="shadownet-${mode}"
+bin="sunlionet-${mode}"
 src="./${bin}"
 dst="/usr/local/bin/${bin}"
 install -m 0755 "$src" "$dst"
-mkdir -p /etc/shadownet
+mkdir -p /etc/sunlionet
 if [ -f "./${bin}.service" ]; then
   install -m 0644 "./${bin}.service" "/etc/systemd/system/${bin}.service"
   systemctl daemon-reload || true
@@ -68,14 +68,14 @@ printf "%s\n" "installed ${dst}"
 
 $insideService = @'
 [Unit]
-Description=ShadowNet Agent (Inside)
+Description=SunLionet (Inside)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/shadownet/inside.env
-ExecStart=/usr/local/bin/shadownet-inside
+EnvironmentFile=-/etc/sunlionet/inside.env
+ExecStart=/usr/local/bin/sunlionet-inside
 Restart=always
 RestartSec=2
 
@@ -85,14 +85,14 @@ WantedBy=multi-user.target
 
 $outsideService = @'
 [Unit]
-Description=ShadowNet Agent (Outside)
+Description=SunLionet (Outside)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/shadownet/outside.env
-ExecStart=/usr/local/bin/shadownet-outside
+EnvironmentFile=-/etc/sunlionet/outside.env
+ExecStart=/usr/local/bin/sunlionet-outside
 Restart=always
 RestartSec=2
 
@@ -101,8 +101,8 @@ WantedBy=multi-user.target
 '@
 
 Write-TextFile -Path (Join-Path $tmpDir "install-linux.sh") -Content $installLinux
-Write-TextFile -Path (Join-Path $tmpDir "shadownet-inside.service") -Content $insideService
-Write-TextFile -Path (Join-Path $tmpDir "shadownet-outside.service") -Content $outsideService
+Write-TextFile -Path (Join-Path $tmpDir "sunlionet-inside.service") -Content $insideService
+Write-TextFile -Path (Join-Path $tmpDir "sunlionet-outside.service") -Content $outsideService
 
 function New-TarGzPackage {
   param([string]$BaseName, [string]$WorkDir)
@@ -131,12 +131,12 @@ function Build-And-Package {
     [string]$Format
   )
 
-  $binBase = "shadownet-$Mode-$Version-$GoOS-$GoArch"
+  $binBase = "sunlionet-$Mode-$Version-$GoOS-$GoArch"
   $work = Join-Path $tmpDir $binBase
   if (Test-Path $work) { Remove-Item -Recurse -Force $work }
   New-Item -ItemType Directory -Force -Path $work | Out-Null
 
-  $binName = "shadownet-$Mode"
+  $binName = "sunlionet-$Mode"
   if ($GoOS -eq "windows") { $binName = $binName + ".exe" }
   $binPath = Join-Path $work $binName
 
@@ -145,10 +145,10 @@ function Build-And-Package {
 
   Copy-Item -Force (Join-Path $tmpDir "install-linux.sh") (Join-Path $work "install-linux.sh")
   if ($Mode -eq "inside") {
-    Copy-Item -Force (Join-Path $tmpDir "shadownet-inside.service") (Join-Path $work "shadownet-inside.service")
+    Copy-Item -Force (Join-Path $tmpDir "sunlionet-inside.service") (Join-Path $work "sunlionet-inside.service")
   }
   if ($Mode -eq "outside") {
-    Copy-Item -Force (Join-Path $tmpDir "shadownet-outside.service") (Join-Path $work "shadownet-outside.service")
+    Copy-Item -Force (Join-Path $tmpDir "sunlionet-outside.service") (Join-Path $work "sunlionet-outside.service")
   }
 
   if ($Format -eq "targz") {
@@ -156,7 +156,7 @@ function Build-And-Package {
   } elseif ($Format -eq "zip") {
     New-ZipPackage -BaseName $binBase -WorkDir $work
   } elseif ($Format -eq "raw") {
-    $rawPath = Join-Path $outDir ("shadownet-$Mode-$Version-$GoOS-$GoArch")
+    $rawPath = Join-Path $outDir ("sunlionet-$Mode-$Version-$GoOS-$GoArch")
     Copy-Item -Force $binPath $rawPath
     $sha = Sha256File $rawPath
     Write-TextFile -Path ($rawPath + ".sha256") -Content ($sha + "  " + (Split-Path -Leaf $rawPath) + "`n")

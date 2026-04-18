@@ -1,8 +1,8 @@
-import Link from "next/link";
 import path from "node:path";
 import { readdir, readFile } from "node:fs/promises";
+import { LocalizedLink } from "./LocalizedLink";
 
-const repoUrl = "https://github.com/kaveh8866/shadownet-agent";
+const repoUrl = "https://github.com/kaveh8866/sunlionet-core";
 const licenseUrl = `${repoUrl}/blob/main/LICENSE`;
 
 type ReleaseInfo = {
@@ -52,7 +52,7 @@ export async function SiteFooter() {
       <div className="mx-auto w-full max-w-6xl px-4 grid gap-10">
         <div className="grid gap-8 md:grid-cols-4">
           <div className="md:col-span-2">
-            <div className="text-foreground font-semibold tracking-tight">ShadowNet Agent</div>
+            <div className="text-foreground font-semibold tracking-tight">SunLionet</div>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-xl">
               Offline-first, privacy-preserving DPI resistance with a dual Inside/Outside architecture. No accounts. No
               analytics. No live seed hosting on this website.
@@ -67,48 +67,48 @@ export async function SiteFooter() {
 
           <div className="grid gap-2 text-sm">
             <div className="text-xs font-mono tracking-wide text-muted-foreground uppercase">Docs</div>
-            <Link href="/docs" prefetch={false} className="text-muted-foreground hover:text-foreground transition-colors">
+            <LocalizedLink href="/docs" prefetch={false} className="text-muted-foreground hover:text-foreground transition-colors">
               Documentation
-            </Link>
-            <Link
+            </LocalizedLink>
+            <LocalizedLink
               href="/docs/install"
               prefetch={false}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Installation
-            </Link>
-            <Link
+            </LocalizedLink>
+            <LocalizedLink
               href="/docs/architecture"
               prefetch={false}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Architecture
-            </Link>
-            <Link
+            </LocalizedLink>
+            <LocalizedLink
               href="/docs/threat-model"
               prefetch={false}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Threat model
-            </Link>
+            </LocalizedLink>
           </div>
 
           <div className="grid gap-2 text-sm">
             <div className="text-xs font-mono tracking-wide text-muted-foreground uppercase">Project</div>
-            <Link
+            <LocalizedLink
               href="/download"
               prefetch={false}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Downloads
-            </Link>
-            <Link
+            </LocalizedLink>
+            <LocalizedLink
               href="/support"
               prefetch={false}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Support
-            </Link>
+            </LocalizedLink>
             <a href={repoUrl} className="text-muted-foreground hover:text-foreground transition-colors">
               GitHub
             </a>
@@ -123,7 +123,7 @@ export async function SiteFooter() {
             Safety note: treat local devices as potentially seized. Prefer minimal logs, verify downloads, and use trusted
             channels for seed delivery.
           </div>
-          <div className="text-xs text-muted-foreground">© {new Date().getFullYear()} ShadowNet contributors</div>
+          <div className="text-xs text-muted-foreground">© {new Date().getFullYear()} SunLionet contributors</div>
         </div>
       </div>
     </footer>

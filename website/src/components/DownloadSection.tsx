@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getUILangFromPathname, uiCopy } from "../lib/uiCopy";
 import { type DetectedOS, useOsDetection } from "./useOsDetection";
 import { Callout } from "./ui/Callout";
 import { SectionHeader } from "./ui/SectionHeader";
@@ -34,7 +36,7 @@ type LocalRelease = {
 };
 
 const repoOwner = "kaveh8866";
-const repoName = "shadownet-agent";
+const repoName = "sunlionet-core";
 const githubRepo = `https://github.com/${repoOwner}/${repoName}`;
 const githubReleases = `${githubRepo}/releases`;
 const githubTagTarballBase = `${githubRepo}/archive/refs/tags`;
@@ -90,11 +92,15 @@ function CommandBlock({
   code,
   language,
   note,
+  copyLabel,
+  copiedLabel,
 }: {
   label: string;
   code: string;
   language?: string;
   note?: string;
+  copyLabel: string;
+  copiedLabel: string;
 }) {
   const [copied, setCopied] = useState(false);
   const onCopy = useCallback(async () => {
@@ -118,7 +124,7 @@ function CommandBlock({
           onClick={onCopy}
           className="px-3 py-1.5 rounded-md border border-border bg-card text-xs font-semibold text-foreground hover:opacity-90 transition-opacity"
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? copiedLabel : copyLabel}
         </button>
       </div>
       <pre className="overflow-auto p-4">
@@ -208,10 +214,15 @@ function releaseArtifactCount(release: LocalRelease | null) {
   return release ? release.artifacts.length : 0;
 }
 
-export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
+export function DownloadSection({ releases, basePrefix }: { releases: LocalRelease[]; basePrefix?: string }) {
+  const pathname = usePathname();
+  const lang = getUILangFromPathname(pathname);
+  const copy = uiCopy[lang];
   const origin = useOrigin();
   const { detection, supportsAutoRecommendation } = useOsDetection();
   const arch = useMemo(() => detectArchFromNavigator(), []);
+  const resolvedBasePrefix = basePrefix?.trim() ? basePrefix : "";
+  const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
 
   const [role, setRole] = useState<Role>("inside");
   const [manualPlatform, setManualPlatform] = useState<PlatformKey>("unknown");
@@ -304,7 +315,7 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
       return {
         download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
         verify: `shasum -a 256 -c ${file}.sha256`,
-        install: isTar ? `tar -xzf ${file}\n./shadownet-${role}` : `./${file}`,
+        install: isTar ? `tar -xzf ${file}\n./sunlionet-${role} || ./shadownet-${role}` : `./${file}`,
       };
     }
 
@@ -314,10 +325,15 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
   const hasLocalReleases = releases.length > 0;
 
   const recommendedHeading = useMemo(() => {
+    if (lang === "fa") {
+      if (!supportsAutoRecommendation) return "دانلود پیشنهادی (انتخاب دستی)";
+      if (autoPlatform === "unknown") return "دانلود پیشنهادی (تشخیص قطعی نیست)";
+      return "دانلود پیشنهادی";
+    }
     if (!supportsAutoRecommendation) return "Recommended download (manual selection)";
     if (autoPlatform === "unknown") return "Recommended download (detection is uncertain)";
     return "Recommended download";
-  }, [supportsAutoRecommendation, autoPlatform]);
+  }, [supportsAutoRecommendation, autoPlatform, lang]);
 
   const platformChoices: { key: PlatformKey; description: string; support: string; method: string; target?: string }[] = useMemo(
     () => [
@@ -370,15 +386,25 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
     <section id="downloads" className="w-full">
       <div className="grid gap-10">
         {!hasLocalReleases ? (
-          <Callout title="No local release artifacts found" tone="warning">
-            This site build does not include any files under <span className="font-mono">website/public/downloads</span>. You can still download
-            from GitHub Releases and verify with published checksums when available.
+          <Callout title={lang === "fa" ? "نسخه محلی پیدا نشد" : "No local release artifacts found"} tone="warning">
+            {lang === "fa" ? (
+              <>
+                در این بیلد فایل‌های مسیر <span className="font-mono">website/public/downloads</span> موجود نیست. هنوز می‌توانید از GitHub
+                Releases دانلود کنید و checksum را بررسی کنید.
+              </>
+            ) : (
+              <>
+                This site build does not include any files under <span className="font-mono">website/public/downloads</span>. You can still
+                download from GitHub Releases and verify with published checksums when available.
+              </>
+            )}
           </Callout>
         ) : null}
 
-        <Callout title="Project status" tone="warning">
-          ShadowNet Agent is currently an MVP/alpha. Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a
-          signed release APK. Always verify checksums and the signed checksum bundle before installing.
+        <Callout title={lang === "fa" ? "وضعیت پروژه" : "Project status"} tone="warning">
+          {lang === "fa"
+            ? "SunLionet فعلاً در مرحله MVP/alpha است. مسیر اصلی پشتیبانی‌شده بسته‌های Linux است. قبل از نصب، checksum و فایل‌های امضاشده را حتماً بررسی کنید."
+            : "SunLionet is currently an MVP/alpha. Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a signed release APK. Always verify checksums and the signed checksum bundle before installing."}
         </Callout>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
@@ -553,9 +579,30 @@ export function DownloadSection({ releases }: { releases: LocalRelease[] }) {
               <div className="text-sm font-semibold text-foreground">Quick install (stepwise)</div>
               {installSteps ? (
                 <div className="mt-3 grid gap-3">
-                  <CommandBlock label="1) Download" code={installSteps.download} language="bash" note="Fetch both the artifact and its checksum file" />
-                  <CommandBlock label="2) Verify" code={installSteps.verify} language="bash" note="Fails if the download was modified or corrupted" />
-                  <CommandBlock label="3) Install / run" code={installSteps.install} language="bash" note="Installs a service on Linux bundles" />
+                  <CommandBlock
+                    label={lang === "fa" ? "1) دانلود" : "1) Download"}
+                    code={installSteps.download}
+                    language="bash"
+                    note={lang === "fa" ? "هم فایل اصلی و هم checksum را بگیرید" : "Fetch both the artifact and its checksum file"}
+                    copyLabel={copy.buttons.copy}
+                    copiedLabel={copy.buttons.copied}
+                  />
+                  <CommandBlock
+                    label={lang === "fa" ? "2) بررسی" : "2) Verify"}
+                    code={installSteps.verify}
+                    language="bash"
+                    note={lang === "fa" ? "در صورت تغییر یا خرابی فایل شکست می‌خورد" : "Fails if the download was modified or corrupted"}
+                    copyLabel={copy.buttons.copy}
+                    copiedLabel={copy.buttons.copied}
+                  />
+                  <CommandBlock
+                    label={lang === "fa" ? "3) نصب / اجرا" : "3) Install / run"}
+                    code={installSteps.install}
+                    language="bash"
+                    note={lang === "fa" ? "برای بسته‌های Linux سرویس نصب می‌شود" : "Installs a service on Linux bundles"}
+                    copyLabel={copy.buttons.copy}
+                    copiedLabel={copy.buttons.copied}
+                  />
                 </div>
               ) : (
                 <div className="mt-3 text-sm text-muted-foreground">
@@ -724,7 +771,7 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
               </div>
               <div className="text-sm text-muted-foreground">
                 For bundle authenticity (publisher signatures enforced by the agent), see{" "}
-                <Link href="/docs/outside/verification" prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
+                <Link href={hrefFor("/docs/outside/verification")} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
                   /docs/outside/verification
                 </Link>
                 .
@@ -755,10 +802,12 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
               </div>
               <div className="mt-4">
                 <CommandBlock
-                  label="Build (example)"
+                  label={lang === "fa" ? "ساخت (نمونه)" : "Build (example)"}
                   language="bash"
-                  code={`git clone ${githubRepo}\ncd shadownet-agent\nmkdir -p bin\ngo build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-inside ./cmd/inside/\ngo build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-outside ./cmd/outside/\n`}
-                  note="Requires Go toolchain as pinned in go.mod"
+                  code={`git clone ${githubRepo}\ncd ${repoName}\nmkdir -p bin\ngo build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/sunlionet-inside ./cmd/inside/\ngo build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/sunlionet-outside ./cmd/outside/\n`}
+                  note={lang === "fa" ? "نیازمند Go مطابق نسخه پین‌شده در go.mod" : "Requires Go toolchain as pinned in go.mod"}
+                  copyLabel={copy.buttons.copy}
+                  copiedLabel={copy.buttons.copied}
                 />
               </div>
             </div>
@@ -822,14 +871,14 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
               <div className="mt-2 text-sm text-muted-foreground">Installation, safety guidance, and verification details.</div>
               <div className="mt-4 grid gap-2">
                 <Link
-                  href="/docs/install"
+                  href={hrefFor("/docs/install")}
                   prefetch={false}
                   className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
                 >
                   Install guide
                 </Link>
                 <Link
-                  href="/docs/outside/verification"
+                  href={hrefFor("/docs/outside/verification")}
                   prefetch={false}
                   className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
                 >

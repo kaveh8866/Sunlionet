@@ -7,10 +7,11 @@ type NavItem = {
   href: string;
 };
 
-function docHref(slug: string[]) {
-  if (slug.length === 1 && slug[0] === "index") return "/docs";
-  if (slug.length >= 2 && slug.at(-1) === "index") return `/docs/${slug.slice(0, -1).join("/")}`;
-  return `/docs/${slug.join("/")}`;
+function docHref(basePrefix: string, slug: string[]) {
+  const base = `${basePrefix}/docs`;
+  if (slug.length === 1 && slug[0] === "index") return base;
+  if (slug.length >= 2 && slug.at(-1) === "index") return `${base}/${slug.slice(0, -1).join("/")}`;
+  return `${base}/${slug.join("/")}`;
 }
 
 function pick(index: Map<string, { title: string; href: string }>, slug: string[]): NavItem | null {
@@ -20,9 +21,10 @@ function pick(index: Map<string, { title: string; href: string }>, slug: string[
   return { label: found.title, href: found.href };
 }
 
-export default async function DocsLayout({ children }: { children: React.ReactNode }) {
+async function DocsShellContent({ children, basePrefix }: { children: React.ReactNode; basePrefix?: string }) {
+  const resolvedBase = basePrefix?.trim() ? basePrefix : "";
   const entries = await getDocsIndex();
-  const index = new Map(entries.map((e) => [e.slug.join("/"), { title: e.title, href: docHref(e.slug) }]));
+  const index = new Map(entries.map((e) => [e.slug.join("/"), { title: e.title, href: docHref(resolvedBase, e.slug) }]));
 
   const overview = [
     pick(index, ["index"]),
@@ -109,7 +111,7 @@ export default async function DocsLayout({ children }: { children: React.ReactNo
               ))}
 
               <Link
-                href="/docs/all"
+                href={`${resolvedBase}/docs/all`}
                 prefetch={false}
                 className="rounded-lg border border-border bg-card/60 px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
               >
@@ -123,4 +125,8 @@ export default async function DocsLayout({ children }: { children: React.ReactNo
       </div>
     </div>
   );
+}
+
+export default async function DocsLayout({ children }: { children: React.ReactNode }) {
+  return <DocsShellContent>{children}</DocsShellContent>;
 }

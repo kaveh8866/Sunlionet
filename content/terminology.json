@@ -1,0 +1,10 @@
+{
+  "node": { "en": "Node", "fa": "نود" },
+  "network": { "en": "Network", "fa": "شبکه" },
+  "encryption": { "en": "Encryption", "fa": "رمزگذاری" },
+  "identity": { "en": "Identity", "fa": "هویت" },
+  "inside": { "en": "Inside", "fa": "Inside (داخل)" },
+  "outside": { "en": "Outside", "fa": "Outside (خارج)" },
+  "bundle": { "en": "Bundle", "fa": "باندل (Bundle)" },
+  "verification": { "en": "Verification", "fa": "تأیید (Verification)" }
+}

@@ -1,0 +1,66 @@
+{
+  "buttons": {
+    "send": "ارسال",
+    "cancel": "لغو",
+    "create": "ایجاد",
+    "join": "پیوستن",
+    "copy": "کپی",
+    "copied": "کپی شد"
+  },
+  "nav": {
+    "home": "خانه",
+    "manifest": "بیانیه",
+    "technology": "فناوری",
+    "security": "امنیت",
+    "docs": "مستندات",
+    "blog": "بلاگ",
+    "updates": "به‌روزرسانی‌ها",
+    "download": "دانلود",
+    "architecture": "معماری",
+    "dashboard": "داشبورد",
+    "roadmap": "نقشه راه",
+    "community": "جامعه",
+    "support": "حمایت"
+  },
+  "system": {
+    "connecting": "در حال اتصال...",
+    "messageSent": "پیام ارسال شد",
+    "encryptionActive": "رمزگذاری فعال است"
+  },
+  "status": {
+    "connected": "متصل",
+    "connecting": "در حال اتصال",
+    "disconnected": "قطع شده",
+    "secure": "امن",
+    "notSecure": "ناامن"
+  },
+  "hybrid": {
+    "secureChat": "چت امن (Secure Chat)",
+    "endToEndEncryption": "رمزگذاری سرتاسری (End-to-End Encryption)",
+    "aiAssistant": "دستیار هوش مصنوعی (AI Assistant)"
+  },
+  "dangerActions": {
+    "deleteAccount": "حذف حساب",
+    "leaveGroup": "خروج از گروه",
+    "reportUser": "گزارش کاربر"
+  },
+  "downloadPage": {
+    "title": "دانلود",
+    "subtitle": "نسخه‌های آماده با مسیر نصب مبتنی بر تأیید منتشر می‌شوند. قبل از اجرا همیشه checksum را بررسی کنید.",
+    "verificationGuide": "راهنمای تأیید",
+    "install": "نصب",
+    "installationGuide": "راهنمای نصب (وب)",
+    "installationGuideDesc": "مسیر نصب مرحله‌به‌مرحله برای حالت‌های رایج (Linux، Termux).",
+    "repoDocs": "مستندات مخزن",
+    "repoDocsDesc": "مرجع اصلی نصب، تأیید و امنیت از مخزن."
+  },
+  "installationPage": {
+    "title": "نصب",
+    "subtitle": "مسیرهای رایج نصب SunLionet Inside و SunLionet Outside. قبل از اجرا همیشه checksum را بررسی کنید.",
+    "repoInstallDoc": "مستند نصب مخزن"
+  },
+  "supportPage": {
+    "home": "خانه",
+    "support": "حمایت"
+  }
+}

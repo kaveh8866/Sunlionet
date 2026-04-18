@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("/dashboard/runtime renders (offline)", async ({ page }) => {
   await page.goto("/dashboard/runtime");
   await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
-  await expect(page.getByText("No active ShadowNet runtime detected")).toBeVisible();
+  await expect(page.getByText("No active SunLionet runtime detected")).toBeVisible();
 });
 
 test("/dashboard/runtime renders (connected)", async ({ page }) => {

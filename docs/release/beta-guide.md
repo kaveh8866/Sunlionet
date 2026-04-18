@@ -1,4 +1,4 @@
-# ShadowNet Beta Guide (v0.2.0-beta)
+# SunLionet Beta Guide (v0.2.0-beta)
 
 This is a controlled beta release intended for sensitive environments. It may fail on some networks. Do not assume it is safe or reliable until you have personally verified it in your context.
 
@@ -6,7 +6,7 @@ This is a controlled beta release intended for sensitive environments. It may fa
 
 - Expected: occasional connection failures, slower connects, missing features, and rough edges
 - Not expected: silent behavior changes, silent updates, hidden telemetry, or “growth hacks”
-- Data: ShadowNet should remain local-first; avoid depending on centralized telemetry
+- Data: SunLionet should remain local-first; avoid depending on centralized telemetry
 
 ## Safety Basics
 
@@ -21,7 +21,7 @@ This is a controlled beta release intended for sensitive environments. It may fa
    - Checksum (SHA-256) matches the official release
    - Signature matches the release signing key for this beta
 3. Install the APK (enable “unknown sources” only for this install if needed).
-4. Open the app and confirm the label shows “ShadowNet Beta”.
+4. Open the app and confirm the label shows “SunLionet Beta”.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ If it fails:
 
 ## Updates (No Silent Auto-Update)
 
-ShadowNet Beta does not silently auto-update.
+SunLionet Beta does not silently auto-update.
 
 Update flow:
 1. A “New version available” notice is shown (or shared by your distributor/community).
@@ -91,4 +91,3 @@ Stop rollout or revert to a previous build if you observe:
 - repeated VPN drops that impact safety
 - unexpected prompts/behavior changes you cannot explain
 - any indication of tampering with download artifacts
-

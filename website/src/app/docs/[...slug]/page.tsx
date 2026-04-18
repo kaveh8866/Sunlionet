@@ -56,33 +56,54 @@ export async function generateStaticParams() {
   return params;
 }
 
-export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {
+export default async function DocPage({
+  params,
+  basePrefix,
+}: {
+  params: Promise<{ slug: string[] }>;
+  basePrefix?: string;
+}) {
   const { slug } = await params;
+  const resolvedBase = basePrefix?.trim() ? basePrefix : "";
+  const prefersFa = resolvedBase === "/fa";
 
   const legacy = tryLegacyRedirect(slug);
-  if (legacy) redirect(legacy);
+  if (legacy) redirect(`${resolvedBase}${legacy}`);
 
   const normalized = normalizeSlug(slug);
-  if (normalized.length === 1 && normalized[0] === "index") redirect("/docs");
+  if (prefersFa && normalized[0] === "fa" && normalized[1] === "fa") {
+    redirect(`${resolvedBase}/docs/${normalized.slice(2).join("/")}`);
+  }
+  if (normalized.length === 1 && normalized[0] === "index") redirect(`${resolvedBase}/docs`);
 
   const direct = await readDocMarkdownBySlug(normalized);
   const indexFallback = direct ? null : tryIndexFallback(normalized);
   const fallback = indexFallback ? await readDocMarkdownBySlug(indexFallback) : null;
-  const resolved = direct ?? fallback;
+  let resolved = direct ?? fallback;
+  let usedEnglishFallback = false;
+
+  if (!resolved && prefersFa && normalized[0] === "fa") {
+    const enSlug = normalized.slice(1);
+    const enDirect = await readDocMarkdownBySlug(enSlug);
+    const enIndexFallback = enDirect ? null : tryIndexFallback(enSlug);
+    const enFallback = enIndexFallback ? await readDocMarkdownBySlug(enIndexFallback) : null;
+    resolved = enDirect ?? enFallback;
+    usedEnglishFallback = Boolean(resolved);
+  }
 
   if (!resolved) notFound();
 
-  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.doc.slug });
+  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.doc.slug, basePrefix: resolvedBase });
   const isFarsi = resolved.doc.slug[0] === "fa";
+  const displaySlug =
+    prefersFa && normalized[0] === "fa" ? normalized.slice(1).filter((p) => p !== "index") : resolved.doc.slug.filter((p) => p !== "index");
 
   const crumbs = [
-    { href: "/docs", label: isFarsi ? "مستندات" : "Docs" },
-    ...resolved.doc.slug
-      .filter((p) => p !== "index")
-      .map((p, idx) => {
-        const full = resolved.doc.slug.filter((x) => x !== "index").slice(0, idx + 1);
-        return { href: `/docs/${full.join("/")}`, label: p };
-      }),
+    { href: `${resolvedBase}/docs`, label: prefersFa ? "مستندات" : "Docs" },
+    ...displaySlug.map((p, idx) => {
+      const full = displaySlug.slice(0, idx + 1);
+      return { href: `${resolvedBase}/docs/${full.join("/")}`, label: p };
+    }),
   ];
 
   return (
@@ -101,9 +122,16 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
       <PageHeader title={resolved.doc.title} />
 
       <div className="grid gap-10 xl:grid-cols-[1fr_260px]">
-        <article className="docs-prose min-w-0" lang={isFarsi ? "fa" : undefined} dir={isFarsi ? "rtl" : undefined}>
-          {rendered.nodes}
-        </article>
+        <div className="grid gap-6 min-w-0">
+          {usedEnglishFallback ? (
+            <Callout title="نسخه فارسی هنوز آماده نیست" tone="warning">
+              این صفحه هنوز به فارسی ترجمه نشده است. فعلاً نسخه انگلیسی نمایش داده می‌شود.
+            </Callout>
+          ) : null}
+          <article className="docs-prose min-w-0" lang={isFarsi ? "fa" : undefined} dir={isFarsi ? "rtl" : undefined}>
+            {rendered.nodes}
+          </article>
+        </div>
         <div className="hidden xl:block">
           <div className="sticky top-24 grid gap-4">
             <DocToc items={rendered.toc} title={isFarsi ? "در این صفحه" : undefined} />

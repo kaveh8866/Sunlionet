@@ -1,0 +1,15 @@
+[Unit]
+Description=SunLionet (Outside)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/sunlionet/outside.env
+ExecStart=/usr/local/bin/sunlionet-outside
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+Alias=shadownet-outside.service

@@ -2,13 +2,16 @@ export const dynamic = "force-static";
 
 import Link from "next/link";
 
-export default function VideoPage() {
+export default async function VideoPage({ params }: { params: Promise<{ lang?: string }> }) {
+  const resolved = await params;
+  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
+
   return (
     <div className="container mx-auto px-4 py-16 max-w-4xl">
       <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Video</h1>
       <p className="mt-4 text-muted-foreground leading-relaxed">
-        ShadowNet overview video (local file, no telemetry). If the player doesn’t load, use the direct download link
-        below.
+        SunLionet overview video (local file, no telemetry). If the player doesn’t load, use the direct download link below.
       </p>
 
       <div className="mt-8 rounded-2xl border border-border bg-card/60 p-4 shadow-[0_0_0_1px_var(--border)]">
@@ -17,11 +20,11 @@ export default function VideoPage() {
           controls
           playsInline
           preload="metadata"
-          src="/media/ShadowNet.mp4"
+          src="/media/SunLionet.mp4"
         />
         <div className="mt-3 text-sm text-muted-foreground">
-          <a className="text-primary hover:opacity-90" href="/media/ShadowNet.mp4" download>
-            Download ShadowNet.mp4
+          <a className="text-primary hover:opacity-90" href="/media/SunLionet.mp4" download>
+            Download video
           </a>
         </div>
       </div>
@@ -29,15 +32,15 @@ export default function VideoPage() {
       <div className="mt-10">
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">More about the project</h2>
         <p className="mt-2 text-muted-foreground leading-relaxed">
-          Learn how ShadowNet works, how to install it, and where to find the full documentation.
+          Learn how SunLionet works, how to install it, and where to find the full documentation.
         </p>
 
         <div className="mt-6 grid sm:grid-cols-2 gap-4">
           {[
-            { href: "/docs", t: "Docs", d: "Full documentation and guides." },
-            { href: "/architecture", t: "Architecture", d: "Inside vs Outside design and data flow." },
-            { href: "/installation", t: "Installation", d: "Step-by-step setup." },
-            { href: "/roadmap", t: "Roadmap", d: "Planned features and milestones." },
+            { href: hrefFor("/docs"), t: "Docs", d: "Full documentation and guides." },
+            { href: hrefFor("/architecture"), t: "Architecture", d: "Inside vs Outside design and data flow." },
+            { href: hrefFor("/installation"), t: "Installation", d: "Step-by-step setup." },
+            { href: hrefFor("/roadmap"), t: "Roadmap", d: "Planned features and milestones." },
           ].map((c) => (
             <Link
               key={c.href}
@@ -54,7 +57,7 @@ export default function VideoPage() {
         <div className="mt-6 text-sm text-muted-foreground">
           <a
             className="text-primary hover:opacity-90"
-            href="https://github.com/kaveh8866/shadownet-agent"
+            href="https://github.com/kaveh8866/sunlionet-core"
             target="_blank"
             rel="noreferrer"
           >

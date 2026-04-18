@@ -5,10 +5,11 @@ import { getDocsIndex } from "../../../lib/docs/fs";
 
 export const dynamic = "force-static";
 
-function docHref(slug: string[]) {
-  if (slug.length === 1 && slug[0] === "index") return "/docs";
-  if (slug.length >= 2 && slug.at(-1) === "index") return `/docs/${slug.slice(0, -1).join("/")}`;
-  return `/docs/${slug.join("/")}`;
+function docHref(basePrefix: string, slug: string[]) {
+  const base = `${basePrefix}/docs`;
+  if (slug.length === 1 && slug[0] === "index") return base;
+  if (slug.length >= 2 && slug.at(-1) === "index") return `${base}/${slug.slice(0, -1).join("/")}`;
+  return `${base}/${slug.join("/")}`;
 }
 
 function groupKey(slug: string[]) {
@@ -16,15 +17,22 @@ function groupKey(slug: string[]) {
   return slug[0] ?? "Root";
 }
 
-export default async function DocsAllPage() {
+export default async function DocsAllPage({ params }: { params: Promise<{ lang?: string }> }) {
+  const resolved = await params;
   const entries = await getDocsIndex();
+  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const isFa = resolvedBasePrefix === "/fa";
   const groups = new Map<string, { title: string; items: Array<{ href: string; title: string; slug: string[] }> }>();
 
   for (const e of entries) {
     if (e.slug.length === 1 && e.slug[0] === "index") continue;
-    const key = groupKey(e.slug);
+    if (isFa && e.slug[0] !== "fa") continue;
+    if (!isFa && e.slug[0] === "fa") continue;
+
+    const displaySlug = isFa ? e.slug.slice(1) : e.slug;
+    const key = groupKey(displaySlug);
     const list = groups.get(key) ?? { title: key, items: [] };
-    list.items.push({ href: docHref(e.slug), title: e.title, slug: e.slug });
+    list.items.push({ href: docHref(resolvedBasePrefix, displaySlug), title: e.title, slug: displaySlug });
     groups.set(key, list);
   }
 
@@ -36,15 +44,15 @@ export default async function DocsAllPage() {
   return (
     <div className="grid gap-10">
       <PageHeader
-        title="Browse all docs"
-        subtitle="All markdown documents found under /docs in the repository."
+        title={isFa ? "فهرست همه مستندات" : "Browse all docs"}
+        subtitle={isFa ? "همه فایل‌های Markdown که زیر /docs/fa قرار دارند." : "All markdown documents found under /docs in the repository."}
         actions={
           <Link
-            href="/docs"
+            href={`${resolvedBasePrefix}/docs`}
             prefetch={false}
             className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
           >
-            Back to docs
+            {isFa ? "بازگشت به مستندات" : "Back to docs"}
           </Link>
         }
       />

@@ -9,6 +9,8 @@ export type TocItem = {
 
 type RenderOptions = {
   baseSlug: string[];
+  basePrefix?: string;
+  routeBase?: string;
 };
 
 type TextAlign = "left" | "center" | "right";
@@ -23,7 +25,7 @@ function slugify(text: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function splitInline(text: string, baseSlug: string[]) {
+function splitInline(text: string, baseSlug: string[], basePrefix?: string, routeBase?: string) {
   const parts: ReactNode[] = [];
   const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)]+\))/g;
   let last = 0;
@@ -48,7 +50,7 @@ function splitInline(text: string, baseSlug: string[]) {
     } else if (token.startsWith("[")) {
       const lm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
       if (lm) {
-        const href = resolveHref(lm[2], baseSlug);
+        const href = resolveHref(lm[2], baseSlug, basePrefix, routeBase);
         parts.push(
           <a key={`${m.index}-link`} href={href} className="hover:text-foreground transition-colors">
             {lm[1]}
@@ -68,7 +70,7 @@ function splitInline(text: string, baseSlug: string[]) {
   return parts;
 }
 
-function resolveHref(href: string, baseSlug: string[]) {
+function resolveHref(href: string, baseSlug: string[], basePrefix?: string, routeBase?: string) {
   const trimmed = href.trim();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   if (trimmed.startsWith("#")) return trimmed;
@@ -94,15 +96,17 @@ function resolveHref(href: string, baseSlug: string[]) {
       }, [])
       .join("/");
     const withoutExt = normalized.replace(/\.md$/i, "");
-    if (withoutExt === "index") return `/docs${hash}`;
-    if (withoutExt.endsWith("/index")) return `/docs/${withoutExt.slice(0, -"/index".length)}${hash}`;
-    return `/docs/${withoutExt}${hash}`;
+    const prefix = basePrefix?.trim() ? basePrefix : "";
+    const base = routeBase?.trim() ? routeBase.trim().replace(/^\/+/, "") : "docs";
+    if (withoutExt === "index") return `${prefix}/${base}${hash}`;
+    if (withoutExt.endsWith("/index")) return `${prefix}/${base}/${withoutExt.slice(0, -"/index".length)}${hash}`;
+    return `${prefix}/${base}/${withoutExt}${hash}`;
   }
 
   return trimmed;
 }
 
-export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes: ReactNode[]; toc: TocItem[] } {
+export function renderMarkdown(md: string, { baseSlug, basePrefix, routeBase }: RenderOptions): { nodes: ReactNode[]; toc: TocItem[] } {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const nodes: ReactNode[] = [];
   const toc: TocItem[] = [];
@@ -142,7 +146,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
       const Tag = level === 1 ? "h1" : level === 2 ? "h2" : level === 3 ? "h3" : "h4";
       nodes.push(
         <Tag key={`h-${id}`} id={id}>
-          {splitInline(text, baseSlug)}
+          {splitInline(text, baseSlug, basePrefix, routeBase)}
         </Tag>,
       );
       i += 1;
@@ -163,7 +167,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
       nodes.push(
         <blockquote key={`q-${i}`}>
           {quoteLines.map((l, idx) => (
-            <p key={idx}>{splitInline(l, baseSlug)}</p>
+            <p key={idx}>{splitInline(l, baseSlug, basePrefix, routeBase)}</p>
           ))}
         </blockquote>,
       );
@@ -179,7 +183,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
       nodes.push(
         <ul key={`ul-${i}`}>
           {items.map((t, idx) => (
-            <li key={idx}>{splitInline(t, baseSlug)}</li>
+            <li key={idx}>{splitInline(t, baseSlug, basePrefix, routeBase)}</li>
           ))}
         </ul>,
       );
@@ -195,7 +199,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
       nodes.push(
         <ol key={`ol-${i}`}>
           {items.map((t, idx) => (
-            <li key={idx}>{splitInline(t, baseSlug)}</li>
+            <li key={idx}>{splitInline(t, baseSlug, basePrefix, routeBase)}</li>
           ))}
         </ol>,
       );
@@ -250,7 +254,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
                     className="px-4 py-3 text-left font-semibold text-foreground border-b border-border"
                     style={{ textAlign: aligns[idx] }}
                   >
-                    {splitInline(h, baseSlug)}
+                    {splitInline(h, baseSlug, basePrefix, routeBase)}
                   </th>
                 ))}
               </tr>
@@ -264,7 +268,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
                       className="px-4 py-3 text-muted-foreground border-b border-border last:border-b-0"
                       style={{ textAlign: aligns[cIdx] }}
                     >
-                      {splitInline(c, baseSlug)}
+                      {splitInline(c, baseSlug, basePrefix, routeBase)}
                     </td>
                   ))}
                 </tr>
@@ -288,7 +292,7 @@ export function renderMarkdown(md: string, { baseSlug }: RenderOptions): { nodes
       i += 1;
     }
     const para = paraLines.join(" ").trim();
-    nodes.push(<p key={`p-${i}-${para.length}`}>{splitInline(para, baseSlug)}</p>);
+    nodes.push(<p key={`p-${i}-${para.length}`}>{splitInline(para, baseSlug, basePrefix, routeBase)}</p>);
   }
 
   return { nodes, toc };

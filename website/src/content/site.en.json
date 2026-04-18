@@ -1,0 +1,67 @@
+{
+  "nav": {
+    "home": "Home",
+    "manifest": "Manifest",
+    "technology": "Technology",
+    "security": "Security",
+    "docs": "Docs",
+    "download": "Download",
+    "architecture": "Architecture",
+    "dashboard": "Dashboard",
+    "roadmap": "Roadmap",
+    "community": "Community",
+    "support": "Support"
+  },
+  "home": {
+    "headline": "A Free Network for a Free World",
+    "subheadline": "SunLionet is a decentralized, open-source platform for secure communication, uncensored information, and digital freedom.",
+    "cta": {
+      "getStarted": "Get Started",
+      "readManifest": "Read Manifest",
+      "download": "Download"
+    }
+  },
+  "manifest": {
+    "title": "Manifest",
+    "intro": "SunLionet is built on a simple belief: access to information and the ability to communicate freely are fundamental human rights.",
+    "body": [
+      "In many parts of the world, these rights are restricted. Information is filtered. Communication is monitored. Voices are silenced.",
+      "SunLionet exists to change that.",
+      "We are building a decentralized, open-source ecosystem that allows people to:"
+    ],
+    "bullets": [
+      "Communicate securely",
+      "Access uncensored information",
+      "Remain private and independent"
+    ],
+    "dedication": "This project is especially dedicated to those who live under restrictions — including the people of Iran.",
+    "closing": [
+      "We do not speak for anyone.",
+      "We build tools so everyone can speak for themselves."
+    ]
+  },
+  "technology": {
+    "title": "Technology",
+    "subtitle": "A simple explanation of what SunLionet aims to provide.",
+    "bullets": [
+      "Decentralized architecture",
+      "No single point of failure",
+      "Encrypted communication",
+      "Open-source transparency"
+    ]
+  },
+  "security": {
+    "title": "Security",
+    "subtitle": "Privacy and safety are core design goals.",
+    "bullets": [
+      "End-to-end encryption",
+      "Privacy by design",
+      "No phone number required",
+      "Anonymous identity options"
+    ]
+  },
+  "community": {
+    "title": "Community",
+    "intro": "SunLionet is an open project. Anyone can contribute."
+  }
+}

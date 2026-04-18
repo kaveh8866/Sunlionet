@@ -496,7 +496,7 @@ func writeJSONAtomic(path string, v any, perm os.FileMode) error {
 
 func renderSummary(sel outsidectl.SelectionManifest, header bundle.BundleHeader, bundleSHA256B64URL string, uriChars int, hasQR bool, hasChunks bool) string {
 	var b strings.Builder
-	b.WriteString("ShadowNet Outside bundle\n")
+	b.WriteString("SunLionet Outside bundle\n")
 	b.WriteString("bundle_id=" + header.BundleID + "\n")
 	b.WriteString("issuer=" + header.PublisherKeyID + "\n")
 	b.WriteString("cipher=" + header.Cipher + "\n")

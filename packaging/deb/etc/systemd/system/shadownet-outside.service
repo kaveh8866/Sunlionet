@@ -1,12 +1,12 @@
 [Unit]
-Description=ShadowNet Agent (Outside)
+Description=SunLionet (Outside)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/shadownet/outside.env
-ExecStart=/usr/local/bin/shadownet-outside
+EnvironmentFile=-/etc/sunlionet/outside.env
+ExecStart=/usr/local/bin/sunlionet-outside
 Restart=always
 RestartSec=2
 

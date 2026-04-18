@@ -5,24 +5,28 @@ import { SectionHeader } from "../../components/ui/SectionHeader";
 
 export const dynamic = "force-static";
 
-export default function ArchitecturePage() {
+export default async function ArchitecturePage({ params }: { params: Promise<{ lang?: string }> }) {
+  const resolved = await params;
+  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="grid gap-10">
         <PageHeader
           title="Architecture"
-          subtitle="ShadowNet separates the data plane (sing-box) from the local control plane (detector → policy engine → optional bounded advisor). Two binaries cooperate: Inside (restricted networks) and Outside (stable networks) for curated delivery via trusted channels."
+          subtitle="SunLionet separates the data plane (sing-box) from the local control plane (detector → policy engine → optional bounded advisor). Two binaries cooperate: Inside (restricted networks) and Outside (stable networks) for curated delivery via trusted channels."
           actions={
             <>
               <Link
-                href="/docs/architecture"
+                href={hrefFor("/docs/architecture")}
                 prefetch={false}
                 className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
               >
                 Read full doc
               </Link>
               <Link
-                href="/download"
+                href={hrefFor("/download")}
                 prefetch={false}
                 className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
               >

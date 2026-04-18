@@ -51,8 +51,9 @@ function artifactKind(fileName: string): ReleaseArtifactKind {
 }
 
 function parseRoleAndTarget(tag: string, fileName: string): { role?: "inside" | "outside"; target?: string } {
-  const prefix = "shadownet-";
-  if (!fileName.startsWith(prefix)) return {};
+  const prefixes = ["sunlionet-", "shadownet-"];
+  const prefix = prefixes.find((p) => fileName.startsWith(p));
+  if (!prefix) return {};
   const rest = fileName.slice(prefix.length);
   const roleMatch = /^(inside|outside)-/.exec(rest);
   if (!roleMatch) return {};

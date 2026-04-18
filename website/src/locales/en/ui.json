@@ -1,0 +1,66 @@
+{
+  "buttons": {
+    "send": "Send",
+    "cancel": "Cancel",
+    "create": "Create",
+    "join": "Join",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "nav": {
+    "home": "Home",
+    "manifest": "Manifest",
+    "technology": "Technology",
+    "security": "Security",
+    "docs": "Docs",
+    "blog": "Blog",
+    "updates": "Updates",
+    "download": "Download",
+    "architecture": "Architecture",
+    "dashboard": "Dashboard",
+    "roadmap": "Roadmap",
+    "community": "Community",
+    "support": "Support"
+  },
+  "system": {
+    "connecting": "Connecting...",
+    "messageSent": "Message sent",
+    "encryptionActive": "Encryption active"
+  },
+  "status": {
+    "connected": "Connected",
+    "connecting": "Connecting",
+    "disconnected": "Disconnected",
+    "secure": "Secure",
+    "notSecure": "Not secure"
+  },
+  "hybrid": {
+    "secureChat": "Secure Chat",
+    "endToEndEncryption": "End-to-End Encryption",
+    "aiAssistant": "AI Assistant"
+  },
+  "dangerActions": {
+    "deleteAccount": "Delete account",
+    "leaveGroup": "Leave group",
+    "reportUser": "Report user"
+  },
+  "downloadPage": {
+    "title": "Download",
+    "subtitle": "Production-style release artifacts with verification-first install steps. Always verify checksums before running.",
+    "verificationGuide": "Verification guide",
+    "install": "Install",
+    "installationGuide": "Installation (web guide)",
+    "installationGuideDesc": "A step-by-step website page for the common paths (Linux, Termux).",
+    "repoDocs": "Repository docs",
+    "repoDocsDesc": "The authoritative install, verification, and security docs from the repo."
+  },
+  "installationPage": {
+    "title": "Installation",
+    "subtitle": "Common install paths for SunLionet Inside and SunLionet Outside. Always verify checksums before running.",
+    "repoInstallDoc": "Repo install doc"
+  },
+  "supportPage": {
+    "home": "Home",
+    "support": "Support"
+  }
+}

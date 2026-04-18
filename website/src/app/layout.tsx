@@ -24,7 +24,7 @@ const fontFa = Vazirmatn({
 });
 
 export const metadata: Metadata = {
-  title: "ShadowNet Agent",
+  title: "SunLionet",
   description:
     "Open-source DPI resistance with offline detection, deterministic rotation, and local-only assistance. Built for high-risk restricted networks.",
   keywords: [
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     "open source privacy tools",
   ],
   openGraph: {
-    title: "ShadowNet Agent",
+    title: "SunLionet",
     description:
       "Local, intelligent, offline DPI resistance. Dual Inside/Outside architecture for resilient censorship circumvention.",
     type: "website",

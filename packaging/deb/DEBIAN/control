@@ -1,5 +1,5 @@
-Package: shadownet
+Package: sunlionet
 Version: 0.1.0
 Architecture: amd64
-Maintainer: ShadowNet
-Description: ShadowNet agent
+Maintainer: SunLionet
+Description: SunLionet agent

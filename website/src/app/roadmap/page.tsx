@@ -23,7 +23,11 @@ const items = [
   },
 ];
 
-export default function RoadmapPage() {
+export default async function RoadmapPage({ params }: { params: Promise<{ lang?: string }> }) {
+  const resolved = await params;
+  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="grid gap-10">
@@ -32,7 +36,7 @@ export default function RoadmapPage() {
           subtitle="Near-term work that improves safety, uptime, verification, and offline survivability."
           actions={
             <Link
-              href="/docs/governance/model"
+              href={hrefFor("/docs/governance/model")}
               prefetch={false}
               className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
             >

@@ -146,7 +146,7 @@ func run() error {
 		return runConnect(os.Args[2:])
 	}
 
-	uiPrintf("ShadowNet Inside %s\n", version)
+	uiPrintf("SunLionet Inside %s\n", version)
 
 	var opts options
 	flag.StringVar(&opts.StateDir, "state-dir", "", "State directory")
@@ -175,35 +175,56 @@ func run() error {
 	flag.Parse()
 
 	if opts.StateDir == "" {
-		opts.StateDir = os.Getenv("SHADOWNET_STATE_DIR")
+		opts.StateDir = os.Getenv("SUNLIONET_STATE_DIR")
+		if opts.StateDir == "" {
+			opts.StateDir = os.Getenv("SHADOWNET_STATE_DIR")
+		}
 	}
 	if opts.StateDir == "" {
 		opts.StateDir = defaultStateDir()
 	}
 	if opts.MasterKey == "" {
-		opts.MasterKey = os.Getenv("SHADOWNET_MASTER_KEY")
+		opts.MasterKey = os.Getenv("SUNLIONET_MASTER_KEY")
+		if opts.MasterKey == "" {
+			opts.MasterKey = os.Getenv("SHADOWNET_MASTER_KEY")
+		}
 	}
 	masterKey, err := profile.ParseMasterKey(opts.MasterKey)
 	if err != nil {
-		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SHADOWNET_MASTER_KEY)", err)
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SHADOWNET_MASTER_KEY)", err)
 	}
 	if opts.TemplatesDir == "" {
-		opts.TemplatesDir = os.Getenv("SHADOWNET_TEMPLATES_DIR")
+		opts.TemplatesDir = os.Getenv("SUNLIONET_TEMPLATES_DIR")
+		if opts.TemplatesDir == "" {
+			opts.TemplatesDir = os.Getenv("SHADOWNET_TEMPLATES_DIR")
+		}
 	}
 	if opts.TemplatesDir == "" {
 		opts.TemplatesDir = filepath.Join(".", "templates")
 	}
 	if opts.TrustedSignerPubsB64 == "" {
-		opts.TrustedSignerPubsB64 = os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+		opts.TrustedSignerPubsB64 = os.Getenv("SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
+		if opts.TrustedSignerPubsB64 == "" {
+			opts.TrustedSignerPubsB64 = os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+		}
 	}
 	if opts.AgeIdentity == "" {
-		opts.AgeIdentity = os.Getenv("SHADOWNET_AGE_IDENTITY")
+		opts.AgeIdentity = os.Getenv("SUNLIONET_AGE_IDENTITY")
+		if opts.AgeIdentity == "" {
+			opts.AgeIdentity = os.Getenv("SHADOWNET_AGE_IDENTITY")
+		}
 	}
 	if opts.SingBoxBin == "" {
-		opts.SingBoxBin = os.Getenv("SHADOWNET_SINGBOX_BIN")
+		opts.SingBoxBin = os.Getenv("SUNLIONET_SINGBOX_BIN")
+		if opts.SingBoxBin == "" {
+			opts.SingBoxBin = os.Getenv("SHADOWNET_SINGBOX_BIN")
+		}
 	}
 	if opts.RuntimeAPIAddr == "" {
-		opts.RuntimeAPIAddr = os.Getenv("SHADOWNET_RUNTIME_API_ADDR")
+		opts.RuntimeAPIAddr = os.Getenv("SUNLIONET_RUNTIME_API_ADDR")
+		if opts.RuntimeAPIAddr == "" {
+			opts.RuntimeAPIAddr = os.Getenv("SHADOWNET_RUNTIME_API_ADDR")
+		}
 	}
 
 	if opts.Verbose {
@@ -211,7 +232,7 @@ func run() error {
 	} else {
 		log.SetFlags(log.LstdFlags)
 	}
-	log.SetPrefix("[ShadowNet Inside] ")
+	log.SetPrefix("[SunLionet Inside] ")
 	if simpleConnectOutput && !opts.Verbose {
 		log.SetOutput(io.Discard)
 	}

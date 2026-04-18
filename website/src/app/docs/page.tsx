@@ -6,33 +6,43 @@ import { SectionHeader } from "../../components/ui/SectionHeader";
 import { getDocsIndex, readDocMarkdownBySlug } from "../../lib/docs/fs";
 import { renderMarkdown } from "../../lib/docs/markdown";
 
-export default async function DocsIndexPage() {
+export default async function DocsIndexPage({ params }: { params: Promise<{ lang?: string }> }) {
+  const resolved = await params;
   const entries = await getDocsIndex();
   const index = new Map(entries.map((e) => [e.slug.join("/"), e]));
+  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
+  const isFa = resolvedBasePrefix === "/fa";
 
-  const overview = await readDocMarkdownBySlug(["index"]);
-  const rendered = overview ? renderMarkdown(overview.raw, { baseSlug: ["index"] }) : null;
+  const overviewSlug = isFa ? ["fa", "index"] : ["index"];
+  const overview = await readDocMarkdownBySlug(overviewSlug);
+  const rendered = overview ? renderMarkdown(overview.raw, { baseSlug: overviewSlug, basePrefix: resolvedBasePrefix }) : null;
+  const titleFor = (key: string, fallback: string) => index.get(isFa ? `fa/${key}` : key)?.title ?? fallback;
 
   return (
     <div className="grid gap-12">
       <PageHeader
-        title="Documentation"
-        subtitle="Repository-backed docs for ShadowNet Agent. Local-first, no analytics, no live seed hosting."
+        title={isFa ? "مستندات" : "Documentation"}
+        subtitle={
+          isFa
+            ? "مستندات مبتنی بر مخزن برای SunLionet. بدون تحلیل‌گر، بدون میزبانی seed، و با اولویت استفاده محلی."
+            : "Repository-backed docs for SunLionet. Local-first, no analytics, no live seed hosting."
+        }
         actions={
           <>
             <Link
-              href="/download"
+              href={hrefFor("/download")}
               prefetch={false}
               className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
             >
-              Download
+              {isFa ? "دانلود" : "Download"}
             </Link>
             <Link
-              href="/architecture"
+              href={hrefFor("/architecture")}
               prefetch={false}
               className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
             >
-              Website architecture page
+              {isFa ? "صفحه معماری وب‌سایت" : "Website architecture page"}
             </Link>
           </>
         }
@@ -40,54 +50,54 @@ export default async function DocsIndexPage() {
 
       {rendered ? (
         <div className="rounded-xl border border-border bg-card/40 p-6">
-          <article className="docs-prose">{rendered.nodes}</article>
+          <article className="docs-prose" lang={isFa ? "fa" : undefined} dir={isFa ? "rtl" : undefined}>
+            {rendered.nodes}
+          </article>
         </div>
       ) : null}
 
       <section className="grid gap-6">
         <SectionHeader
-          title="Start here"
-          subtitle="The quickest path to installing safely and understanding how Inside/Outside work together."
+          title={isFa ? "از اینجا شروع کنید" : "Start here"}
+          subtitle={
+            isFa
+              ? "سریع‌ترین مسیر برای نصب امن و درک همکاری Inside/Outside."
+              : "The quickest path to installing safely and understanding how Inside/Outside work together."
+          }
         />
         <div className="grid md:grid-cols-2 gap-4">
           <InfoCard
-            href="/docs/install"
-            title={index.get("install")?.title ?? "Installation"}
-            description="Release artifacts, verification, and basic setup."
+            href={hrefFor("/docs/install")}
+            title={titleFor("install", isFa ? "نصب" : "Installation")}
+            description={isFa ? "نسخه‌ها، تأیید (verification)، و تنظیمات اولیه." : "Release artifacts, verification, and basic setup."}
           />
           <InfoCard
-            href="/docs/user/safety"
-            title={index.get("user/safety")?.title ?? "Safety"}
-            description="Operational safety principles for high-risk environments."
+            href={hrefFor("/docs/user/safety")}
+            title={titleFor("user/safety", isFa ? "ایمنی" : "Safety")}
+            description={isFa ? "اصول ایمنی عملیاتی برای محیط‌های پرریسک." : "Operational safety principles for high-risk environments."}
           />
           <InfoCard
-            href="/docs/architecture"
-            title={index.get("architecture")?.title ?? "Architecture"}
-            description="Inside vs Outside, data plane vs control plane."
+            href={hrefFor("/docs/architecture")}
+            title={titleFor("architecture", isFa ? "معماری" : "Architecture")}
+            description={isFa ? "Inside در برابر Outside، صفحه داده در برابر صفحه کنترل." : "Inside vs Outside, data plane vs control plane."}
           />
           <InfoCard
-            href="/docs/outside/verification"
-            title={index.get("outside/verification")?.title ?? "Verification"}
-            description="Verify artifacts and bundles before use."
+            href={hrefFor("/docs/outside/verification")}
+            title={titleFor("outside/verification", isFa ? "تأیید" : "Verification")}
+            description={isFa ? "قبل از استفاده، فایل‌ها و bundleها را تأیید کنید." : "Verify artifacts and bundles before use."}
           />
         </div>
       </section>
 
-      <section className="grid gap-6" lang="fa" dir="rtl">
-        <SectionHeader title="فارسی" subtitle="ترجمه فارسی برای مسیرهای اصلی نصب، ایمنی، و تأیید." />
-        <div className="grid md:grid-cols-2 gap-4">
-          <InfoCard
-            href="/docs/fa"
-            title={index.get("fa/index")?.title ?? "مستندات (فارسی)"}
-            description="فهرست مستندات فارسی و لینک به صفحات مهم."
-          />
-          <InfoCard
-            href="/docs/fa/user/safety"
-            title={index.get("fa/user/safety")?.title ?? "ایمنی"}
-            description="محدودیت‌ها و اصول ایمنی در شرایط پرریسک."
-          />
-        </div>
-      </section>
+      {isFa ? null : (
+        <section className="grid gap-6" lang="fa" dir="rtl">
+          <SectionHeader title="فارسی" subtitle="نسخه فارسی برای مسیرهای اصلی نصب، ایمنی، و تأیید." />
+          <div className="grid md:grid-cols-2 gap-4">
+            <InfoCard href="/fa/docs" title="مستندات فارسی" description="فهرست مستندات فارسی و لینک به صفحات مهم." />
+            <InfoCard href="/fa/docs/user/safety" title="ایمنی" description="اصول ایمنی عملیاتی در محیط‌های پرریسک." />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

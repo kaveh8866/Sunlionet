@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "content:check": "node scripts/content-check.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

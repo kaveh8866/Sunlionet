@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { getRuntimeEvents, getRuntimeState, type RuntimeEvent, type RuntimeSnapshot } from "../../lib/runtime-client";
+import { getUILangFromPathname, uiCopy } from "../../lib/uiCopy";
 import { formatUnixAgo } from "./format";
 import { EventTimeline } from "./EventTimeline";
 
@@ -16,6 +18,9 @@ function mapStatus(s: string): UIStatus {
 }
 
 export function RuntimeDashboard() {
+  const pathname = usePathname();
+  const lang = getUILangFromPathname(pathname);
+  const copy = uiCopy[lang];
   const [state, setState] = useState<RuntimeSnapshot | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +28,12 @@ export function RuntimeDashboard() {
   const snapshotTimerRef = useRef<number | null>(null);
 
   const uiStatus = useMemo(() => mapStatus(state?.status ?? "disconnected"), [state?.status]);
+  const uiStatusText = useMemo(() => {
+    if (uiStatus === "CONNECTED") return copy.status.connected;
+    if (uiStatus === "CONNECTING") return copy.status.connecting;
+    return copy.status.disconnected;
+  }, [uiStatus, copy.status.connected, copy.status.connecting, copy.status.disconnected]);
+  const securityStatusText = uiStatus === "CONNECTED" ? copy.status.secure : copy.status.notSecure;
 
   const mergeEvents = useCallback((prev: RuntimeEvent[], incoming: RuntimeEvent[]) => {
     const map = new Map<string, RuntimeEvent>();
@@ -115,11 +126,14 @@ export function RuntimeDashboard() {
     <div className="grid gap-6">
       <div className="flex items-start justify-between gap-6 flex-wrap">
         <div className="min-w-0">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">ShadowNet Dashboard</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider">SunLionet Dashboard</div>
           <div className="mt-1 flex items-center gap-3 flex-wrap">
-            <div className="text-foreground font-bold text-lg">ShadowNet Inside</div>
+            <div className="text-foreground font-bold text-lg">SunLionet Inside</div>
             <div data-testid="runtime-status-badge" className={`text-xs font-mono px-2 py-1 rounded border ${badgeClass}`}>
-              {uiStatus}
+              {uiStatusText}
+            </div>
+            <div className={`text-xs font-mono px-2 py-1 rounded border ${uiStatus === "CONNECTED" ? "border-emerald-400/40 text-emerald-300 bg-emerald-950/30" : "border-red-400/40 text-red-300 bg-red-950/30"}`}>
+              {securityStatusText}
             </div>
             <div className="text-xs font-mono text-muted-foreground">
               updated {state ? formatUnixAgo(state.lastUpdated) : "—"}
@@ -138,12 +152,12 @@ export function RuntimeDashboard() {
 
       {!state ? (
         <div className="rounded-xl border border-border bg-card/60 p-4">
-          <div className="text-foreground font-semibold">No active ShadowNet runtime detected</div>
+          <div className="text-foreground font-semibold">No active SunLionet runtime detected</div>
           <div className="mt-2 text-sm text-muted-foreground">
-            Start ShadowNet Inside locally with the runtime API enabled, then refresh this page.
+            Start SunLionet Inside locally with the runtime API enabled, then refresh this page.
           </div>
           <div className="mt-3 text-xs font-mono border border-border bg-background/40 rounded px-3 py-2 overflow-auto">
-            shadownet-inside --runtime-api-addr 127.0.0.1:8080 --runtime-api-keepalive ...
+            sunlionet-inside --runtime-api-addr 127.0.0.1:8080 --runtime-api-keepalive ...
           </div>
         </div>
       ) : (
