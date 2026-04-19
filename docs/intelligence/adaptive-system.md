@@ -1,6 +1,6 @@
 # Adaptive Intelligence System
 
-ShadowNet now includes a local-first adaptive intelligence layer that learns from real connection outcomes and improves profile selection over time without sending sensitive data off-device.
+SunLionet now includes a local-first adaptive intelligence layer that learns from real connection outcomes and improves profile selection over time without sending sensitive data off-device.
 
 ## Safety Model
 
@@ -114,6 +114,12 @@ Runtime events also expose selected profile, confidence, candidate list, and fal
 ## Reset And Controls
 
 CLI reset command:
+
+```bash
+sunlionet-inside reset-learning --state-dir <path> --master-key <key>
+```
+
+If you are running older releases that still ship legacy binaries, the command may be:
 
 ```bash
 shadownet-inside reset-learning --state-dir <path> --master-key <key>

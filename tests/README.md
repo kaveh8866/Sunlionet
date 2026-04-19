@@ -1,6 +1,6 @@
-# Local Testing Environment for ShadowNet Agent
+# Local Testing Environment for SunLionet
 
-This directory contains the tools needed to test the ShadowNet Agent locally, without needing to be connected to the actual Iranian national intranet.
+This directory contains the tools needed to test SunLionet locally, without needing to be connected to the actual Iranian national intranet.
 
 ## Components
 
@@ -34,7 +34,7 @@ go run main.go -drop 0.15 -listen-tcp :443 -listen-udp :443
 *Note: If port 443 requires sudo on your system, run it as `sudo go run main.go ...` or change the listen ports to something like `:8444`.*
 
 ### Step 3: Run the Inside Agent
-In a separate terminal, start the main ShadowNet Inside agent.
+In a separate terminal, start the main SunLionet Inside agent.
 Modify the agent's seed config (`bundle.snb.json` or your mocked initial state) to point to the **Mock DPI Proxy** (e.g., `127.0.0.1:443`).
 
 ```bash

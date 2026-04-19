@@ -8,19 +8,19 @@
   --muted: #475569;
   --muted-foreground: #64748b;
   --border: rgba(15, 23, 42, 0.12);
-  --primary: #6d28d9;
+  --primary: #b8860b;
   --primary-foreground: #ffffff;
-  --ring: rgba(109, 40, 217, 0.35);
-  --accent: #0ea5e9;
-  --accent-foreground: #06101b;
+  --ring: rgba(184, 134, 11, 0.35);
+  --accent: #0b2a5b;
+  --accent-foreground: #ffffff;
   --success: #10b981;
   --success-foreground: #05120d;
   --warning: #f59e0b;
   --warning-foreground: #1a0e00;
   --danger: #ef4444;
   --danger-foreground: #1b0707;
-  --info: #38bdf8;
-  --info-foreground: #06101b;
+  --info: #0b2a5b;
+  --info-foreground: #ffffff;
   --panel: rgba(15, 23, 42, 0.04);
   --code: rgba(15, 23, 42, 0.04);
 }
@@ -54,52 +54,52 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #070a12;
+    --background: #071326;
     --foreground: #e6eaf2;
     --card: rgba(11, 16, 32, 0.7);
     --card-foreground: #e6eaf2;
     --muted: #9aa4b2;
     --muted-foreground: #aab4c2;
     --border: rgba(148, 163, 184, 0.16);
-    --primary: #8b5cf6;
-    --primary-foreground: #070a12;
-    --ring: rgba(139, 92, 246, 0.35);
-    --accent: #38bdf8;
-    --accent-foreground: #041018;
+    --primary: #f0c24b;
+    --primary-foreground: #071326;
+    --ring: rgba(240, 194, 75, 0.35);
+    --accent: #123a7a;
+    --accent-foreground: #e6eaf2;
     --success: #34d399;
     --success-foreground: #04120c;
     --warning: #fbbf24;
     --warning-foreground: #1a0f00;
     --danger: #fb7185;
     --danger-foreground: #1b0707;
-    --info: #38bdf8;
-    --info-foreground: #041018;
+    --info: #123a7a;
+    --info-foreground: #e6eaf2;
     --panel: rgba(148, 163, 184, 0.07);
     --code: rgba(148, 163, 184, 0.07);
   }
 }
 
 html.dark {
-  --background: #070a12;
+  --background: #071326;
   --foreground: #e6eaf2;
   --card: rgba(11, 16, 32, 0.7);
   --card-foreground: #e6eaf2;
   --muted: #9aa4b2;
   --muted-foreground: #aab4c2;
   --border: rgba(148, 163, 184, 0.16);
-  --primary: #8b5cf6;
-  --primary-foreground: #070a12;
-  --ring: rgba(139, 92, 246, 0.35);
-  --accent: #38bdf8;
-  --accent-foreground: #041018;
+  --primary: #f0c24b;
+  --primary-foreground: #071326;
+  --ring: rgba(240, 194, 75, 0.35);
+  --accent: #123a7a;
+  --accent-foreground: #e6eaf2;
   --success: #34d399;
   --success-foreground: #04120c;
   --warning: #fbbf24;
   --warning-foreground: #1a0f00;
   --danger: #fb7185;
   --danger-foreground: #1b0707;
-  --info: #38bdf8;
-  --info-foreground: #041018;
+  --info: #123a7a;
+  --info-foreground: #e6eaf2;
   --panel: rgba(148, 163, 184, 0.07);
   --code: rgba(148, 163, 184, 0.07);
 }
@@ -130,8 +130,8 @@ html.light {
 }
 
 body {
-  background: radial-gradient(900px circle at 18% 12%, rgba(109, 40, 217, 0.10), transparent 45%),
-    radial-gradient(900px circle at 82% 18%, rgba(14, 165, 233, 0.08), transparent 44%), var(--background);
+  background: radial-gradient(900px circle at 18% 12%, rgba(240, 194, 75, 0.10), transparent 45%),
+    radial-gradient(900px circle at 82% 18%, rgba(18, 58, 122, 0.16), transparent 44%), var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
     "Apple Color Emoji", "Segoe UI Emoji";

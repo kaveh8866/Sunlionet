@@ -1,13 +1,15 @@
 # Getting Started
 
-ShadowNet is a local-first, bundle-based system designed for censorship-resilient connectivity in high-risk DPI environments.
+SunLionet is a local-first, bundle-based privacy and resilient communication system designed for high-risk, restricted networks.
 
 It ships as:
 
-- ShadowNet Inside: the on-device agent that selects profiles and manages the local data plane.
-- ShadowNet Outside: the supporter tool that generates signed (and optionally encrypted) bundles for controlled delivery.
-- ShadowNet App: the Android wrapper for ShadowNet Inside (VPN integration + bundle import UI).
-- ShadowNet Dashboard: a web UI that can show local runtime status (no cloud required).
+- SunLionet Inside: the on-device agent that selects profiles and manages the local data plane.
+- SunLionet Outside: the supporter tool that generates signed (and optionally encrypted) bundles for controlled delivery.
+- SunLionet App: the Android wrapper for SunLionet Inside (VPN integration + configuration import UI).
+- SunLionet Dashboard: a web UI that can show local runtime status (no cloud required).
+
+Migration note: this repository is still named `shadownet-agent` during the transition, so some internal identifiers and older release artifacts may still use legacy `shadownet-*` naming.
 
 ## First-Time Setup (Linux user path)
 
@@ -23,18 +25,18 @@ Minimal flow (example for Linux amd64):
 VERSION="v0.1.0"
 BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/download/${VERSION}"
 
-curl -fL -O "${BASE_URL}/shadownet-inside-${VERSION}-linux-amd64.tar.gz"
-curl -fL -O "${BASE_URL}/shadownet-inside-${VERSION}-linux-amd64.tar.gz.sha256"
-sha256sum -c "shadownet-inside-${VERSION}-linux-amd64.tar.gz.sha256"
+curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz"
+curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz.sha256"
+sha256sum -c "sunlionet-inside-${VERSION}-linux-amd64.tar.gz.sha256"
 
-tar -xzf "shadownet-inside-${VERSION}-linux-amd64.tar.gz"
+tar -xzf "sunlionet-inside-${VERSION}-linux-amd64.tar.gz"
 sudo ./install-linux.sh inside
 ```
 
 Import a bundle and connect:
 
 ```bash
-shadownet-inside \
+sunlionet-inside \
   --import ./bundle.snb.json \
   --trusted-signer-pub-b64url "<PASTE_TRUSTED_SIGNER_PUB_B64URL>" \
   --age-identity "<PASTE_AGE_SECRET_KEY>" \
@@ -44,14 +46,14 @@ shadownet-inside \
 
 What to expect:
 
-- `[ShadowNet] Starting agent...`
+- `[SunLionet] Starting agent...`
 - `[Profile] Selected: ...`
 - `[Connection] Testing...`
 - `[Connection] SUCCESS` (when probe is enabled and succeeds)
 
 ## First-Time Setup (Android user path)
 
-1. Install ShadowNet App (signed APK).
+1. Install SunLionet App (signed APK).
 2. Open the app and grant VPN permission.
 3. Import a trusted bundle (from a supporter or trusted channel).
 4. Tap Connect.
@@ -64,21 +66,21 @@ Start here:
 
 ## First-Time Setup (Web dashboard path)
 
-ShadowNet Dashboard can show the local runtime state if ShadowNet Inside is running with the runtime API enabled.
+SunLionet Dashboard can show the local runtime state if SunLionet Inside is running with the runtime API enabled.
 
-1. Start ShadowNet Inside with runtime API enabled:
+1. Start SunLionet Inside with runtime API enabled:
 
 ```bash
-shadownet-inside --runtime-api-addr 127.0.0.1:8080 --runtime-api-keepalive ...
+sunlionet-inside --runtime-api-addr 127.0.0.1:8080 --runtime-api-keepalive ...
 ```
 
 2. Open the dashboard runtime page:
 
 - Website: `/dashboard/runtime`
 
-If you see “No active ShadowNet runtime detected”, check that:
+If you see “No active SunLionet runtime detected”, check that:
 
-- ShadowNet Inside is running on the same machine as your browser.
+- SunLionet Inside is running on the same machine as your browser.
 - The runtime API address is `127.0.0.1:<port>` (localhost-only).
 
 ## Safety notes

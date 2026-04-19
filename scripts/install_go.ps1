@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "       ShadowNet Agent: Go Installer for Windows    " -ForegroundColor Cyan
+Write-Host "       SunLionet: Go Installer for Windows          " -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Cyan
 
 $GoVersion = "1.22.1"

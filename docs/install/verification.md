@@ -1,6 +1,6 @@
 # Artifact Verification
 
-ShadowNet release verification uses two layers:
+SunLionet release verification uses two layers:
 
 1. File checksum validation (`sha256sum`)
 2. Signed checksum verification (`cosign verify-blob`)

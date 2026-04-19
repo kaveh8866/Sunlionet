@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-const runtimeBase = process.env.SHADOWNET_RUNTIME_API_BASE ?? "http://127.0.0.1:8080";
+const runtimeBase =
+  process.env.SUNLIONET_RUNTIME_API_BASE ?? process.env.SHADOWNET_RUNTIME_API_BASE ?? "http://127.0.0.1:8080";
 
 export const dynamic = "force-dynamic";
 
@@ -26,4 +27,3 @@ export async function GET() {
     clearTimeout(timeout);
   }
 }
-

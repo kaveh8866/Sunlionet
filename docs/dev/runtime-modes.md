@@ -1,6 +1,6 @@
 # Runtime Modes
 
-ShadowNet runs in one of two explicit modes:
+SunLionet runs in one of two explicit modes:
 
 - `real`: Production runtime. Only real implementations are allowed.
 - `simulation`: Test/simulation runtime. Simulated implementations are allowed.

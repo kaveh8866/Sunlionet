@@ -1,6 +1,6 @@
-# ShadowNet Agent: Local LLM Setup Guide
+# SunLionet: Local LLM Setup Guide
 
-The ShadowNet Agent relies on a completely offline, quantized Large Language Model to make intelligent protocol rotation decisions against DPI. 
+SunLionet relies on a completely offline, quantized Large Language Model to make intelligent protocol rotation decisions against DPI. 
 We strongly recommend **Phi-4-mini (3.8B)** or **Gemma-3-4B** due to their excellent reasoning capabilities at very small parameter counts.
 
 ## 1. Quantization Recommendation
@@ -35,7 +35,7 @@ wget https://huggingface.co/bartowski/Phi-4-mini-instruct-GGUF/resolve/main/Phi-
   --mlock \           # Lock model in RAM (prevents slow swapping)
   -cb                 # Continous batching for faster response
 ```
-The ShadowNet Go agent (`cmd/inside/daemon.go`) connects to `http://127.0.0.1:8080/completion` automatically.
+The SunLionet Go agent (`cmd/inside/daemon.go`) connects to `http://127.0.0.1:8080/completion` automatically.
 
 ## 3. Setup on Android (Termux)
 

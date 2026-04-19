@@ -2,7 +2,7 @@
 
 ## Users
 
-- Install and use ShadowNet.
+- Install and use SunLionet.
 - Import bundles from trusted publishers.
 - Share feedback only when safe.
 
@@ -35,4 +35,3 @@
 - No user tracking or telemetry proposals.
 - Assume adversarial environment when designing features.
 - Prefer safe defaults and explicit failure messages.
-

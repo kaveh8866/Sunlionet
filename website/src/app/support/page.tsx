@@ -35,12 +35,12 @@ export default async function SupportPage({ params }: { params: Promise<{ lang?:
 
       <section className="rounded-3xl border border-border bg-card/50 p-8 md:p-10 shadow-[0_0_0_1px_var(--border)]">
         <h1 className="text-4xl font-extrabold tracking-tight text-foreground md:text-5xl">
-          {isFa ? "حمایت از SunLionet — برای روشن ماندن اینترنت آزاد" : "Support SunLionet – Keep the Light On for Free Internet"}
+          {isFa ? "حمایت از SunLionet — برای پایداری و حفظ حریم خصوصی" : "Support SunLionet – Keep It Resilient and Private"}
         </h1>
         <p className="mt-4 max-w-3xl text-lg leading-relaxed text-muted">
           {isFa
-            ? "هر مشارکت به نگهداری و بهبود ابزار عبور از سانسور کمک می‌کند. می‌توانید همزمان از مسیرهای امن از پروژه حمایت کنید."
-            : "Every contribution helps maintain and improve the tool that bypasses censorship. You can support us while earning rewards yourself."}
+            ? "هر مشارکت به نگهداری و بهبود سامانه‌ای کمک می‌کند که برای ارتباط امن و پایداری در شبکه‌های محدود طراحی شده است. می‌توانید از مسیرهای امن و اختیاری از پروژه حمایت کنید."
+            : "Every contribution helps maintain and improve an open-source system designed for private, resilient communication on restricted networks."}
         </p>
         <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground">
           {isFa
@@ -117,8 +117,8 @@ export default async function SupportPage({ params }: { params: Promise<{ lang?:
           and maintaining config seeds. No company or organization takes a cut.
         </p>
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          Responsibility for using SunLionet lies with the user. The goal is bypassing blockers of the free flow of
-          information.
+          Responsibility for using SunLionet lies with the user. The goal is private, resilient communication and access
+          to information without relying on a central service.
         </p>
       </section>
     </div>

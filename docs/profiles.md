@@ -1,6 +1,6 @@
 # sing-box Profiles & Outbound Strategy
 
-ShadowNet treats outbounds as **pre-validated profiles** (templates + metadata). The policy engine selects a profile and an allowed mutation set; the LLM advisor may recommend a selection when deterministic logic is insufficient.
+SunLionet treats outbounds as **pre-validated profiles** (templates + metadata). The policy engine selects a profile and an allowed mutation set; the LLM advisor may recommend a selection when deterministic logic is insufficient.
 
 ## Profile data model
 

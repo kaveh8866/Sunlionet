@@ -413,7 +413,7 @@ class AgentService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ShadowNet Agent")
+            .setContentTitle("SunLionet Agent")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
             .setContentIntent(pi)

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# ShadowNet Agent - Test Runner
+# SunLionet - Test Runner
 # This script runs all unit tests and integration tests for the project.
 
 RED='\033[0;31m'
@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${GREEN}====================================================${NC}"
-echo -e "${GREEN}       ShadowNet Agent: Full Test Suite             ${NC}"
+echo -e "${GREEN}       SunLionet: Full Test Suite                   ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
 # Check for Go installation

@@ -1,6 +1,6 @@
 # End-to-End (E2E) Validation: Real sing-box Runtime
 
-This document defines what “working” means for ShadowNet Inside and how to prove real traffic is flowing through a real `sing-box` process (not just config rendering).
+This document defines what “working” means for SunLionet Inside and how to prove real traffic is flowing through a real `sing-box` process (not just config rendering).
 
 ## Real Runtime Success Criteria
 
@@ -42,10 +42,10 @@ go run ./cmd/inside \
 Or use the helper runner:
 
 ```bash
-export SHADOWNET_E2E_BUNDLE=/absolute/path/to/bundle.snb.json
-export SHADOWNET_E2E_TRUSTED_SIGNER_PUB_B64URL="$(cat /absolute/path/to/trusted_signer_pub.b64url)"
-export SHADOWNET_E2E_AGE_IDENTITY="$(cat /absolute/path/to/inside.agekey)"
-export SHADOWNET_E2E_MASTER_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+export SUNLIONET_E2E_BUNDLE=/absolute/path/to/bundle.snb.json
+export SUNLIONET_E2E_TRUSTED_SIGNER_PUB_B64URL="$(cat /absolute/path/to/trusted_signer_pub.b64url)"
+export SUNLIONET_E2E_AGE_IDENTITY="$(cat /absolute/path/to/inside.agekey)"
+export SUNLIONET_E2E_MASTER_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 bash ./tests/e2e/linux/run_real.sh
 ```
 
@@ -72,11 +72,11 @@ This repository includes an opt-in E2E test that only runs on Linux and only whe
 Enable:
 
 ```bash
-export SHADOWNET_E2E=1
-export SHADOWNET_E2E_BUNDLE=/absolute/path/to/bundle.snb.json
-export SHADOWNET_E2E_TRUSTED_SIGNER_PUB_B64URL="$(cat /absolute/path/to/trusted_signer_pub.b64url)"
-export SHADOWNET_E2E_AGE_IDENTITY="$(cat /absolute/path/to/inside.agekey)"
-export SHADOWNET_E2E_MASTER_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+export SUNLIONET_E2E=1
+export SUNLIONET_E2E_BUNDLE=/absolute/path/to/bundle.snb.json
+export SUNLIONET_E2E_TRUSTED_SIGNER_PUB_B64URL="$(cat /absolute/path/to/trusted_signer_pub.b64url)"
+export SUNLIONET_E2E_AGE_IDENTITY="$(cat /absolute/path/to/inside.agekey)"
+export SUNLIONET_E2E_MASTER_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 go test ./tests/e2e/linux -run TestInside_RealSingBox_HTTPProbe -v
 ```
 

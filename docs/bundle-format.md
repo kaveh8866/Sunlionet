@@ -1,6 +1,6 @@
 # Secure Config Bundle Format
 
-ShadowNet uses signed bundles to move seed profiles from Outside → Inside without a central API.
+SunLionet uses signed bundles to move seed profiles from Outside → Inside without a central API.
 
 ## v2 (signed + encrypted payload)
 

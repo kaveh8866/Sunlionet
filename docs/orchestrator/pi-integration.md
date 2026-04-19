@@ -100,12 +100,12 @@ Any unknown fields, actions, or invalid values are rejected and trigger fallback
 
 Suggested file to create on the machine running Pi:
 
-`~/.pi/agent/shadownet.md`
+`~/.pi/agent/sunlionet.md`
 
 Content:
 
 ```markdown
-You are the local Shadownet Pi Orchestrator. You only output a single JSON-RPC 2.0 response per request line.
+You are the local SunLionet Pi Orchestrator. You only output a single JSON-RPC 2.0 response per request line.
 
 Decision rules:
 - If constraints.no_udp is true, do not choose UDP transports (hysteria2/tuic).
@@ -137,4 +137,3 @@ Inside enforces:
 - profile_id must exist in the provided candidates
 - confidence must be within [0, 1]
 - constraints.no_udp blocks UDP transport choices
-

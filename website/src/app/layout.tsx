@@ -26,21 +26,22 @@ const fontFa = Vazirmatn({
 export const metadata: Metadata = {
   title: "SunLionet",
   description:
-    "Open-source DPI resistance with offline detection, deterministic rotation, and local-only assistance. Built for high-risk restricted networks.",
+    "Offline-first, open-source privacy and resilient communication system with local detection, deterministic rotation, and local-only assistance. Built for high-risk restricted networks.",
   keywords: [
-    "censorship circumvention",
-    "offline DPI bypass",
+    "privacy",
+    "resilient networking",
+    "offline-first",
     "sing-box",
     "reality",
     "hysteria2",
     "tuic",
     "shadowtls",
-    "open source privacy tools",
+    "open source",
   ],
   openGraph: {
     title: "SunLionet",
     description:
-      "Local, intelligent, offline DPI resistance. Dual Inside/Outside architecture for resilient censorship circumvention.",
+      "Offline-first privacy and resilient communication. Dual Inside/Outside architecture with local-only runtime visibility.",
     type: "website",
   },
 };

@@ -1,4 +1,4 @@
-# Real-World Deployment Model (Censorship-Resilient)
+# Real-World Deployment Model (Resilient)
 
 ## Threat Model
 
@@ -35,7 +35,7 @@
 
 Operational controls:
 
-1. Ship a clearly marked tester build (`ShadowNet (Test Build)`).
+1. Ship a clearly marked tester build (`SunLionet (Test Build)`).
 2. Collect only manual, user-controlled feedback exports (`logs.json`).
 3. Aggregate only high-level failure categories (no sensitive endpoints).
 4. Patch and redeploy in short cycles (`24-72` hours).

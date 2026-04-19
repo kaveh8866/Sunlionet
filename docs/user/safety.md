@@ -1,10 +1,10 @@
-# ShadowNet Safety Guide
+# SunLionet Safety Guide
 
 ## Important Limits
 
-- ShadowNet does **not** guarantee anonymity.
-- ShadowNet does **not** provide legal protection.
-- ShadowNet does **not** remove all surveillance risk.
+- SunLionet does **not** guarantee anonymity.
+- SunLionet does **not** provide legal protection.
+- SunLionet does **not** remove all surveillance risk.
 
 ## Safe Defaults in This Project
 
@@ -30,4 +30,3 @@
 
 - Do not pressure others to install without explaining risks.
 - Share only verified files; avoid unverified reposts.
-

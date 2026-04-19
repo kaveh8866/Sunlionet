@@ -30,8 +30,8 @@ var (
 
 func init() {
 	flag.StringVar(&llamaURL, "llama-url", "http://127.0.0.1:8080", "Local llama.cpp API endpoint")
-	flag.StringVar(&storePath, "store", "/var/lib/shadownet/store.enc", "Path to AES-GCM encrypted config DB")
-	flag.StringVar(&templateDir, "templates", "/opt/shadownet/templates", "Path to sing-box JSON templates")
+	flag.StringVar(&storePath, "store", "/var/lib/sunlionet/store.enc", "Path to AES-GCM encrypted config DB (legacy default was /var/lib/shadownet/store.enc)")
+	flag.StringVar(&templateDir, "templates", "/opt/sunlionet/templates", "Path to sing-box JSON templates (legacy default was /opt/shadownet/templates)")
 	flag.StringVar(&masterKeyArg, "master-key", "", "Master key for local encrypted storage (32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable verbose logging and LLM reasoning output")
 	flag.IntVar(&batteryLevel, "battery", 100, "Simulated battery level (Android)")
@@ -40,17 +40,35 @@ func init() {
 func main() {
 	flag.Parse()
 
-	log.Println("=== Starting ShadowNet Autonomous Agent ===")
+	log.Println("=== Starting SunLionet Autonomous Agent ===")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if storePath == "/var/lib/sunlionet/store.enc" {
+		if _, err := os.Stat(storePath); err != nil {
+			if _, legacyErr := os.Stat("/var/lib/shadownet/store.enc"); legacyErr == nil {
+				storePath = "/var/lib/shadownet/store.enc"
+			}
+		}
+	}
+	if templateDir == "/opt/sunlionet/templates" {
+		if _, err := os.Stat(templateDir); err != nil {
+			if _, legacyErr := os.Stat("/opt/shadownet/templates"); legacyErr == nil {
+				templateDir = "/opt/shadownet/templates"
+			}
+		}
+	}
+
 	if masterKeyArg == "" {
-		masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+		masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
+		if masterKeyArg == "" {
+			masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+		}
 	}
 	masterKey, err := profile.ParseMasterKey(masterKeyArg)
 	if err != nil {
-		log.Fatalf("Missing or invalid master key: %v (set --master-key or SHADOWNET_MASTER_KEY)", err)
+		log.Fatalf("Missing or invalid master key: %v (set --master-key, SUNLIONET_MASTER_KEY, or SHADOWNET_MASTER_KEY)", err)
 	}
 
 	// 1. Initialize Encrypted Store

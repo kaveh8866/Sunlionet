@@ -1,6 +1,6 @@
 # Real-Time Observability (Events + SSE)
 
-ShadowNet Inside exposes a local-first, privacy-safe observability surface based on structured events and an SSE stream.
+SunLionet Inside exposes a local-first, privacy-safe observability surface based on structured events and an SSE stream.
 
 ## Goals
 

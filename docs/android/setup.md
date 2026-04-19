@@ -24,7 +24,7 @@
 
 1. Tap **Connect**.
 2. Grant VPN permission.
-3. `ShadowNetVpnService` establishes TUN.
+3. `ShadowNetVpnService` establishes TUN (legacy class name during transition).
 4. `AgentService` starts Go agent loop and renders config.
 5. `SingBoxController` starts `sing-box run -c <config>`.
 
@@ -39,4 +39,3 @@
 
 - If sing-box asset is missing, app stays fail-safe and reports an explicit error in logs.
 - No cloud dependency is required for runtime operation.
-

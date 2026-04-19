@@ -439,7 +439,7 @@ class MainActivity : AppCompatActivity() {
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "application/json"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "ShadowNet logs (${BuildConfig.APP_VERSION_LABEL})")
+                putExtra(Intent.EXTRA_SUBJECT, "SunLionet logs (${BuildConfig.APP_VERSION_LABEL})")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(send, getString(R.string.export_logs)))
@@ -463,7 +463,7 @@ class MainActivity : AppCompatActivity() {
             }
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "message/rfc822"
-                putExtra(Intent.EXTRA_SUBJECT, "ShadowNet Test Build Issue")
+                putExtra(Intent.EXTRA_SUBJECT, "SunLionet Test Build Issue")
                 putExtra(Intent.EXTRA_TEXT, body)
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

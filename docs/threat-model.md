@@ -1,6 +1,6 @@
 # Threat Model (Dual-Agent Setup)
 
-This document focuses on the dual-version model: ShadowNet Inside operates in a high-risk, hostile environment; ShadowNet Outside operates in a safer jurisdiction.
+This document focuses on the dual-version model: SunLionet Inside operates in a high-risk, hostile environment; SunLionet Outside operates in a safer jurisdiction.
 
 ## Assumptions
 

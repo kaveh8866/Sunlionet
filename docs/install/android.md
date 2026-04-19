@@ -1,6 +1,6 @@
 # Android Installation
 
-ShadowNet Android release is distributed as a signed APK (`app-release.apk`).
+SunLionet Android release is distributed as a signed APK (`app-release.apk`).
 
 > Version in examples: `v0.1.0`
 
@@ -44,7 +44,7 @@ Expected output:
 
 ## 4) First Launch and Setup
 
-1. Open ShadowNet.
+1. Open SunLionet.
 2. Grant VPN permission when prompted.
 3. Import trusted bundle(s) and start the agent.
 

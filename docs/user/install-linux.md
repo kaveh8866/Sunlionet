@@ -1,4 +1,4 @@
-# Install ShadowNet on Linux (User Guide)
+# Install SunLionet on Linux (User Guide)
 
 ## Requirements
 
@@ -33,4 +33,3 @@
 - Run as dedicated user.
 - Keep logs local and rotate.
 - Do not expose management ports publicly.
-

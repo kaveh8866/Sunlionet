@@ -2,8 +2,8 @@
 
 این مخزن در حال حاضر روی این سناریوها تمرکز دارد:
 
-- **ShadowNet Inside**: لینوکس (x86_64 یا arm64) و اندروید (Termux برای توسعه)
-- **ShadowNet Outside**: هر سیستم‌عامل با اینترنت پایدار (Linux/macOS/Windows)
+- **SunLionet Inside**: لینوکس (x86_64 یا arm64) و اندروید (Termux برای توسعه)
+- **SunLionet Outside**: هر سیستم‌عامل با اینترنت پایدار (Linux/macOS/Windows)
 
 ## برچسب‌های build
 

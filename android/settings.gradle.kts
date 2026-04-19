@@ -14,6 +14,6 @@ dependencyResolutionManagement {
 	}
 }
 
-rootProject.name = "ShadowNetAndroid"
+rootProject.name = "SunLionetAndroid"
 include(":app")
 

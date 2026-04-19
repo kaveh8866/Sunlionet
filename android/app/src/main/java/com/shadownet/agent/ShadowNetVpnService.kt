@@ -73,7 +73,7 @@ class ShadowNetVpnService : VpnService() {
         startForeground(NOTIF_ID, buildNotification("VPN connecting"))
 
         val builder = Builder()
-            .setSession("ShadowNet")
+            .setSession("SunLionet")
             .setMtu(1400)
             .addAddress("10.0.0.2", 32)
             .addDnsServer("1.1.1.1")
@@ -127,7 +127,7 @@ class ShadowNetVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ShadowNet VPN")
+            .setContentTitle("SunLionet VPN")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pi)

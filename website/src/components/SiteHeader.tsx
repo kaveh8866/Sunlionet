@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { cx } from "../lib/cx";
 import { getUILangFromPathname, uiCopy } from "../lib/uiCopy";
 import { ThemeToggle } from "./ThemeToggle";
-import logoSprite from "../../../Brandkit/Gemini_Generated_Image_6m50066m50066m50 - Kopie.png";
 
 type NavItem = {
   href: string;
@@ -75,11 +74,19 @@ export function SiteHeader() {
         >
           <span className="w-8 h-8 rounded bg-card/60 border border-border shadow-[0_0_18px_var(--ring)] overflow-hidden">
             <Image
-              src={logoSprite}
+              src="/brand/sunlionet-color-64.png"
               alt="SunLionet"
               width={32}
               height={32}
-              className="w-8 h-8 object-cover object-left-top"
+              className="w-8 h-8 object-contain dark:hidden"
+              priority={false}
+            />
+            <Image
+              src="/brand/sunlionet-invert-64.png"
+              alt="SunLionet"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain hidden dark:block"
               priority={false}
             />
           </span>

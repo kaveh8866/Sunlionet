@@ -11,7 +11,7 @@
 
 ### Community Members
 
-- Use ShadowNet, report issues, and participate in discussions.
+- Use SunLionet, report issues, and participate in discussions.
 - Do not need accounts on any single platform to be considered part of the community.
 
 ### Contributors
@@ -101,4 +101,3 @@
 - Technical conflicts: resolve by evidence (tests, reproducible results, threat modeling).
 - Governance conflicts: resolve publicly with a recorded decision and rationale.
 - Code of conduct: enforce consistently; moderation is separate from technical privilege.
-

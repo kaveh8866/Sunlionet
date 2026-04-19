@@ -1,6 +1,6 @@
 # Outside: Trust Model
 
-ShadowNet uses offline distribution of signed bundles rather than a central fetch API. This shifts trust to explicit key management and fail-closed verification.
+SunLionet uses offline distribution of signed bundles rather than a central fetch API. This shifts trust to explicit key management and fail-closed verification.
 
 ## Actors
 
@@ -61,4 +61,3 @@ Therefore:
 - integrity is provided by the signature
 - confidentiality (if required) is provided by age encryption
 - replay value is reduced by short bundle expirations
-

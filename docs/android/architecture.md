@@ -3,7 +3,7 @@
 ## Components
 
 - `MainActivity`: minimal UX (Connect, Disconnect, Import configuration, state/log display).
-- `ShadowNetVpnService`: Android `VpnService` owner of TUN lifecycle.
+- `ShadowNetVpnService`: Android `VpnService` owner of TUN lifecycle (legacy class name during transition).
 - `AgentService`: foreground background runtime supervisor.
 - `SingBoxController`: writes/uses config path, starts/stops/restarts sing-box.
 - `Bridge`: Kotlin -> Go bridge entry points.
@@ -14,7 +14,7 @@
 
 1. UI requests connect.
 2. VPN permission is requested/granted.
-3. `ShadowNetVpnService` establishes TUN.
+3. `ShadowNetVpnService` establishes TUN (legacy class name during transition).
 4. `AgentService` starts Go loop via `Bridge.StartAgent(config)`.
 5. Go loop selects profile and renders config file.
 6. `SingBoxController` starts sing-box process with rendered config.

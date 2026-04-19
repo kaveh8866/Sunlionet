@@ -2,8 +2,10 @@
 
 This repository currently targets:
 
-- ShadowNet Inside: Linux + Android (signed APK and Termux CLI path)
-- ShadowNet Outside: any OS with stable internet (Linux/macOS/Windows)
+- SunLionet Inside: Linux + Android (signed APK and Termux CLI path)
+- SunLionet Outside: any OS with stable internet (Linux/macOS/Windows)
+
+Migration note: this repository is still named `shadownet-agent` during the transition. Some internal identifiers and older release artifacts may still use legacy `shadownet-*` naming.
 
 If you are installing for the first time, start here:
 
@@ -43,8 +45,8 @@ Optional tools:
 ```bash
 mkdir -p bin
 
-go build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-inside ./cmd/inside/
-go build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/shadownet-outside ./cmd/outside/
+go build -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o bin/sunlionet-inside ./cmd/inside/
+go build -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o bin/sunlionet-outside ./cmd/outside/
 ```
 
 ## Run tests

@@ -62,11 +62,12 @@ The browser calls the Next.js API routes:
 
 To override the upstream base URL (server-side only):
 
-- `SHADOWNET_RUNTIME_API_BASE=http://127.0.0.1:8080`
+- `SUNLIONET_RUNTIME_API_BASE=http://127.0.0.1:8080`
+- `SHADOWNET_RUNTIME_API_BASE=http://127.0.0.1:8080` (legacy)
 
 ## Troubleshooting
 
-- Dashboard shows “No active ShadowNet runtime detected”:
+- Dashboard shows “No active SunLionet runtime detected”:
   - Ensure the Inside agent is running with `--runtime-api-addr 127.0.0.1:8080 --runtime-api-keepalive`
   - Ensure nothing else is using port `8080`
 - Proxy returns `runtime_unavailable`:
@@ -77,4 +78,3 @@ To override the upstream base URL (server-side only):
 
 - The runtime API refuses non-local bind addresses (only `127.0.0.1` / `localhost`)
 - Endpoints are read-only and return operational metadata only (no keys, no secrets)
-

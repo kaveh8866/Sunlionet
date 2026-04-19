@@ -1,11 +1,11 @@
 # Release Checklist
 
-This checklist is for preparing and publishing a public ShadowNet release (example: `v0.1.0`).
+This checklist is for preparing and publishing a public SunLionet release (example: `v0.1.0`).
 
 ## Artifacts
 
-- ShadowNet Inside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
-- ShadowNet Outside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
+- SunLionet Inside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
+- SunLionet Outside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
 - Android APK built and signed (`app-release.apk`)
 - Checksums generated for every artifact (`*.sha256` or `checksums.txt`)
 - Checksum signatures generated and verified (`checksums.sig` + `checksums.pub`, if used)

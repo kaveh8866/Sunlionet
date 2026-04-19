@@ -1,15 +1,15 @@
 # System Architecture (Inside + Outside)
 
-ShadowNet is split into two coordinated agents compiled from one codebase.
+SunLionet is split into two coordinated agents compiled from one codebase.
 
-## ShadowNet Inside (Iran)
+## SunLionet Inside
 
 Inside runs on the user device and owns all real-time decisions. It is designed to be lightweight, seizure-resistant, and able to operate during partial or total blackouts.
 
 **Control plane components**
 
-- Supervisor (`shadownetd`): starts/stops detector, policy, sing-box controller, mesh, and Signal receiver
-- Detector: produces censorship/DPI events (timeouts, resets, DNS poisoning, UDP block suspicion)
+- Supervisor (`shadownetd`): starts/stops detector, policy, sing-box controller, mesh, and Signal receiver (legacy name during transition)
+- Detector: produces network-interference events (timeouts, resets, DNS poisoning suspicion, UDP disruption suspicion)
 - Policy Engine (deterministic): handles routine decisions without any AI
 - LLM Advisor (bounded): invoked sparingly when events are ambiguous; must output strict JSON selecting only from allowed actions/mutations
 - Secure Local Store: encrypted profile store + health statistics
@@ -17,7 +17,7 @@ Inside runs on the user device and owns all real-time decisions. It is designed 
 - Bluetooth Mesh: local sharing of working seeds during blackout
 - Signal Receiver: receive-only by default
 
-## ShadowNet Outside (Exile/Helper)
+## SunLionet Outside (Helper)
 
 Outside runs in a safer jurisdiction. It continuously generates and tests new seed profiles and distributes bundles to Inside users via a one-way channel.
 

@@ -18,8 +18,8 @@ Before opening a PR:
 
 ## Repository structure
 
-- `cmd/inside` (build tag: `inside`): ShadowNet Inside entrypoint
-- `cmd/outside` (build tag: `outside`): ShadowNet Outside entrypoint
+- `cmd/inside` (build tag: `inside`): SunLionet Inside entrypoint
+- `cmd/outside` (build tag: `outside`): SunLionet Outside entrypoint
 - `pkg/*`: shared and Inside-only packages (see `/docs` for architecture)
 
 ## Security rules (strict)

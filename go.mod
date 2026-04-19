@@ -7,7 +7,4 @@ require (
 	golang.org/x/crypto v0.25.0
 )
 
-require (
-	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b // indirect
-	golang.org/x/sys v0.43.0 // indirect
-)
+require golang.org/x/sys v0.43.0 // indirect
