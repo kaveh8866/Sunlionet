@@ -9,13 +9,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/kaveh/shadownet-agent/pkg/detector"
+	"github.com/kaveh/shadownet-agent/pkg/identity"
 	"github.com/kaveh/shadownet-agent/pkg/llm"
+	"github.com/kaveh/shadownet-agent/pkg/messaging"
 	"github.com/kaveh/shadownet-agent/pkg/policy"
 	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/shadownet-agent/pkg/relay"
 	"github.com/kaveh/shadownet-agent/pkg/sbctl"
 )
 
@@ -26,6 +31,11 @@ var (
 	masterKeyArg string
 	debugMode    bool
 	batteryLevel int
+
+	relayURL           string
+	identityStorePath  string
+	mailboxRotationSec int
+	decoyMailboxCount  int
 )
 
 func init() {
@@ -35,6 +45,10 @@ func init() {
 	flag.StringVar(&masterKeyArg, "master-key", "", "Master key for local encrypted storage (32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable verbose logging and LLM reasoning output")
 	flag.IntVar(&batteryLevel, "battery", 100, "Simulated battery level (Android)")
+	flag.StringVar(&relayURL, "relay-url", "", "Relay base URL (e.g. https://relay.example.com)")
+	flag.StringVar(&identityStorePath, "identity-store", "", "Path to AES-GCM encrypted identity DB (defaults to <store dir>/identity.enc)")
+	flag.IntVar(&mailboxRotationSec, "mailbox-rotation-sec", 3600, "Mailbox rotation period in seconds")
+	flag.IntVar(&decoyMailboxCount, "decoy-mailboxes", 2, "Number of decoy mailboxes to poll per persona")
 }
 
 func main() {
@@ -64,6 +78,12 @@ func main() {
 		masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
 		if masterKeyArg == "" {
 			masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+		}
+	}
+	if relayURL == "" {
+		relayURL = os.Getenv("SUNLIONET_RELAY_URL")
+		if relayURL == "" {
+			relayURL = os.Getenv("SHADOWNET_RELAY_URL")
 		}
 	}
 	masterKey, err := profile.ParseMasterKey(masterKeyArg)
@@ -102,6 +122,39 @@ func main() {
 	// Start Rotation Manager in background
 	go rotationMgr.Start(ctx, anomalyChan)
 
+	if identityStorePath == "" {
+		identityStorePath = filepath.Join(filepath.Dir(storePath), "identity.enc")
+	}
+	if relayURL != "" {
+		idStore, err := identity.NewStore(identityStorePath, masterKey)
+		if err != nil {
+			log.Printf("Identity store init failed: %v", err)
+		} else {
+			idState, err := idStore.Load()
+			if err != nil {
+				log.Printf("Identity store load failed: %v", err)
+			} else if len(idState.Personas) == 0 {
+				log.Printf("No personas configured, skipping relay pollers")
+			} else {
+				rclient := relay.NewHTTPClient(relayURL)
+				var idMu sync.Mutex
+				for i := range idState.Personas {
+					personaID := idState.Personas[i].ID
+					b, created, err := idState.EnsureMailboxBinding(personaID)
+					if err != nil {
+						log.Printf("Mailbox binding init failed for persona %s: %v", personaID, err)
+						continue
+					}
+					if created {
+						_ = idStore.Save(idState)
+					}
+					binding := *b
+					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, personaID, binding, mailboxRotationSec, decoyMailboxCount)
+				}
+			}
+		}
+	}
+
 	// ==========================================
 	// MAIN AGENT LOOP (Detection Suite)
 	// ==========================================
@@ -127,6 +180,174 @@ func main() {
 			runDetectionSuite(anomalyChan)
 		}
 	}
+}
+
+func runPersonaPollerRotationLoop(
+	ctx context.Context,
+	r relay.Relay,
+	idStore *identity.Store,
+	idState *identity.State,
+	idMu *sync.Mutex,
+	personaID identity.PersonaID,
+	binding identity.MailboxBinding,
+	rotationSec int,
+	decoyCount int,
+) {
+	if r == nil || idStore == nil || idState == nil || idMu == nil {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		now := time.Now()
+		mailbox, nextRotateAt, err := binding.MailboxAt(now, int64(rotationSec))
+		if err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		prevMailbox, _ := binding.MailboxPrevAt(now, int64(rotationSec))
+		decoys, _ := binding.DecoyMailboxesAt(now, int64(rotationSec), decoyCount)
+		decoyMBs := make([]relay.MailboxID, 0, 1+len(decoys))
+		if prevMailbox != "" && prevMailbox != mailbox {
+			decoyMBs = append(decoyMBs, relay.MailboxID(prevMailbox))
+		}
+		for i := range decoys {
+			if decoys[i] == "" || decoys[i] == mailbox {
+				continue
+			}
+			decoyMBs = append(decoyMBs, relay.MailboxID(decoys[i]))
+		}
+
+		waitSec, _ := binding.DeriveInt("poll:wait_sec", 10, 20)
+		cycleSec := waitSec
+		jitterMs, _ := binding.DeriveInt("poll:jitter_ms", 300, 2200)
+		backoffBase, _ := binding.DeriveInt("poll:backoff_base_ms", 200, 600)
+		backoffMax, _ := binding.DeriveInt("poll:backoff_max_ms", 4000, 12000)
+		ackDelay, _ := binding.DeriveInt("poll:ack_delay_ms", 150, 900)
+		ackBatchSec, _ := binding.DeriveInt("poll:ack_batch_sec", 3, 12)
+		ackBatchMax, _ := binding.DeriveInt("poll:ack_batch_max", 20, 80)
+		coverAckSec, _ := binding.DeriveInt("poll:cover_ack_sec", 25, 90)
+		coverAckCount, _ := binding.DeriveInt("poll:cover_ack_count", 1, 3)
+		coverAckJitterMs, _ := binding.DeriveInt("poll:cover_ack_jitter_ms", 250, 1500)
+		decoyPullSec, _ := binding.DeriveInt("poll:decoy_pull_sec", 10, 40)
+		decoyWaitSec, _ := binding.DeriveInt("poll:decoy_wait_sec", 1, 5)
+		decoyLimit, _ := binding.DeriveInt("poll:decoy_limit", 1, 2)
+		decoyPullJitterMs, _ := binding.DeriveInt("poll:decoy_pull_jitter_ms", 250, 1500)
+
+		pushMinDelayMs, _ := binding.DeriveInt("push:min_delay_ms", 200, 1200)
+		pushMaxDelayMs, _ := binding.DeriveInt("push:max_delay_ms", 1500, 7000)
+		pushBatchMax, _ := binding.DeriveInt("push:batch_max", 2, 10)
+		pushInterJitterMs, _ := binding.DeriveInt("push:inter_jitter_ms", 50, 400)
+
+		activeRelay := r
+		shaped, err := relay.NewShapedRelay(r, relay.SendOptions{
+			MinDelayMs:        pushMinDelayMs,
+			MaxDelayMs:        pushMaxDelayMs,
+			BatchMax:          pushBatchMax,
+			QueueMax:          1000,
+			InterPushJitterMs: pushInterJitterMs,
+		})
+		if err == nil && shaped != nil {
+			activeRelay = shaped
+		}
+
+		childCtx, cancel := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+		p := &relay.Poller{
+			Relay: activeRelay,
+			Opts: relay.PollOptions{
+				Mailbox:           relay.MailboxID(mailbox),
+				Limit:             50,
+				WaitSec:           waitSec,
+				CycleSec:          cycleSec,
+				JitterMs:          jitterMs,
+				BackoffBaseMs:     backoffBase,
+				BackoffMaxMs:      backoffMax,
+				Ack:               true,
+				AckDelayMsMax:     ackDelay,
+				AckBatchSec:       ackBatchSec,
+				AckBatchMax:       ackBatchMax,
+				CoverAckSec:       coverAckSec,
+				CoverAckCount:     coverAckCount,
+				CoverAckJitterMs:  coverAckJitterMs,
+				DecoyMailboxes:    decoyMBs,
+				DecoyPullSec:      decoyPullSec,
+				DecoyWaitSec:      decoyWaitSec,
+				DecoyLimit:        decoyLimit,
+				DecoyPullJitterMs: decoyPullJitterMs,
+				Handle: func(ctx context.Context, msgs []relay.Message) error {
+					handleRelayMessages(idStore, idState, idMu, personaID, msgs)
+					return nil
+				},
+			},
+		}
+		go func() { errCh <- p.Run(childCtx) }()
+
+		sleepDur := time.Until(nextRotateAt)
+		if sleepDur < 1*time.Second {
+			sleepDur = 1 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			cancel()
+			<-errCh
+			if shaped != nil {
+				_ = shaped.Close()
+			}
+			return
+		case <-time.After(sleepDur):
+			cancel()
+			<-errCh
+			if shaped != nil {
+				_ = shaped.Close()
+			}
+		case <-errCh:
+			cancel()
+			if shaped != nil {
+				_ = shaped.Close()
+			}
+		}
+	}
+}
+
+func handleRelayMessages(store *identity.Store, state *identity.State, mu *sync.Mutex, personaID identity.PersonaID, msgs []relay.Message) {
+	if store == nil || state == nil || len(msgs) == 0 {
+		return
+	}
+	changed := false
+	now := time.Now()
+	for mi := range msgs {
+		env, err := messaging.DecodeEnvelope(string(msgs[mi].Envelope))
+		if err != nil {
+			continue
+		}
+		mu.Lock()
+		for i := range state.PreKeys {
+			priv, err := state.PreKeys[i].DecodePrivate()
+			if err != nil {
+				continue
+			}
+			_, _, err = messaging.DecryptWithPreKey(env, priv)
+			if err != nil {
+				continue
+			}
+			state.PreKeys = append(state.PreKeys[:i], state.PreKeys[i+1:]...)
+			state.UpdatedAt = now.Unix()
+			changed = true
+			break
+		}
+		mu.Unlock()
+	}
+	if changed {
+		mu.Lock()
+		_ = store.Save(state)
+		mu.Unlock()
+	}
+	_ = personaID
 }
 
 // runDetectionSuite runs the fast active+passive checks (must take <5s total)
