@@ -88,7 +88,7 @@ export default async function DocsLayout({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
       <div className="grid gap-10 lg:grid-cols-[260px_1fr]">
-        <aside className="hidden lg:block">
+        <aside data-testid="docs-sidebar" className="hidden lg:block">
           <div className="sticky top-24 grid gap-6">
             <div className="rounded-xl border border-border bg-panel/60 p-4">
               <div className="text-xs font-mono tracking-wide text-muted-foreground uppercase">Docs</div>
@@ -97,7 +97,7 @@ export default async function DocsLayout({
               </div>
             </div>
 
-            <nav className="grid gap-6">
+            <nav data-testid="docs-nav" className="grid gap-6">
               {sections.map((s) => (
                 <div key={s.title} className="grid gap-2" lang={s.title === "فارسی" ? "fa" : undefined} dir={s.title === "فارسی" ? "rtl" : undefined}>
                   <div className="text-xs font-mono tracking-wide text-muted-foreground uppercase">{s.title}</div>
@@ -121,6 +121,7 @@ export default async function DocsLayout({
               <Link
                 href={`${basePrefix}/docs/all`}
                 prefetch={false}
+                data-testid="docs-browse-all"
                 className="rounded-lg border border-border bg-card/60 px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
               >
                 Browse all docs

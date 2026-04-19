@@ -31,6 +31,7 @@
     "connected": "Connected",
     "connecting": "Connecting",
     "disconnected": "Disconnected",
+    "error": "Error",
     "secure": "Secure",
     "notSecure": "Not secure"
   },

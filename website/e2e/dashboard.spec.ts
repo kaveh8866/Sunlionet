@@ -44,9 +44,49 @@ test("/dashboard/runtime renders (connected)", async ({ page }) => {
   });
 
   await page.goto("/dashboard/runtime");
-  await expect(page.getByTestId("runtime-status-badge")).toHaveText("CONNECTED");
+  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/connected/i);
   await expect(page.getByText("reality-1", { exact: true })).toBeVisible();
+  await page.locator("summary").filter({ hasText: /Show activity/i }).click();
   await expect(page.getByText("PROFILE_SWITCH")).toBeVisible();
+});
+
+test("/dashboard/runtime renders (error status)", async ({ page }) => {
+  await page.route("**/api/proxy/state", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "failed",
+        activeProfile: "reality-1",
+        latencyMs: 0,
+        lastUpdated: 1710000000,
+        failures: [{ timestamp: 1710000000, reason: "probe timeout" }],
+        mode: "real",
+      }),
+    });
+  });
+  await page.route("**/api/proxy/events/list", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ timestamp: 1710000000, type: "CONNECTION_FAIL", message: "Probe timeout" }]),
+    });
+  });
+  await page.route("**/api/proxy/events", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify({
+        timestamp: 1710000001,
+        type: "CONNECTION_FAIL",
+        message: "Probe timeout",
+      })}\n\n`,
+    });
+  });
+
+  await page.goto("/dashboard/runtime");
+  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/error/i);
+  await expect(page.getByText("Not secure")).toBeVisible();
 });
 
 test("/dashboard/global renders (no feed)", async ({ page }) => {

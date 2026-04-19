@@ -64,13 +64,14 @@ export function SiteHeader() {
   const labels = uiCopy[currentLang].nav;
 
   return (
-    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+    <header data-testid="site-header" className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="mx-auto w-full max-w-6xl px-4 h-16 flex items-center justify-between gap-4">
         <Link
           href={homeHref}
           prefetch={false}
           className="text-sm sm:text-base font-semibold tracking-tight text-foreground flex items-center gap-2"
           onClick={() => setOpen(false)}
+          data-testid="nav-home"
         >
           <span className="w-8 h-8 rounded bg-card/60 border border-border shadow-[0_0_18px_var(--ring)] overflow-hidden">
             <Image
@@ -85,12 +86,13 @@ export function SiteHeader() {
           SunLionet
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-muted-foreground">
+        <nav data-testid="nav-desktop" className="hidden lg:flex items-center gap-6 text-sm font-semibold text-muted-foreground">
           {navItems.map((i) => (
             <Link
               key={i.href}
               href={hrefFor(i.href)}
               prefetch={false}
+              data-testid={`nav-${i.key}`}
               className={cx(
                 "transition-colors hover:text-foreground",
                 activeHref === i.href ? "text-foreground" : null,
@@ -113,6 +115,7 @@ export function SiteHeader() {
           <Link
             href={hrefFor("/download")}
             prefetch={false}
+            data-testid="nav-cta-download"
             className="hidden sm:inline-flex bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
           >
             {labels.download}
@@ -122,6 +125,7 @@ export function SiteHeader() {
             className="inline-flex lg:hidden items-center justify-center rounded-md border border-border bg-card/60 p-2 text-foreground hover:bg-card transition-colors"
             aria-label="Open navigation menu"
             onClick={() => setOpen((v) => !v)}
+            data-testid="nav-menu-button"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -137,13 +141,14 @@ export function SiteHeader() {
 
       {open ? (
         <div className="lg:hidden border-t border-border bg-card/60">
-          <div className="mx-auto w-full max-w-6xl px-4 py-4 grid gap-2">
+          <div data-testid="nav-mobile" className="mx-auto w-full max-w-6xl px-4 py-4 grid gap-2">
             {navItems.map((i) => (
               <Link
                 key={i.href}
                 href={hrefFor(i.href)}
                 prefetch={false}
                 onClick={() => setOpen(false)}
+                data-testid={`nav-mobile-${i.key}`}
                 className={cx(
                   "rounded-lg border border-border bg-card/60 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-card transition-colors",
                   activeHref === i.href ? "text-foreground" : null,
@@ -156,6 +161,7 @@ export function SiteHeader() {
               href={otherLangHref}
               prefetch={false}
               onClick={() => setOpen(false)}
+              data-testid="nav-mobile-lang"
               className="rounded-lg border border-border bg-card/60 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
             >
               {otherLang.toUpperCase()}
@@ -164,6 +170,7 @@ export function SiteHeader() {
               href={hrefFor("/download")}
               prefetch={false}
               onClick={() => setOpen(false)}
+              data-testid="nav-mobile-download"
               className="mt-1 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
             >
               {labels.download}

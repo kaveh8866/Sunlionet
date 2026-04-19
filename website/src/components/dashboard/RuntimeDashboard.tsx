@@ -31,8 +31,9 @@ export function RuntimeDashboard() {
   const uiStatusText = useMemo(() => {
     if (uiStatus === "CONNECTED") return copy.status.connected;
     if (uiStatus === "CONNECTING") return copy.status.connecting;
+    if (uiStatus === "ERROR") return copy.status.error;
     return copy.status.disconnected;
-  }, [uiStatus, copy.status.connected, copy.status.connecting, copy.status.disconnected]);
+  }, [uiStatus, copy.status.connected, copy.status.connecting, copy.status.disconnected, copy.status.error]);
   const securityStatusText = uiStatus === "CONNECTED" ? copy.status.secure : copy.status.notSecure;
 
   const mergeEvents = useCallback((prev: RuntimeEvent[], incoming: RuntimeEvent[]) => {

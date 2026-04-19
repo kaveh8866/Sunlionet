@@ -4,7 +4,6 @@
     <string name="app_name_test">SunLionet (Test Build)</string>
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
-    <string name="import_bundle">Import Bundle</string>
     <string name="import_configuration">Import configuration</string>
     <string name="scan_qr">Scan QR</string>
     <string name="paste_link">Paste link</string>
@@ -22,9 +21,13 @@
     <string name="status_detail_connecting">Connecting securely…</string>
     <string name="status_detail_disconnected">Not connected.</string>
     <string name="status_detail_failed">Unable to connect. Try again later.</string>
-    <string name="hint_welcome">Welcome to SunLionet.\n\n1. Import configuration\n2. Tap Connect</string>
-    <string name="hint_ready">Tap Connect to start secure connection.</string>
+    <string name="hint_welcome">Get started:\n• Import configuration\n• Tap Connect</string>
+    <string name="hint_ready">Ready. Tap Connect.</string>
     <string name="hint_retry">Network may be restricted. The app will retry automatically.</string>
+    <string name="config_ready">Configuration: Ready</string>
+    <string name="config_required">Configuration: Required</string>
+    <string name="connect_dev">Connect (dev)</string>
+    <string name="error_vpn_permission_denied">VPN permission denied.</string>
     <string name="error_config_missing">Import configuration to connect.</string>
     <string name="error_config_invalid">Configuration is invalid or expired.</string>
     <string name="error_network_blocked">Connection blocked by network.</string>

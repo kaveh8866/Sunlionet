@@ -2,7 +2,7 @@
 
 ## Components
 
-- `MainActivity`: minimal UX (Connect, Disconnect, Import Bundle, state/log display).
+- `MainActivity`: minimal UX (Connect, Disconnect, Import configuration, state/log display).
 - `ShadowNetVpnService`: Android `VpnService` owner of TUN lifecycle.
 - `AgentService`: foreground background runtime supervisor.
 - `SingBoxController`: writes/uses config path, starts/stops/restarts sing-box.
@@ -37,4 +37,3 @@ The status payload is JSON and consumed by `StateRepository`.
 - No remote telemetry.
 - Local encrypted state via existing profile/template stores.
 - Optional Pi orchestration remains non-blocking.
-

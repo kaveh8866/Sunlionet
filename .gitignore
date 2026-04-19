@@ -12,6 +12,7 @@
 
 # Android / Gradle build artifacts
 /android/.gradle/
+/android/.gradle-bootstrap/
 /android/**/build/
 /android/**/.cxx/
 /android/**/.kotlin/

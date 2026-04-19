@@ -178,7 +178,7 @@ function platformLabel(k: PlatformKey) {
     case "raspberrypi-arm64":
       return "Raspberry Pi (ARM64)";
     case "android":
-      return "Android (Termux)";
+      return "Android (APK)";
     case "source":
       return "Source code";
     default:
@@ -360,7 +360,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       },
       {
         key: "android",
-        description: "Inside supports a signed APK sideload flow and a Termux CLI fallback.",
+        description: "Signed APK sideload flow (primary). Optional Termux CLI fallback.",
         support: "Experimental",
         method: "APK + verify SHA256/signature + sideload",
       },
@@ -403,8 +403,8 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
         <Callout title={lang === "fa" ? "وضعیت پروژه" : "Project status"} tone="warning">
           {lang === "fa"
-            ? "SunLionet فعلاً در مرحله MVP/alpha است. مسیر اصلی پشتیبانی‌شده بسته‌های Linux است. قبل از نصب، checksum و فایل‌های امضاشده را حتماً بررسی کنید."
-            : "SunLionet is currently an MVP/alpha. Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a signed release APK. Always verify checksums and the signed checksum bundle before installing."}
+            ? "SunLionet فعلاً نسخه Beta (در حد MVP) است. مسیر اصلی پشتیبانی‌شده بسته‌های Linux است. قبل از نصب، checksum و فایل‌های امضاشده را حتماً بررسی کنید."
+            : "SunLionet is currently Beta (MVP-level). Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a signed release APK. Always verify checksums and the signed checksum bundle before installing."}
         </Callout>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
@@ -421,6 +421,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                 <select
                   value={selectedTag}
                   onChange={(e) => setSelectedTag(e.target.value)}
+                  data-testid="download-release-select"
                   className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
                 >
                   {releases.map((r) => (
@@ -477,6 +478,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                 <select
                   value={manualPlatform}
                   onChange={(e) => setManualPlatform(e.target.value as PlatformKey)}
+                  data-testid="download-platform-select"
                   className="w-full bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
                 >
                   <option value="unknown">{supportsAutoRecommendation ? "Auto (recommended)" : "Select…"}</option>
@@ -505,6 +507,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     <a
                       href={recommendedArtifact.href}
+                      data-testid="recommended-download"
                       className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
                       download
                     >

@@ -5,19 +5,59 @@ import org.json.JSONObject
 import java.io.File
 
 object Bridge {
-    private fun mobileClass(): Class<*> = Class.forName("com.shadownet.mobile.Mobile")
+    private val mobileClassNames = listOf(
+        "com.shadownet.mobile.Mobile",
+        "com.shadownet.mobile.mobile.Mobile",
+    )
+
+    private fun mobileClass(): Class<*> {
+        var last: Throwable? = null
+        for (name in mobileClassNames) {
+            try {
+                return Class.forName(name)
+            } catch (t: Throwable) {
+                last = t
+            }
+        }
+        throw last ?: ClassNotFoundException(mobileClassNames.firstOrNull() ?: "com.shadownet.mobile.Mobile")
+    }
 
     private fun callMobile(methodName: String, argTypes: Array<Class<*>>, args: Array<Any?>) {
         val cls = mobileClass()
-        val method = cls.getMethod(methodName, *argTypes)
-        method.invoke(null, *args)
+        val candidates = listOf(
+            methodName,
+            methodName.replaceFirstChar { it.lowercase() },
+        ).distinct()
+        var last: Throwable? = null
+        for (name in candidates) {
+            try {
+                val method = cls.getMethod(name, *argTypes)
+                method.invoke(null, *args)
+                return
+            } catch (t: Throwable) {
+                last = t
+            }
+        }
+        throw last ?: NoSuchMethodException("${cls.name}.$methodName")
     }
 
     private fun callMobileString(methodName: String): String {
         val cls = mobileClass()
-        val method = cls.getMethod(methodName)
-        val out = method.invoke(null)
-        return out as? String ?: ""
+        val candidates = listOf(
+            methodName,
+            methodName.replaceFirstChar { it.lowercase() },
+        ).distinct()
+        var last: Throwable? = null
+        for (name in candidates) {
+            try {
+                val method = cls.getMethod(name)
+                val out = method.invoke(null)
+                return out as? String ?: ""
+            } catch (t: Throwable) {
+                last = t
+            }
+        }
+        throw last ?: NoSuchMethodException("${cls.name}.$methodName")
     }
 
     fun startAgent(context: Context, usePi: Boolean = false): Result<Unit> = runCatching {

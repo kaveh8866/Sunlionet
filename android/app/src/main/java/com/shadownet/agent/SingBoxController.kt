@@ -20,47 +20,75 @@ class SingBoxController(private val context: Context) {
 
     private fun binaryFile(): File = File(context.filesDir, "bin/sing-box")
 
-    private fun assetNameForAbi(): String {
-        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        return when {
-            abi.contains("arm64") -> "bin/sing-box-arm64"
-            abi.contains("armeabi") -> "bin/sing-box-armv7"
-            else -> "bin/sing-box-arm64"
-        }
-    }
+    private data class AbiInfo(
+        val abi: String,
+        val assetName: String,
+        val expectedSha256: String,
+    )
 
-    private fun expectedSha256ForAbi(): String {
+    private fun abiInfo(): AbiInfo {
         val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         return when {
-            abi.contains("arm64") -> BuildConfig.SING_BOX_SHA256_ARM64
-            abi.contains("armeabi") -> BuildConfig.SING_BOX_SHA256_ARMV7
-            else -> BuildConfig.SING_BOX_SHA256_ARM64
+            abi.contains("x86") -> AbiInfo(
+                abi = abi,
+                assetName = "",
+                expectedSha256 = "",
+            )
+            abi.contains("arm64") -> AbiInfo(
+                abi = abi,
+                assetName = "bin/sing-box-arm64",
+                expectedSha256 = BuildConfig.SING_BOX_SHA256_ARM64,
+            )
+            abi.contains("armeabi") -> AbiInfo(
+                abi = abi,
+                assetName = "bin/sing-box-armv7",
+                expectedSha256 = BuildConfig.SING_BOX_SHA256_ARMV7,
+            )
+            else -> AbiInfo(
+                abi = abi,
+                assetName = "bin/sing-box-arm64",
+                expectedSha256 = BuildConfig.SING_BOX_SHA256_ARM64,
+            )
         }
     }
 
     fun ensureBinary(): Result<File> = runCatching {
+        val abiInfo = abiInfo()
+        if (abiInfo.abi.contains("x86")) {
+            throw IllegalStateException(
+                "sing-box is not packaged for ABI=${abiInfo.abi}. This is expected on x86/x86_64 emulators. Use an ARM64 device/emulator or add x86_64 assets.",
+            )
+        }
+
         val out = binaryFile()
         if (!out.exists()) {
             out.parentFile?.mkdirs()
             try {
-                context.assets.open(assetNameForAbi()).use { input ->
+                context.assets.open(abiInfo.assetName).use { input ->
                     out.outputStream().use { output -> input.copyTo(output) }
                 }
             } catch (e: FileNotFoundException) {
-                throw IllegalStateException("sing-box binary missing in assets for ABI: ${android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()}")
+                throw IllegalStateException("sing-box binary missing in assets: ${abiInfo.assetName} (ABI=${abiInfo.abi})")
             }
-        }
-        val expected = expectedSha256ForAbi()
-        if (expected.isBlank()) {
-            throw IllegalStateException("expected sing-box sha256 missing for ABI: ${android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()}")
-        }
-        val actual = sha256(out)
-        if (!actual.equals(expected, ignoreCase = true)) {
-            throw IllegalStateException("sing-box checksum mismatch: expected=$expected actual=$actual")
         }
         if (!out.setExecutable(true)) {
             throw IllegalStateException("failed to mark sing-box executable")
         }
+
+        val expected = abiInfo.expectedSha256.trim()
+        if (expected.isBlank()) {
+            if (BuildConfig.DEBUG) {
+                Logs.w("sing-box", "checksum unavailable for ABI=${abiInfo.abi} (debug build); skipping verification")
+                return@runCatching out
+            }
+            throw IllegalStateException("expected sing-box sha256 missing for ABI=${abiInfo.abi}")
+        }
+
+        val actual = sha256(out)
+        if (!actual.equals(expected, ignoreCase = true)) {
+            throw IllegalStateException("sing-box checksum mismatch: expected=$expected actual=$actual")
+        }
+
         out
     }
 

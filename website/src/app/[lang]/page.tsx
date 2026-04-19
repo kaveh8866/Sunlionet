@@ -140,9 +140,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             </div>
           </section>
 
-          <div id="downloads">
-            <DownloadSection releases={releases} basePrefix={base} />
-          </div>
+          <DownloadSection releases={releases} basePrefix={base} />
 
           <section className="grid gap-6">
             <SectionHeader

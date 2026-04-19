@@ -25,7 +25,7 @@ This is a controlled beta release intended for sensitive environments. It may fa
 
 ## Quick Start
 
-1. Import a configuration bundle (`.bundle`) using Import Bundle.
+1. Import a configuration bundle (`.bundle`) using Import configuration.
 2. Tap Connect.
 3. Approve the VPN permission prompt.
 4. Wait for Connected status.

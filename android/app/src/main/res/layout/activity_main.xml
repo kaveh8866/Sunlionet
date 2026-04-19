@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:fillViewport="true"
     android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
     <TextView
         android:id="@+id/textAppLabel"
@@ -25,14 +30,6 @@
         android:layout_marginTop="8dp"
         android:text="@string/tester_safety_message" />
 
-    <TextView
-        android:id="@+id/textHint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/hint_welcome"
-        android:textSize="14sp" />
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -42,17 +39,19 @@
 
         <View
             android:id="@+id/statusDot"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
             android:layout_marginEnd="8dp"
-            android:background="@android:color/darker_gray" />
+            android:background="@android:color/darker_gray"
+            android:importantForAccessibility="no" />
 
         <TextView
             android:id="@+id/textStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/status_disconnected"
-            android:textSize="18sp" />
+            android:textSize="18sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <TextView
@@ -63,11 +62,42 @@
         android:text="@string/status_detail_disconnected" />
 
     <TextView
+        android:id="@+id/textConfigStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/textHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/hint_welcome"
+        android:textSize="14sp" />
+
+    <TextView
         android:id="@+id/textError"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="8dp"
+        android:minHeight="48dp"
+        android:background="#1AEF4444"
+        android:padding="12dp"
         android:text="@string/error_none"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
+
+    <ProgressBar
+        android:id="@+id/progressConnecting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:accessibilityLiveRegion="polite"
+        android:contentDescription="@string/status_connecting"
         android:visibility="gone" />
 
     <Button
@@ -116,8 +146,7 @@
     <LinearLayout
         android:id="@+id/panelAdvanced"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:visibility="gone"
         android:orientation="vertical">
@@ -159,12 +188,12 @@
         <TextView
             android:id="@+id/textDebugPanel"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
+            android:layout_height="200dp"
             android:layout_marginTop="12dp"
-            android:layout_weight="1"
             android:background="#11000000"
             android:padding="8dp"
             android:textSize="12sp" />
     </LinearLayout>
 
-</LinearLayout>
+    </LinearLayout>
+</ScrollView>

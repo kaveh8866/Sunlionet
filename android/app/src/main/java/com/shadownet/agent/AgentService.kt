@@ -65,7 +65,7 @@ class AgentService : Service() {
 
     override fun onDestroy() {
         unregisterNetworkSwitchMonitor()
-        stopAgent()
+        stopAgent(clearUi = false)
         super.onDestroy()
     }
 
@@ -76,6 +76,7 @@ class AgentService : Service() {
             val msg = it.message ?: "start failed"
             Logs.e("agent", msg)
             val mapped = mapBridgeErrorToUi(msg)
+            secure.setDesiredConnected(false)
             repo.save(
                 UiState(
                     status = "Error",
@@ -83,7 +84,8 @@ class AgentService : Service() {
                     lastErrorDetails = mapped.second,
                 ),
             )
-            stopAgent()
+            stopVpnService()
+            stopAgent(clearUi = false)
             return
         }
         Logs.i("agent", "started")
@@ -105,13 +107,32 @@ class AgentService : Service() {
                     Logs.w("agent", merged.lastError)
                 }
 
+                if (merged.status == "Error" && merged.lastError.isNotBlank()) {
+                    secure.setDesiredConnected(false)
+                    stopVpnService()
+                    stopAgent(clearUi = false)
+                    return@launch
+                }
+
                 val configPath = File(filesDir, "runtime/config.json").absolutePath
                 val cfgExists = File(configPath).exists()
                 if (cfgExists && !controller.isRunning()) {
                     if (restartAttempts < 3) {
                         restartAttempts++
                         controller.start(configPath).onFailure {
-                            Logs.e("agent", "sing-box start failed: ${it.message}")
+                            val msg = it.message ?: "sing-box start failed"
+                            Logs.e("agent", "sing-box start failed: $msg")
+                            secure.setDesiredConnected(false)
+                            repo.save(
+                                merged.copy(
+                                    status = "Error",
+                                    lastAction = "Runtime unavailable",
+                                    lastError = "Runtime unavailable",
+                                    lastErrorDetails = msg,
+                                ),
+                            )
+                            stopVpnService()
+                            stopAgent(clearUi = false)
                         }
                     } else {
                         Logs.w("agent", "restart limit reached")
@@ -167,15 +188,23 @@ class AgentService : Service() {
         }
     }
 
-    private fun stopAgent() {
+    private fun stopAgent(clearUi: Boolean = true) {
         monitorJob?.cancel()
         monitorJob = null
         Bridge.stopAgent()
         controller.stop()
-        repo.save(UiState(status = "Disconnected", currentProfile = "-", lastAction = "stopped"))
+        if (clearUi) {
+            repo.save(UiState(status = "Disconnected", currentProfile = "-", lastAction = "stopped"))
+        }
         Logs.i("agent", "stopped")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun stopVpnService() {
+        runCatching {
+            startService(Intent(this, ShadowNetVpnService::class.java).apply { action = ShadowNetVpnService.ACTION_STOP })
+        }
     }
 
     private fun importBundle(path: String) {
@@ -246,6 +275,9 @@ class AgentService : Service() {
     private fun mapBridgeErrorToUi(raw: String): Pair<String, String> {
         val msg = raw.trim()
         val lower = msg.lowercase()
+        if (lower.contains("classnotfoundexception") || lower.contains("com.shadownet.mobile.mobile")) {
+            return "Native runtime unavailable" to msg
+        }
         if (lower.contains("no profiles available")) {
             return getString(R.string.error_config_missing) to "No profiles available"
         }

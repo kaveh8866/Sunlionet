@@ -1,4 +1,4 @@
-# ShadowNet Tester Guide (Controlled Rollout)
+# SunLionet Tester Guide (Controlled Rollout)
 
 ## Scope
 
@@ -20,13 +20,13 @@
 1. Receive APK from a trusted coordinator.
 2. Verify checksum/signature if provided.
 3. Install manually from local file.
-4. Open app and confirm build label: `ShadowNet (Test Build)`.
-5. Confirm version shown in app (example: `v0.1.0-test3`).
+4. Open app and confirm build label: `SunLionet Beta` (or `SunLionet (Test Build)`).
+5. Confirm version shown in app (example: `v0.2.0-beta`).
 
-## Import Bundle
+## Import Configuration
 
-1. Tap `Import Bundle`.
-2. Select the encrypted bundle file provided by your coordinator.
+1. Tap `Import configuration`.
+2. Select the encrypted configuration bundle file provided by your coordinator.
 3. Wait for import confirmation in app status.
 
 ## Connect

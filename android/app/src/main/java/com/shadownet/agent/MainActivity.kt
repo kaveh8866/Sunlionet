@@ -1,21 +1,27 @@
 package com.shadownet.agent
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.view.View
+import android.text.method.ScrollingMovementMethod
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -33,10 +39,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textHint: TextView
     private lateinit var textStatus: TextView
     private lateinit var textStatusDetail: TextView
+    private lateinit var textConfigStatus: TextView
     private lateinit var textProfile: TextView
     private lateinit var textAction: TextView
     private lateinit var textError: TextView
     private lateinit var textDebugPanel: TextView
+    private lateinit var progressConnecting: ProgressBar
     private lateinit var buttonToggle: Button
     private lateinit var sectionImport: LinearLayout
     private lateinit var buttonImport: Button
@@ -48,6 +56,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonExportLogs: Button
     private lateinit var buttonReportIssue: Button
 
+    private var pendingAfterNotificationPermission: (() -> Unit)? = null
+
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -55,7 +65,25 @@ class MainActivity : AppCompatActivity() {
             startRuntime()
         } else {
             Logs.add("[ui] vpn permission denied")
+            secure.setDesiredConnected(false)
+            repo.save(
+                UiState(
+                    status = "Error",
+                    currentProfile = "-",
+                    lastAction = "Permission required",
+                    lastError = getString(R.string.error_vpn_permission_denied),
+                    lastErrorDetails = "",
+                ),
+            )
         }
+    }
+
+    private val notificationsPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        val next = pendingAfterNotificationPermission ?: return@registerForActivityResult
+        pendingAfterNotificationPermission = null
+        next()
     }
 
     private val importLauncher = registerForActivityResult(
@@ -93,10 +121,12 @@ class MainActivity : AppCompatActivity() {
         textHint = findViewById(R.id.textHint)
         textStatus = findViewById(R.id.textStatus)
         textStatusDetail = findViewById(R.id.textStatusDetail)
+        textConfigStatus = findViewById(R.id.textConfigStatus)
         textProfile = findViewById(R.id.textProfile)
         textAction = findViewById(R.id.textAction)
         textError = findViewById(R.id.textError)
         textDebugPanel = findViewById(R.id.textDebugPanel)
+        progressConnecting = findViewById(R.id.progressConnecting)
         buttonToggle = findViewById(R.id.buttonToggle)
         sectionImport = findViewById(R.id.sectionImport)
         buttonImport = findViewById(R.id.buttonImport)
@@ -114,19 +144,21 @@ class MainActivity : AppCompatActivity() {
         textSafety.visibility = if (isTester) View.VISIBLE else View.GONE
 
         buttonToggle.setOnClickListener {
-            val st = repo.load()
             val hasBundle = hasBundle()
-            if (!hasBundle) {
-                return@setOnClickListener
-            }
             val desired = secure.isDesiredConnected()
-            if (desired && st.status == "Connected") {
+            if (desired) {
                 disconnect()
                 return@setOnClickListener
             }
-            if (!desired) {
-                requestVpnAndConnect()
+            if (!hasBundle) {
+                if (canDevConnectWithoutBundle()) {
+                    showImportOptionsDialog(allowDevConnect = true)
+                } else {
+                    showImportOptionsDialog(allowDevConnect = false)
+                }
+                return@setOnClickListener
             }
+            ensureNotificationsPermissionThen { requestVpnAndConnect() }
         }
         buttonImport.setOnClickListener {
             importLauncher.launch(arrayOf("*/*"))
@@ -163,7 +195,12 @@ class MainActivity : AppCompatActivity() {
         buttonReportIssue.setOnClickListener { reportIssue() }
         textDebugPanel.visibility = if (isTester) View.VISIBLE else View.GONE
         if (isTester) {
+            textDebugPanel.movementMethod = ScrollingMovementMethod()
             Logs.observe { textDebugPanel.post { textDebugPanel.text = it } }
+        }
+
+        if (!hasBundle()) {
+            secure.setDesiredConnected(false)
         }
 
         val loaded = repo.load()
@@ -193,6 +230,91 @@ class MainActivity : AppCompatActivity() {
         } else {
             startRuntime()
         }
+    }
+
+    private fun ensureNotificationsPermissionThen(action: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 33) {
+            action()
+            return
+        }
+        val granted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            action()
+            return
+        }
+        pendingAfterNotificationPermission = action
+        notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    private fun canDevConnectWithoutBundle(): Boolean {
+        if (!BuildConfig.DEBUG) {
+            return false
+        }
+        val fp = android.os.Build.FINGERPRINT.orEmpty()
+        val model = android.os.Build.MODEL.orEmpty()
+        val brand = android.os.Build.BRAND.orEmpty()
+        val device = android.os.Build.DEVICE.orEmpty()
+        val product = android.os.Build.PRODUCT.orEmpty()
+        val hardware = android.os.Build.HARDWARE.orEmpty()
+        return fp.contains("generic", ignoreCase = true) ||
+            fp.contains("emulator", ignoreCase = true) ||
+            fp.contains("sdk_gphone", ignoreCase = true) ||
+            model.contains("Emulator", ignoreCase = true) ||
+            model.contains("Android SDK built for", ignoreCase = true) ||
+            brand.contains("generic", ignoreCase = true) ||
+            device.contains("generic", ignoreCase = true) ||
+            product.contains("sdk_gphone", ignoreCase = true) ||
+            hardware.contains("ranchu", ignoreCase = true) ||
+            hardware.contains("goldfish", ignoreCase = true)
+    }
+
+    private fun showImportFirstDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.import_configuration))
+            .setMessage(getString(R.string.error_config_missing))
+            .setPositiveButton(getString(R.string.details_close), null)
+            .show()
+    }
+
+    private fun showImportOptionsDialog(allowDevConnect: Boolean) {
+        val items = buildList {
+            add(getString(R.string.import_configuration))
+            add(getString(R.string.scan_qr))
+            add(getString(R.string.paste_link))
+            if (allowDevConnect) {
+                add(getString(R.string.connect_dev))
+            }
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.import_configuration))
+            .setItems(items) { _, which ->
+                val selected = items[which]
+                when (selected) {
+                    getString(R.string.import_configuration) -> importLauncher.launch(arrayOf("*/*"))
+                    getString(R.string.scan_qr) -> launchQrScanner()
+                    getString(R.string.paste_link) -> pasteLinkDialog()
+                    getString(R.string.connect_dev) -> ensureNotificationsPermissionThen { requestVpnAndConnect() }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showDevConnectDialog() {
+        val msg = buildString {
+            appendLine(getString(R.string.error_config_missing))
+            appendLine()
+            append("Dev/emulator mode: continue to exercise the VPN permission + service startup flow. No real connection will be established.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.connect))
+            .setMessage(msg)
+            .setPositiveButton(getString(R.string.connect)) { _, _ ->
+                ensureNotificationsPermissionThen { requestVpnAndConnect() }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun startRuntime() {
@@ -355,8 +477,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(st: UiState) {
         val hasBundle = hasBundle()
+        val allowDevConnect = !hasBundle && canDevConnectWithoutBundle()
         val desired = secure.isDesiredConnected()
+        val isConfigMissing = !hasBundle && st.lastError == getString(R.string.error_config_missing)
         val status = when {
+            isConfigMissing -> "Disconnected"
             st.lastError.isNotBlank() -> "Failed"
             desired && st.status != "Connected" -> "Connecting"
             st.status == "Connected" -> "Connected"
@@ -380,12 +505,35 @@ class MainActivity : AppCompatActivity() {
         textStatusDetail.text = when (status) {
             "Connected" -> getString(R.string.status_detail_connected)
             "Connecting" -> getString(R.string.status_detail_connecting)
-            "Failed" -> getString(R.string.status_detail_failed)
+            "Failed" -> {
+                if (allowDevConnect) {
+                    "Dev/emulator mode: no configuration imported. You can still exercise the VPN permission flow."
+                } else {
+                    getString(R.string.status_detail_failed)
+                }
+            }
             else -> getString(R.string.status_detail_disconnected)
         }
 
-        val showError = st.lastError.isNotBlank()
+        progressConnecting.visibility = if (status == "Connecting") View.VISIBLE else View.GONE
+
+        textConfigStatus.text = if (hasBundle) getString(R.string.config_ready) else getString(R.string.config_required)
+        textConfigStatus.setTextColor(
+            if (hasBundle) {
+                Color.parseColor("#10b981")
+            } else {
+                Color.parseColor("#f59e0b")
+            },
+        )
+
+        val showError = st.lastError.isNotBlank() && !isConfigMissing
         textError.text = st.lastError
+        textError.contentDescription =
+            if (st.lastErrorDetails.isNotBlank()) {
+                "${st.lastError}. ${getString(R.string.details_title)}"
+            } else {
+                st.lastError
+            }
         textError.visibility = if (showError) View.VISIBLE else View.GONE
 
         sectionImport.visibility = if (hasBundle) View.GONE else View.VISIBLE
@@ -402,11 +550,10 @@ class MainActivity : AppCompatActivity() {
         textAction.text = "Last action: ${st.lastAction}"
 
         buttonToggle.text = when {
-            !hasBundle -> getString(R.string.connect)
-            desired && st.status == "Connected" -> getString(R.string.disconnect)
-            desired -> getString(R.string.status_connecting)
+            desired -> getString(R.string.disconnect)
+            !hasBundle && allowDevConnect -> getString(R.string.connect_dev)
             else -> getString(R.string.connect)
         }
-        buttonToggle.isEnabled = hasBundle && !(desired && st.status != "Connected")
+        buttonToggle.isEnabled = true
     }
 }

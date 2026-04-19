@@ -116,7 +116,7 @@ sudo systemctl enable --now sunlionet-inside.service || sudo systemctl enable --
           </Step>
 
           <Step n="3" title="Install (Android app)">
-            Install SunLionet as a signed APK from GitHub Releases, then import a trusted bundle and connect.
+            Install SunLionet as a signed APK from GitHub Releases, then import a trusted configuration bundle and connect.
             <div className="mt-4 text-sm text-muted-foreground">
               Follow:{" "}
               <Link href={hrefFor("/docs/install/android")} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
