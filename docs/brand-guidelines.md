@@ -108,6 +108,5 @@ C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\public\brand\sunlionet-mono-512.pn
 C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\public\brand\sunlionet-mono-64.png	4765d9b22eb2612ffc55620fc64ea3cf3a34fb3fc721f42a23a7762138df59e4
 C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\public\favicon.ico	13b7aebc437c94a3a039778803fb14d0aa56ca692b48674d4cba19f0848548cd
 C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\src\app\favicon.ico	13b7aebc437c94a3a039778803fb14d0aa56ca692b48674d4cba19f0848548cd
-C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\src\app\favcon.ico	13b7aebc437c94a3a039778803fb14d0aa56ca692b48674d4cba19f0848548cd
 C:\Users\Kaveh\Desktop\Iran-Agent-Vpn\website\src\app\icon.png	b2b4766413fc6520a12a7befb96b80d24e2eceecb9fd208ae589c2ba4aad9839
 ```

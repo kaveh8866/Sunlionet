@@ -11,7 +11,7 @@
 
 یادداشت مهاجرت: نام مخزن در دوره گذار هنوز `shadownet-agent` است؛ بنابراین ممکن است بعضی مسیرها، نام‌گذاری آرتیفکت‌ها، و شناسه‌های پروتکل هنوز از نام‌گذاری قدیمی `shadownet-*` استفاده کنند.
 
-سایت مستندات (GitHub Pages): https://kaveh8866.github.io/shadownet-agent/
+سایت مستندات (GitHub Pages): https://kaveh8866.github.io/Sunlionet/
 
 ---
 

@@ -60,7 +60,7 @@ export default async function DocPage({
   params,
   basePrefix,
 }: {
-  params: Promise<{ slug: string[] }>;
+  params: Promise<{ slug: string[] }> | { slug: string[] };
   basePrefix?: string;
 }) {
   const { slug } = await params;

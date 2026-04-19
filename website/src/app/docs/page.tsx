@@ -6,8 +6,12 @@ import { SectionHeader } from "../../components/ui/SectionHeader";
 import { getDocsIndex, readDocMarkdownBySlug } from "../../lib/docs/fs";
 import { renderMarkdown } from "../../lib/docs/markdown";
 
-export default async function DocsIndexPage({ params }: { params: Promise<{ lang?: string }> }) {
-  const resolved = await params;
+export default async function DocsIndexPage({
+  params,
+}: {
+  params?: Promise<{ lang?: string }> | { lang?: string };
+}) {
+  const resolved = (await params) ?? {};
   const entries = await getDocsIndex();
   const index = new Map(entries.map((e) => [e.slug.join("/"), e]));
   const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";

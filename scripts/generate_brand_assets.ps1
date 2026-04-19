@@ -84,7 +84,6 @@ $invert = New-Object System.Drawing.Imaging.ColorMatrix (,@(
 $sizes = @(16, 32, 48, 64, 128, 256, 512)
 
 Copy-Item -Force $srcIco (Join-Path $outRoot "sunlionet.ico")
-Copy-Item -Force $srcIco (Join-Path $outWebApp "favicon.ico")
 Copy-Item -Force $srcIco (Join-Path $outWebApp "favcon.ico")
 Copy-Item -Force $srcIco (Join-Path $root "website\public\favicon.ico")
 

@@ -16,7 +16,7 @@ export default async function BlogPostPage({
   params,
   basePrefix,
 }: {
-  params: Promise<{ slug: string[] }>;
+  params: Promise<{ slug: string[] }> | { slug: string[] };
   basePrefix?: string;
 }) {
   const { slug } = await params;
@@ -31,7 +31,8 @@ export default async function BlogPostPage({
 
   if (!resolved) notFound();
 
-  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.entry.slug, basePrefix: resolvedBase, routeBase: "blog" });
+  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.entry.slug, routeBase: "blog" });
+  const renderLang = resolved.entry.lang;
 
   return (
     <div className="grid gap-10">
@@ -51,7 +52,11 @@ export default async function BlogPostPage({
 
       <PageHeader title={resolved.entry.title} />
 
-      <article className="docs-prose min-w-0" lang={lang === "fa" ? "fa" : undefined} dir={lang === "fa" ? "rtl" : undefined}>
+      <article
+        className="docs-prose min-w-0"
+        lang={renderLang === "fa" ? "fa" : undefined}
+        dir={renderLang === "fa" ? "rtl" : undefined}
+      >
         {rendered.nodes}
       </article>
     </div>

@@ -15,7 +15,7 @@ It ships as:
 
 Migration note: this repository is still named `shadownet-agent` during the transition. Some paths, package imports, release artifacts, and protocol identifiers may still use legacy `shadownet-*` naming until the release pipeline is fully renamed.
 
-Documentation site (GitHub Pages): https://kaveh8866.github.io/shadownet-agent/
+Documentation site (GitHub Pages): https://kaveh8866.github.io/Sunlionet/
 
 Persian: see [README.fa.md](README.fa.md).
 
