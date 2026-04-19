@@ -31,7 +31,7 @@ export default async function UpdatePage({
 
   if (!resolved) notFound();
 
-  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.entry.slug, basePrefix: resolvedBase, routeBase: "updates" });
+  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.entry.slug });
 
   return (
     <div className="grid gap-10">

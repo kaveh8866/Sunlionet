@@ -33,8 +33,7 @@ export default async function BlogPostPage({
 
   const rendered = renderMarkdown(resolved.raw, {
     baseSlug: resolved.entry.slug,
-    basePrefix: resolvedBase,
-    routeBase: "blog",
+    
   });
   const renderLang = resolved.entry.lang;
 
