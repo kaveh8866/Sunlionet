@@ -31,7 +31,11 @@ export default async function BlogPostPage({
 
   if (!resolved) notFound();
 
-  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.entry.slug, routeBase: "blog" });
+  const rendered = renderMarkdown(resolved.raw, {
+    baseSlug: resolved.entry.slug,
+    basePrefix: resolvedBase,
+    routeBase: "blog",
+  });
   const renderLang = resolved.entry.lang;
 
   return (

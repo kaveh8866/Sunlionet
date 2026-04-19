@@ -20,7 +20,10 @@ export default async function DocsIndexPage({
 
   const overviewSlug = isFa ? ["fa", "index"] : ["index"];
   const overview = await readDocMarkdownBySlug(overviewSlug);
-  const rendered = overview ? renderMarkdown(overview.raw, { baseSlug: overviewSlug, basePrefix: resolvedBasePrefix }) : null;
+  const overviewRenderSlug = isFa ? overviewSlug.slice(1) : overviewSlug;
+  const rendered = overview
+    ? renderMarkdown(overview.raw, { baseSlug: overviewRenderSlug, basePrefix: resolvedBasePrefix })
+    : null;
   const titleFor = (key: string, fallback: string) => index.get(isFa ? `fa/${key}` : key)?.title ?? fallback;
 
   return (

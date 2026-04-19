@@ -93,7 +93,9 @@ export default async function DocPage({
 
   if (!resolved) notFound();
 
-  const rendered = renderMarkdown(resolved.raw, { baseSlug: resolved.doc.slug, basePrefix: resolvedBase });
+  const renderBaseSlug =
+    prefersFa && resolved.doc.slug[0] === "fa" ? resolved.doc.slug.slice(1) : resolved.doc.slug;
+  const rendered = renderMarkdown(resolved.raw, { baseSlug: renderBaseSlug, basePrefix: resolvedBase });
   const isFarsi = resolved.doc.slug[0] === "fa";
   const displaySlug =
     prefersFa && normalized[0] === "fa" ? normalized.slice(1).filter((p) => p !== "index") : resolved.doc.slug.filter((p) => p !== "index");
