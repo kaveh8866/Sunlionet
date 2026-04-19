@@ -74,6 +74,12 @@ export default async function DocPage({
   if (prefersFa && normalized[0] === "fa" && normalized[1] === "fa") {
     redirect(`${resolvedBase}/docs/${normalized.slice(2).join("/")}`);
   }
+  if (!prefersFa && normalized[0] === "fa") {
+    const rest = normalized.slice(1);
+    if (rest.length === 0 || (rest.length === 1 && rest[0] === "index")) redirect(`/fa/docs`);
+    if (rest.at(-1) === "index") redirect(`/fa/docs/${rest.slice(0, -1).join("/")}`);
+    redirect(`/fa/docs/${rest.join("/")}`);
+  }
   if (normalized.length === 1 && normalized[0] === "index") redirect(`${resolvedBase}/docs`);
 
   const direct = await readDocMarkdownBySlug(normalized);
@@ -93,8 +99,7 @@ export default async function DocPage({
 
   if (!resolved) notFound();
 
-  const renderBaseSlug =
-    prefersFa && resolved.doc.slug[0] === "fa" ? resolved.doc.slug.slice(1) : resolved.doc.slug;
+  const renderBaseSlug = resolved.doc.slug[0] === "fa" ? resolved.doc.slug.slice(1) : resolved.doc.slug;
   const rendered = renderMarkdown(resolved.raw, { baseSlug: renderBaseSlug, basePrefix: resolvedBase });
   const isFarsi = resolved.doc.slug[0] === "fa";
   const displaySlug =
