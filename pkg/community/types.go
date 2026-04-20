@@ -3,6 +3,7 @@ package community
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -40,9 +41,11 @@ type Event struct {
 }
 
 type State struct {
-	SchemaVersion int         `json:"schema_version"`
-	UpdatedAt     int64       `json:"updated_at"`
-	Communities   []Community `json:"communities"`
+	SchemaVersion int            `json:"schema_version"`
+	UpdatedAt     int64          `json:"updated_at"`
+	Communities   []Community    `json:"communities"`
+	Invites       []StoredInvite `json:"invites,omitempty"`
+	Members       []Member       `json:"members,omitempty"`
 }
 
 type Community struct {
@@ -51,11 +54,18 @@ type Community struct {
 	Role      Role        `json:"role"`
 }
 
+type StoredInvite struct {
+	Invite Invite `json:"invite"`
+	Uses   int    `json:"uses"`
+}
+
 func NewState() *State {
 	return &State{
 		SchemaVersion: SchemaV1,
 		UpdatedAt:     time.Now().Unix(),
 		Communities:   []Community{},
+		Invites:       []StoredInvite{},
+		Members:       []Member{},
 	}
 }
 
@@ -83,6 +93,39 @@ func (s *State) Validate() error {
 		case RoleOwner, RoleModerator, RoleMember:
 		default:
 			return fmt.Errorf("community: invalid role for %q: %q", c.ID, c.Role)
+		}
+	}
+	seenInv := make(map[InviteID]struct{}, len(s.Invites))
+	for i := range s.Invites {
+		if s.Invites[i].Uses < 0 {
+			return fmt.Errorf("community: invalid invite uses for index %d", i)
+		}
+		inv := s.Invites[i].Invite
+		if inv.Schema != SchemaV1 || inv.ID == "" || inv.Community == "" || strings.TrimSpace(inv.IssuerPubB64) == "" {
+			return fmt.Errorf("community: invalid invite at index %d", i)
+		}
+		if err := inv.VerifySignature(); err != nil {
+			return fmt.Errorf("community: invalid invite signature at index %d: %w", i, err)
+		}
+		if _, ok := seenInv[s.Invites[i].Invite.ID]; ok {
+			return fmt.Errorf("community: duplicate invite id: %q", s.Invites[i].Invite.ID)
+		}
+		seenInv[s.Invites[i].Invite.ID] = struct{}{}
+	}
+	for i := range s.Members {
+		m := s.Members[i]
+		if m.Community == "" || strings.TrimSpace(m.MemberPubB64) == "" {
+			return fmt.Errorf("community: invalid member at index %d", i)
+		}
+		switch m.Role {
+		case RoleOwner, RoleModerator, RoleMember:
+		default:
+			return fmt.Errorf("community: invalid member role at index %d: %q", i, m.Role)
+		}
+		switch m.Status {
+		case MemberActive, MemberRevoked, MemberBanned:
+		default:
+			return fmt.Errorf("community: invalid member status at index %d: %q", i, m.Status)
 		}
 	}
 	return nil

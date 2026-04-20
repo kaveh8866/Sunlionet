@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -22,8 +23,20 @@ type DeviceJoinRequest struct {
 }
 
 func NewDeviceJoinRequest(personaID PersonaID, devicePubB64 string) (*DeviceJoinRequest, error) {
+	deviceID, err := newDeviceID()
+	if err != nil {
+		return nil, err
+	}
+	return NewDeviceJoinRequestForDevice(personaID, deviceID, devicePubB64)
+}
+
+func NewDeviceJoinRequestForDevice(personaID PersonaID, deviceID string, devicePubB64 string) (*DeviceJoinRequest, error) {
 	if personaID == "" {
 		return nil, errors.New("identity: persona_id required")
+	}
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return nil, errors.New("identity: device_id required")
 	}
 	if devicePubB64 == "" {
 		return nil, errors.New("identity: device_pub_b64url required")
@@ -34,10 +47,6 @@ func NewDeviceJoinRequest(personaID PersonaID, devicePubB64 string) (*DeviceJoin
 	}
 	if len(pub) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("identity: invalid device pub size: %d", len(pub))
-	}
-	deviceID, err := newDeviceID()
-	if err != nil {
-		return nil, err
 	}
 	now := time.Now()
 	nonce, err := newNonceB64(24)
@@ -172,5 +181,67 @@ func (p *DeviceJoinPackage) Validate(personaPubB64 string) error {
 	if err := VerifyDeviceCert(personaPubB64, &p.Cert); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (p *DeviceJoinPackage) Encode() (string, error) {
+	if p == nil {
+		return "", errors.New("identity: join package is nil")
+	}
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return "sn4dp:" + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func DecodeDeviceJoinPackage(s string) (*DeviceJoinPackage, error) {
+	if s == "" {
+		return nil, errors.New("identity: join package string is empty")
+	}
+	if len(s) < 6 || s[:6] != "sn4dp:" {
+		return nil, errors.New("identity: invalid join package prefix")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s[6:])
+	if err != nil {
+		return nil, fmt.Errorf("identity: decode join package: %w", err)
+	}
+	var pkg DeviceJoinPackage
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		return nil, err
+	}
+	return &pkg, nil
+}
+
+func UpsertDeviceFromJoinPackage(state *State, personaPubB64 string, pkg *DeviceJoinPackage) error {
+	if state == nil {
+		return errors.New("identity: state is nil")
+	}
+	if pkg == nil {
+		return errors.New("identity: join package is nil")
+	}
+	if err := pkg.Validate(personaPubB64); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	for i := range state.Devices {
+		if state.Devices[i].PersonaID == pkg.PersonaID && state.Devices[i].DeviceID == pkg.DeviceID {
+			state.Devices[i].SignPubB64 = pkg.DevicePubB64
+			state.Devices[i].Trust = DeviceTrusted
+			state.Devices[i].RevokedAt = 0
+			state.UpdatedAt = now
+			return nil
+		}
+	}
+	state.Devices = append(state.Devices, Device{
+		PersonaID:   pkg.PersonaID,
+		DeviceID:    pkg.DeviceID,
+		CreatedAt:   now,
+		Trust:       DeviceTrusted,
+		Label:       "linked-device",
+		SignPubB64:  pkg.DevicePubB64,
+		SignPrivB64: "",
+	})
+	state.UpdatedAt = now
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kaveh/shadownet-agent/pkg/chat"
 	"github.com/kaveh/shadownet-agent/pkg/detector"
 	"github.com/kaveh/shadownet-agent/pkg/identity"
 	"github.com/kaveh/shadownet-agent/pkg/llm"
@@ -136,10 +137,23 @@ func main() {
 			} else if len(idState.Personas) == 0 {
 				log.Printf("No personas configured, skipping relay pollers")
 			} else {
+				chatStorePath := filepath.Join(filepath.Dir(storePath), "chat.enc")
+				chatStore, err := chat.NewStore(chatStorePath, masterKey)
+				if err != nil {
+					log.Printf("Chat store init failed: %v", err)
+				}
+				var chatSvc *chat.Service
+				if chatStore != nil {
+					chatSvc, err = chat.NewService(chatStore)
+					if err != nil {
+						log.Printf("Chat service init failed: %v", err)
+					}
+				}
 				rclient := relay.NewHTTPClient(relayURL)
 				var idMu sync.Mutex
 				for i := range idState.Personas {
 					personaID := idState.Personas[i].ID
+					persona := idState.Personas[i]
 					b, created, err := idState.EnsureMailboxBinding(personaID)
 					if err != nil {
 						log.Printf("Mailbox binding init failed for persona %s: %v", personaID, err)
@@ -149,7 +163,7 @@ func main() {
 						_ = idStore.Save(idState)
 					}
 					binding := *b
-					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, personaID, binding, mailboxRotationSec, decoyMailboxCount)
+					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, chatSvc, &persona, personaID, binding, mailboxRotationSec, decoyMailboxCount)
 				}
 			}
 		}
@@ -188,6 +202,8 @@ func runPersonaPollerRotationLoop(
 	idStore *identity.Store,
 	idState *identity.State,
 	idMu *sync.Mutex,
+	chatSvc *chat.Service,
+	persona *identity.Persona,
 	personaID identity.PersonaID,
 	binding identity.MailboxBinding,
 	rotationSec int,
@@ -280,7 +296,7 @@ func runPersonaPollerRotationLoop(
 				DecoyLimit:        decoyLimit,
 				DecoyPullJitterMs: decoyPullJitterMs,
 				Handle: func(ctx context.Context, msgs []relay.Message) error {
-					handleRelayMessages(idStore, idState, idMu, personaID, msgs)
+					handleRelayMessages(ctx, activeRelay, idStore, idState, idMu, chatSvc, persona, personaID, msgs)
 					return nil
 				},
 			},
@@ -314,33 +330,39 @@ func runPersonaPollerRotationLoop(
 	}
 }
 
-func handleRelayMessages(store *identity.Store, state *identity.State, mu *sync.Mutex, personaID identity.PersonaID, msgs []relay.Message) {
+func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Store, state *identity.State, mu *sync.Mutex, chatSvc *chat.Service, persona *identity.Persona, personaID identity.PersonaID, msgs []relay.Message) {
 	if store == nil || state == nil || len(msgs) == 0 {
 		return
 	}
 	changed := false
 	now := time.Now()
 	for mi := range msgs {
-		env, err := messaging.DecodeEnvelope(string(msgs[mi].Envelope))
+		envStr := string(msgs[mi].Envelope)
+		env, err := messaging.DecodeEnvelope(envStr)
 		if err != nil {
 			continue
 		}
+		var plaintext []byte
 		mu.Lock()
 		for i := range state.PreKeys {
 			priv, err := state.PreKeys[i].DecodePrivate()
 			if err != nil {
 				continue
 			}
-			_, _, err = messaging.DecryptWithPreKey(env, priv)
+			pt, _, err := messaging.DecryptWithPreKey(env, priv)
 			if err != nil {
 				continue
 			}
+			plaintext = pt
 			state.PreKeys = append(state.PreKeys[:i], state.PreKeys[i+1:]...)
 			state.UpdatedAt = now.Unix()
 			changed = true
 			break
 		}
 		mu.Unlock()
+		if chatSvc != nil && persona != nil && len(plaintext) > 0 {
+			_ = chatSvc.ApplyIncomingWithRelay(ctx, r, persona, msgs[mi], envStr, plaintext)
+		}
 	}
 	if changed {
 		mu.Lock()

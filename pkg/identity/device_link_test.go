@@ -35,4 +35,22 @@ func TestDeviceJoinRequestEncodeDecodeApprove(t *testing.T) {
 	if err := pkg.Validate(p.SignPubB64); err != nil {
 		t.Fatalf("Validate join package: %v", err)
 	}
+	pkgEnc, err := pkg.Encode()
+	if err != nil {
+		t.Fatalf("pkg.Encode: %v", err)
+	}
+	pkgDec, err := DecodeDeviceJoinPackage(pkgEnc)
+	if err != nil {
+		t.Fatalf("DecodeDeviceJoinPackage: %v", err)
+	}
+	st := NewState()
+	if err := UpsertDeviceFromJoinPackage(st, p.SignPubB64, pkgDec); err != nil {
+		t.Fatalf("UpsertDeviceFromJoinPackage: %v", err)
+	}
+	if len(st.Devices) != 1 {
+		t.Fatalf("expected 1 device, got %d", len(st.Devices))
+	}
+	if st.Devices[0].Trust != DeviceTrusted {
+		t.Fatalf("expected trusted device")
+	}
 }
