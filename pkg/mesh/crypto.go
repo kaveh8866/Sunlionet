@@ -45,20 +45,13 @@ func (c *Crypto) PublicKey() [32]byte {
 	return c.pubKey
 }
 
-func (c *Crypto) EncryptOffer(offer ProxyOffer, recipientPub [32]byte) (MeshMessage, error) {
-	plaintext, err := json.Marshal(offer)
-	if err != nil {
-		return MeshMessage{}, err
-	}
-
+func (c *Crypto) EncryptPayload(plaintext []byte, recipientPub [32]byte) (MeshMessage, error) {
 	var nonce [24]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return MeshMessage{}, err
 	}
-
 	rpub := recipientPub
 	ciphertext := box.Seal(nil, plaintext, &nonce, &rpub, &c.privKey)
-
 	return MeshMessage{
 		Nonce:      nonce,
 		Ciphertext: ciphertext,
@@ -66,10 +59,26 @@ func (c *Crypto) EncryptOffer(offer ProxyOffer, recipientPub [32]byte) (MeshMess
 	}, nil
 }
 
-func (c *Crypto) DecryptOffer(msg MeshMessage) (ProxyOffer, error) {
+func (c *Crypto) DecryptPayload(msg MeshMessage) ([]byte, error) {
 	plaintext, ok := box.Open(nil, msg.Ciphertext, &msg.Nonce, &msg.SenderPub, &c.privKey)
 	if !ok {
-		return ProxyOffer{}, errDecrypt
+		return nil, errDecrypt
+	}
+	return plaintext, nil
+}
+
+func (c *Crypto) EncryptOffer(offer ProxyOffer, recipientPub [32]byte) (MeshMessage, error) {
+	plaintext, err := json.Marshal(offer)
+	if err != nil {
+		return MeshMessage{}, err
+	}
+	return c.EncryptPayload(plaintext, recipientPub)
+}
+
+func (c *Crypto) DecryptOffer(msg MeshMessage) (ProxyOffer, error) {
+	plaintext, err := c.DecryptPayload(msg)
+	if err != nil {
+		return ProxyOffer{}, err
 	}
 
 	var offer ProxyOffer

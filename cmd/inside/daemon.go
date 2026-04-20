@@ -17,11 +17,15 @@ import (
 	"github.com/kaveh/sunlionet-agent/pkg/chat"
 	"github.com/kaveh/sunlionet-agent/pkg/detector"
 	"github.com/kaveh/sunlionet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/ledger"
+	"github.com/kaveh/sunlionet-agent/pkg/ledgersync"
 	"github.com/kaveh/sunlionet-agent/pkg/llm"
+	"github.com/kaveh/sunlionet-agent/pkg/mesh"
 	"github.com/kaveh/sunlionet-agent/pkg/messaging"
 	"github.com/kaveh/sunlionet-agent/pkg/policy"
 	"github.com/kaveh/sunlionet-agent/pkg/profile"
 	"github.com/kaveh/sunlionet-agent/pkg/relay"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
 )
 
@@ -149,6 +153,37 @@ func main() {
 						log.Printf("Chat service init failed: %v", err)
 					}
 				}
+
+				var ledgerStore *ledger.Store
+				var ledgerSvc *ledgersync.Service
+				ledgerStorePath := filepath.Join(filepath.Dir(storePath), "ledger.enc")
+				ledgerStore, err = ledger.NewStore(ledgerStorePath, masterKey)
+				if err != nil {
+					log.Printf("Ledger store init failed: %v", err)
+				} else {
+					snap, err := ledgerStore.Load()
+					if err != nil {
+						log.Printf("Ledger store load failed: %v", err)
+					} else {
+						l, err := ledger.NewFromSnapshot(snap)
+						if err != nil {
+							log.Printf("Ledger snapshot invalid: %v", err)
+						} else {
+							crypto, err := mesh.NewCrypto()
+							if err != nil {
+								log.Printf("Ledger sync crypto init failed: %v", err)
+							} else {
+								pol := ledger.ProductionPolicy()
+								pol.RequireKnownPrev = false
+								ledgerSvc, err = ledgersync.New(&nullMesh{}, crypto, l, &pol, nil, ledgersync.Options{})
+								if err != nil {
+									log.Printf("Ledger sync service init failed: %v", err)
+								}
+							}
+						}
+					}
+				}
+
 				rclient := relay.NewHTTPClient(relayURL)
 				var idMu sync.Mutex
 				for i := range idState.Personas {
@@ -163,7 +198,7 @@ func main() {
 						_ = idStore.Save(idState)
 					}
 					binding := *b
-					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, chatSvc, &persona, personaID, binding, mailboxRotationSec, decoyMailboxCount)
+					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, chatSvc, ledgerStore, ledgerSvc, &persona, personaID, binding, mailboxRotationSec, decoyMailboxCount)
 				}
 			}
 		}
@@ -203,6 +238,8 @@ func runPersonaPollerRotationLoop(
 	idState *identity.State,
 	idMu *sync.Mutex,
 	chatSvc *chat.Service,
+	ledgerStore *ledger.Store,
+	ledgerSvc *ledgersync.Service,
 	persona *identity.Persona,
 	personaID identity.PersonaID,
 	binding identity.MailboxBinding,
@@ -296,7 +333,7 @@ func runPersonaPollerRotationLoop(
 				DecoyLimit:        decoyLimit,
 				DecoyPullJitterMs: decoyPullJitterMs,
 				Handle: func(ctx context.Context, msgs []relay.Message) error {
-					handleRelayMessages(ctx, activeRelay, idStore, idState, idMu, chatSvc, persona, personaID, msgs)
+					handleRelayMessages(ctx, activeRelay, idStore, idState, idMu, chatSvc, ledgerStore, ledgerSvc, persona, personaID, msgs)
 					return nil
 				},
 			},
@@ -330,7 +367,7 @@ func runPersonaPollerRotationLoop(
 	}
 }
 
-func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Store, state *identity.State, mu *sync.Mutex, chatSvc *chat.Service, persona *identity.Persona, personaID identity.PersonaID, msgs []relay.Message) {
+func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Store, state *identity.State, mu *sync.Mutex, chatSvc *chat.Service, ledgerStore *ledger.Store, ledgerSvc *ledgersync.Service, persona *identity.Persona, personaID identity.PersonaID, msgs []relay.Message) {
 	if store == nil || state == nil || len(msgs) == 0 {
 		return
 	}
@@ -355,12 +392,30 @@ func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Sto
 			break
 		}
 		mu.Unlock()
-		if chatSvc != nil && persona != nil && len(plaintext) > 0 {
+		handledByLedger := false
+		if ledgerSvc != nil && ledgerStore != nil && len(plaintext) > 0 {
+			peerID := "relay:" + string(msgs[mi].Mailbox)
+			ok, rep, _ := ledgerSvc.TryApplyWirePlaintext(peerID, plaintext)
+			handledByLedger = ok
+			if rep.Applied > 0 && ledgerSvc.Ledger() != nil {
+				_ = ledgerStore.Save(ledgerSvc.Ledger().Snapshot())
+			}
+		}
+		if !handledByLedger && chatSvc != nil && persona != nil && len(plaintext) > 0 {
 			_ = chatSvc.ApplyIncomingWithRelay(ctx, r, persona, msgs[mi], envStr, plaintext)
 		}
 	}
 	_ = personaID
 }
+
+type nullMesh struct{}
+
+func (m *nullMesh) Broadcast([]byte) error { return nil }
+func (m *nullMesh) Receive(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+func (m *nullMesh) RuntimeMode() runtimecfg.RuntimeMode { return runtimecfg.ModeReal }
 
 // runDetectionSuite runs the fast active+passive checks (must take <5s total)
 func runDetectionSuite(anomalies chan<- detector.Event) {
