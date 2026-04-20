@@ -82,6 +82,27 @@ func TestMailboxBindingRotation(t *testing.T) {
 	}
 }
 
+func TestEnsurePreKeys(t *testing.T) {
+	s := NewState()
+	created, err := s.EnsurePreKeys(5, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("EnsurePreKeys: %v", err)
+	}
+	if created != 5 {
+		t.Fatalf("expected created=5, got %d", created)
+	}
+	if len(s.PreKeys) != 5 {
+		t.Fatalf("expected len(prekeys)=5, got %d", len(s.PreKeys))
+	}
+	created, err = s.EnsurePreKeys(5, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("EnsurePreKeys(again): %v", err)
+	}
+	if created != 0 {
+		t.Fatalf("expected created=0, got %d", created)
+	}
+}
+
 func TestContactOfferV2IncludesMailbox(t *testing.T) {
 	p, err := NewPersona()
 	if err != nil {

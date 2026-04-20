@@ -53,6 +53,17 @@ class SecureStore(context: Context) {
         return id
     }
 
+    fun getOrCreateAgeRecipient(): String {
+        getOrCreateAgeIdentity()
+        val rec = prefs.getString("age_recipient", null)
+        if (!rec.isNullOrBlank()) {
+            return rec
+        }
+        val id = generateAgeIdentity()
+        prefs.edit().putString("age_identity", id).apply()
+        return prefs.getString("age_recipient", "") ?: ""
+    }
+
     fun getTrustedSignerKeysCSV(): String {
         return prefs.getString("trusted_signers_b64url_csv", "") ?: ""
     }

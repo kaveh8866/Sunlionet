@@ -133,10 +133,14 @@ func CreateContactOffer(stateDir string, masterKey string, personaID string, ttl
 	if persona == nil {
 		return "", fmt.Errorf("persona not found: %q", personaID)
 	}
-	preKey, err := identity.NewPreKey(24 * time.Hour)
+	_, err = state.EnsurePreKeys(1, 24*time.Hour)
 	if err != nil {
 		return "", err
 	}
+	if len(state.PreKeys) == 0 {
+		return "", fmt.Errorf("no prekeys available")
+	}
+	preKey := state.PreKeys[len(state.PreKeys)-1]
 	mb, created, err := state.EnsureMailboxBinding(persona.ID)
 	if err != nil {
 		return "", err
@@ -146,7 +150,6 @@ func CreateContactOffer(stateDir string, masterKey string, personaID string, ttl
 	if err != nil {
 		return "", err
 	}
-	state.PreKeys = append(state.PreKeys, *preKey)
 	if created {
 		state.UpdatedAt = now.Unix()
 	}
@@ -253,8 +256,6 @@ func DecryptEnvelopeToText(stateDir string, masterKey string, envelope string) (
 		if err != nil {
 			continue
 		}
-		state.PreKeys = append(state.PreKeys[:i], state.PreKeys[i+1:]...)
-		_ = store.Save(state)
 		return string(pt), nil
 	}
 	return "", fmt.Errorf("no matching prekey for envelope")
@@ -288,6 +289,140 @@ func ChatAddContactFromOffer(stateDir string, masterKey string, alias string, of
 	}
 	raw, _ := json.Marshal(out)
 	return string(raw), nil
+}
+
+func DeviceLinkSAS(linkBundle string) (string, error) {
+	return identity.DeviceLinkSAS(strings.TrimSpace(linkBundle))
+}
+
+func CreateDeviceJoinRequest(stateDir string, masterKey string, personaID string, ageRecipient string) (string, error) {
+	mk, err := profile.ParseMasterKey(masterKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid master_key: %w", err)
+	}
+	store, err := identity.NewStore(filepath.Join(stateDir, "identity.enc"), mk)
+	if err != nil {
+		return "", err
+	}
+	state, err := store.Load()
+	if err != nil {
+		return "", err
+	}
+	pid := identity.PersonaID(strings.TrimSpace(personaID))
+	if pid == "" {
+		return "", fmt.Errorf("persona_id required")
+	}
+	d, err := identity.NewDevice(pid, "linked-device")
+	if err != nil {
+		return "", err
+	}
+	state.Devices = append(state.Devices, *d)
+	if err := store.Save(state); err != nil {
+		return "", err
+	}
+	req, err := identity.NewDeviceJoinRequestForDevice(pid, d.DeviceID, d.SignPubB64, ageRecipient)
+	if err != nil {
+		return "", err
+	}
+	return req.Encode()
+}
+
+func ApproveDeviceJoinRequest(stateDir string, masterKey string, personaID string, joinRequest string) (string, error) {
+	mk, err := profile.ParseMasterKey(masterKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid master_key: %w", err)
+	}
+	store, err := identity.NewStore(filepath.Join(stateDir, "identity.enc"), mk)
+	if err != nil {
+		return "", err
+	}
+	state, err := store.Load()
+	if err != nil {
+		return "", err
+	}
+	var persona *identity.Persona
+	for i := range state.Personas {
+		if string(state.Personas[i].ID) == personaID {
+			persona = &state.Personas[i]
+			break
+		}
+	}
+	if persona == nil {
+		return "", fmt.Errorf("persona not found: %q", personaID)
+	}
+	req, err := identity.DecodeDeviceJoinRequest(joinRequest)
+	if err != nil {
+		return "", err
+	}
+	pkg, err := identity.ApproveDeviceJoinRequest(persona, req)
+	if err != nil {
+		return "", err
+	}
+	if err := identity.UpsertDeviceFromJoinPackage(state, persona.SignPubB64, pkg); err != nil {
+		return "", err
+	}
+	if err := store.Save(state); err != nil {
+		return "", err
+	}
+	link, err := identity.NewDeviceLinkBundle(persona, req, pkg)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(req.AgeRecipient) == "" {
+		return "", fmt.Errorf("missing age recipient in join request")
+	}
+	return identity.EncryptDeviceLinkBundle(persona, req.AgeRecipient, link)
+}
+
+func ApplyDeviceJoinPackage(stateDir string, masterKey string, personaID string, joinPackage string, ageIdentity string) error {
+	mk, err := profile.ParseMasterKey(masterKey)
+	if err != nil {
+		return fmt.Errorf("invalid master_key: %w", err)
+	}
+	store, err := identity.NewStore(filepath.Join(stateDir, "identity.enc"), mk)
+	if err != nil {
+		return err
+	}
+	state, err := store.Load()
+	if err != nil {
+		return err
+	}
+	pid := identity.PersonaID(strings.TrimSpace(personaID))
+	if pid == "" {
+		return fmt.Errorf("persona_id required")
+	}
+	link, err := identity.DecryptDeviceLink(joinPackage, ageIdentity)
+	if err != nil {
+		return err
+	}
+	if link.JoinPackage.PersonaID != pid {
+		return fmt.Errorf("persona mismatch")
+	}
+	hasDevice := false
+	for i := range state.Devices {
+		if state.Devices[i].PersonaID == link.JoinPackage.PersonaID && state.Devices[i].DeviceID == link.JoinPackage.DeviceID {
+			hasDevice = true
+			break
+		}
+	}
+	if !hasDevice {
+		return fmt.Errorf("device not initialized on this device (create join request first)")
+	}
+	if err := identity.UpsertDeviceFromJoinPackage(state, link.Persona.SignPubB64, &link.JoinPackage); err != nil {
+		return err
+	}
+	upserted := false
+	for i := range state.Personas {
+		if state.Personas[i].ID == link.Persona.ID {
+			state.Personas[i] = link.Persona
+			upserted = true
+			break
+		}
+	}
+	if !upserted {
+		state.Personas = append(state.Personas, link.Persona)
+	}
+	return store.Save(state)
 }
 
 func ChatList(stateDir string, masterKey string) (string, error) {
@@ -342,7 +477,171 @@ func ChatMarkMessageState(stateDir string, masterKey string, chatID string, mess
 	return svc.MarkMessageState(chat.ChatID(strings.TrimSpace(chatID)), chat.MessageID(strings.TrimSpace(messageID)), strings.TrimSpace(state))
 }
 
-func DeviceCreateJoinRequest(stateDir string, masterKey string, personaID string, deviceID string, devicePubB64 string) (string, error) {
+func ChatSyncOnce(relayURL string, stateDir string, masterKey string, personaID string, waitSec int, limit int) (string, error) {
+	if strings.TrimSpace(relayURL) == "" {
+		return "", fmt.Errorf("missing relay_url")
+	}
+	if waitSec <= 0 {
+		waitSec = 10
+	}
+	if waitSec > 30 {
+		waitSec = 30
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	mk, err := profile.ParseMasterKey(masterKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid master_key: %w", err)
+	}
+	idStore, err := identity.NewStore(filepath.Join(stateDir, "identity.enc"), mk)
+	if err != nil {
+		return "", err
+	}
+	idState, err := idStore.Load()
+	if err != nil {
+		return "", err
+	}
+	var persona *identity.Persona
+	for i := range idState.Personas {
+		if string(idState.Personas[i].ID) == strings.TrimSpace(personaID) {
+			persona = &idState.Personas[i]
+			break
+		}
+	}
+	if persona == nil {
+		return "", fmt.Errorf("persona not found: %q", personaID)
+	}
+
+	mb, created, err := idState.EnsureMailboxBinding(persona.ID)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	mailbox, _, err := mb.MailboxAt(now, 3600)
+	if err != nil {
+		return "", err
+	}
+	prevMailbox, _ := mb.MailboxPrevAt(now, 3600)
+	if created {
+		idState.UpdatedAt = now.Unix()
+		if err := idStore.Save(idState); err != nil {
+			return "", err
+		}
+	}
+
+	cs, err := chat.NewStore(filepath.Join(stateDir, "chat.enc"), mk)
+	if err != nil {
+		return "", err
+	}
+	chatSvc, err := chat.NewService(cs)
+	if err != nil {
+		return "", err
+	}
+	r := relay.NewHTTPClient(strings.TrimSpace(relayURL))
+
+	mailboxes := make([]string, 0, 2)
+	if strings.TrimSpace(mailbox) != "" {
+		mailboxes = append(mailboxes, mailbox)
+	}
+	if strings.TrimSpace(prevMailbox) != "" && strings.TrimSpace(prevMailbox) != strings.TrimSpace(mailbox) {
+		mailboxes = append(mailboxes, prevMailbox)
+	}
+	if len(mailboxes) == 0 {
+		return "", fmt.Errorf("no mailbox available")
+	}
+
+	var (
+		pulled    int
+		decrypted int
+		applied   int
+		acked     int
+	)
+	for _, mbx := range mailboxes {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(waitSec+15)*time.Second)
+		msgs, err := r.Pull(ctx, relay.PullRequest{
+			Mailbox: relay.MailboxID(mbx),
+			Limit:   limit,
+			WaitSec: waitSec,
+		})
+		cancel()
+		if err != nil {
+			continue
+		}
+		pulled += len(msgs)
+		if len(msgs) == 0 {
+			continue
+		}
+		ackIDs := make([]relay.MessageID, 0, len(msgs))
+		for i := range msgs {
+			envStr := string(msgs[i].Envelope)
+			env, err := messaging.DecodeEnvelope(envStr)
+			if err != nil {
+				continue
+			}
+			var plaintext []byte
+			for k := range idState.PreKeys {
+				priv, err := idState.PreKeys[k].DecodePrivate()
+				if err != nil {
+					continue
+				}
+				pt, _, err := messaging.DecryptWithPreKey(env, priv)
+				if err != nil {
+					continue
+				}
+				plaintext = pt
+				break
+			}
+			if len(plaintext) == 0 {
+				continue
+			}
+			decrypted++
+
+			ctxApply, cancelApply := context.WithTimeout(context.Background(), 15*time.Second)
+			err = chatSvc.ApplyIncomingWithRelay(ctxApply, r, persona, msgs[i], envStr, plaintext)
+			cancelApply()
+			if err != nil {
+				continue
+			}
+			applied++
+			ackIDs = append(ackIDs, msgs[i].ID)
+		}
+		if len(ackIDs) == 0 {
+			continue
+		}
+		ctxAck, cancelAck := context.WithTimeout(context.Background(), 10*time.Second)
+		err = r.Ack(ctxAck, relay.AckRequest{Mailbox: relay.MailboxID(mbx), IDs: ackIDs})
+		cancelAck()
+		if err == nil {
+			acked += len(ackIDs)
+		}
+	}
+
+	out := struct {
+		Mailboxes  []string `json:"mailboxes"`
+		Pulled     int      `json:"pulled"`
+		Decrypted  int      `json:"decrypted"`
+		Applied    int      `json:"applied"`
+		Acked      int      `json:"acked"`
+		PersonaID  string   `json:"persona_id"`
+		MailboxNow string   `json:"mailbox_now"`
+	}{
+		Mailboxes:  mailboxes,
+		Pulled:     pulled,
+		Decrypted:  decrypted,
+		Applied:    applied,
+		Acked:      acked,
+		PersonaID:  string(persona.ID),
+		MailboxNow: mailbox,
+	}
+	raw, _ := json.Marshal(out)
+	return string(raw), nil
+}
+
+func DeviceCreateJoinRequest(stateDir string, masterKey string, personaID string, deviceID string, devicePubB64 string, ageRecipient string) (string, error) {
 	mk, err := profile.ParseMasterKey(masterKey)
 	if err != nil {
 		return "", fmt.Errorf("invalid master_key: %w", err)
@@ -365,7 +664,7 @@ func DeviceCreateJoinRequest(stateDir string, masterKey string, personaID string
 	if p == nil {
 		return "", fmt.Errorf("persona not found: %q", personaID)
 	}
-	req, err := identity.NewDeviceJoinRequestForDevice(p.ID, strings.TrimSpace(deviceID), strings.TrimSpace(devicePubB64))
+	req, err := identity.NewDeviceJoinRequestForDevice(p.ID, strings.TrimSpace(deviceID), strings.TrimSpace(devicePubB64), ageRecipient)
 	if err != nil {
 		return "", err
 	}
@@ -413,20 +712,27 @@ func DeviceApproveJoinRequest(stateDir string, masterKey string, personaID strin
 	if err != nil {
 		return "", err
 	}
-	token, err := pkg.Encode()
+	link, err := identity.NewDeviceLinkBundle(p, req, pkg)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(req.AgeRecipient) == "" {
+		return "", fmt.Errorf("missing age recipient in join request")
+	}
+	token, err := identity.EncryptDeviceLinkBundle(p, req.AgeRecipient, link)
 	if err != nil {
 		return "", err
 	}
 	out := struct {
-		JoinPackage string `json:"join_package"`
+		LinkBundle string `json:"link_bundle"`
 	}{
-		JoinPackage: token,
+		LinkBundle: token,
 	}
 	raw, _ := json.Marshal(out)
 	return string(raw), nil
 }
 
-func DeviceApplyJoinPackage(stateDir string, masterKey string, personaID string, joinPackage string) error {
+func DeviceApplyJoinPackage(stateDir string, masterKey string, personaID string, joinPackage string, ageIdentity string) error {
 	mk, err := profile.ParseMasterKey(masterKey)
 	if err != nil {
 		return fmt.Errorf("invalid master_key: %w", err)
@@ -439,22 +745,30 @@ func DeviceApplyJoinPackage(stateDir string, masterKey string, personaID string,
 	if err != nil {
 		return err
 	}
-	var p *identity.Persona
-	for i := range idState.Personas {
-		if string(idState.Personas[i].ID) == strings.TrimSpace(personaID) {
-			p = &idState.Personas[i]
-			break
-		}
+	pid := identity.PersonaID(strings.TrimSpace(personaID))
+	if pid == "" {
+		return fmt.Errorf("persona_id required")
 	}
-	if p == nil {
-		return fmt.Errorf("persona not found: %q", personaID)
-	}
-	pkg, err := identity.DecodeDeviceJoinPackage(strings.TrimSpace(joinPackage))
+	link, err := identity.DecryptDeviceLink(strings.TrimSpace(joinPackage), ageIdentity)
 	if err != nil {
 		return err
 	}
-	if err := identity.UpsertDeviceFromJoinPackage(idState, p.SignPubB64, pkg); err != nil {
+	if link.JoinPackage.PersonaID != pid {
+		return fmt.Errorf("persona mismatch")
+	}
+	if err := identity.UpsertDeviceFromJoinPackage(idState, link.Persona.SignPubB64, &link.JoinPackage); err != nil {
 		return err
+	}
+	upserted := false
+	for i := range idState.Personas {
+		if idState.Personas[i].ID == link.Persona.ID {
+			idState.Personas[i] = link.Persona
+			upserted = true
+			break
+		}
+	}
+	if !upserted {
+		idState.Personas = append(idState.Personas, link.Persona)
 	}
 	return idStore.Save(idState)
 }

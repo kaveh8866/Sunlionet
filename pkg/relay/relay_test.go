@@ -2,6 +2,9 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -105,6 +108,119 @@ func TestMemoryRelayLongPoll(t *testing.T) {
 	}
 	if time.Since(start) < 100*time.Millisecond {
 		t.Fatalf("expected Pull to wait, returned too quickly")
+	}
+}
+
+func TestVerifyPoW(t *testing.T) {
+	mb := MailboxID("mb_pow")
+	env := Envelope("envelope")
+	bits := 12
+
+	var nonceB64 string
+	for i := uint64(0); i < 200000; i++ {
+		var nonce [8]byte
+		binary.LittleEndian.PutUint64(nonce[:], i)
+		h := sha256.New()
+		_, _ = h.Write([]byte(mb))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(env))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(nonce[:])
+		sum := h.Sum(nil)
+		if hashHasLeadingZeroBits(sum, bits) {
+			nonceB64 = base64.RawURLEncoding.EncodeToString(nonce[:])
+			break
+		}
+	}
+	if nonceB64 == "" {
+		t.Fatalf("failed to find pow nonce")
+	}
+	if err := VerifyPoW(mb, env, nonceB64, bits); err != nil {
+		t.Fatalf("VerifyPoW: %v", err)
+	}
+	if err := VerifyPoW(mb, env, nonceB64, bits+6); err == nil {
+		t.Fatalf("expected VerifyPoW to fail for higher difficulty")
+	}
+}
+
+func TestFileRelayPushPullAck(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewFileRelay(dir, FileRelayOptions{MaxPendingPerMailbox: 100, MaxTotalPending: 1000})
+	if err != nil {
+		t.Fatalf("NewFileRelay: %v", err)
+	}
+	ctx := context.Background()
+
+	mb := MailboxID("mb1")
+	id, err := r.Push(ctx, PushRequest{Mailbox: mb, Envelope: Envelope("e1")})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	msgs, err := r.Pull(ctx, PullRequest{Mailbox: mb, Limit: 10})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].ID != id {
+		t.Fatalf("id mismatch")
+	}
+	if err := r.Ack(ctx, AckRequest{Mailbox: mb, IDs: []MessageID{id}}); err != nil {
+		t.Fatalf("Ack: %v", err)
+	}
+	msgs, err = r.Pull(ctx, PullRequest{Mailbox: mb, Limit: 10})
+	if err != nil {
+		t.Fatalf("Pull after ack: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("expected 0 messages after ack, got %d", len(msgs))
+	}
+}
+
+func TestFileRelayTTLAndDelay(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewFileRelay(dir, FileRelayOptions{MaxPendingPerMailbox: 100, MaxTotalPending: 1000})
+	if err != nil {
+		t.Fatalf("NewFileRelay: %v", err)
+	}
+	ctx := context.Background()
+	mbTTL := MailboxID("mbttl")
+	mbDelay := MailboxID("mbdelay")
+
+	_, err = r.Push(ctx, PushRequest{Mailbox: mbTTL, Envelope: Envelope("e"), TTLSec: 1})
+	if err != nil {
+		t.Fatalf("Push ttl: %v", err)
+	}
+	_, err = r.Push(ctx, PushRequest{Mailbox: mbDelay, Envelope: Envelope("e"), DelaySec: 1})
+	if err != nil {
+		t.Fatalf("Push delay: %v", err)
+	}
+
+	msgs, err := r.Pull(ctx, PullRequest{Mailbox: mbDelay, Limit: 10})
+	if err != nil {
+		t.Fatalf("Pull delay: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("expected 0 messages before delay, got %d", len(msgs))
+	}
+
+	time.Sleep(1200 * time.Millisecond)
+
+	msgs, err = r.Pull(ctx, PullRequest{Mailbox: mbTTL})
+	if err != nil {
+		t.Fatalf("Pull ttl: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("expected 0 messages after ttl, got %d", len(msgs))
+	}
+
+	msgs, err = r.Pull(ctx, PullRequest{Mailbox: mbDelay, Limit: 10})
+	if err != nil {
+		t.Fatalf("Pull delay after: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message after delay, got %d", len(msgs))
 	}
 }
 

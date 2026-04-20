@@ -219,6 +219,38 @@ func (s *State) Prune(now time.Time) {
 	s.PreKeys = kept
 }
 
+func (s *State) EnsurePreKeys(min int, ttl time.Duration) (int, error) {
+	if s == nil {
+		return 0, errors.New("identity: state is nil")
+	}
+	if min < 0 {
+		return 0, errors.New("identity: min must be >= 0")
+	}
+	if min > MaxPreKeys {
+		min = MaxPreKeys
+	}
+	if ttl <= 0 {
+		return 0, errors.New("identity: ttl must be > 0")
+	}
+	now := time.Now()
+	s.Prune(now)
+	if len(s.PreKeys) >= min {
+		return 0, nil
+	}
+	need := min - len(s.PreKeys)
+	created := 0
+	for i := 0; i < need && len(s.PreKeys) < MaxPreKeys; i++ {
+		k, err := NewPreKey(ttl)
+		if err != nil {
+			return created, err
+		}
+		s.PreKeys = append(s.PreKeys, *k)
+		created++
+	}
+	s.Prune(now)
+	return created, nil
+}
+
 type MailboxBinding struct {
 	PersonaID PersonaID `json:"persona_id"`
 	CreatedAt int64     `json:"created_at"`

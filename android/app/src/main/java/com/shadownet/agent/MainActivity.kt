@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonAdvanced: Button
     private lateinit var panelAdvanced: LinearLayout
     private lateinit var switchDiagnostics: Switch
+    private lateinit var buttonPhase4Tools: Button
     private lateinit var buttonExportLogs: Button
     private lateinit var buttonReportIssue: Button
 
@@ -135,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         buttonAdvanced = findViewById(R.id.buttonAdvanced)
         panelAdvanced = findViewById(R.id.panelAdvanced)
         switchDiagnostics = findViewById(R.id.switchDiagnostics)
+        buttonPhase4Tools = findViewById(R.id.buttonPhase4Tools)
         buttonExportLogs = findViewById(R.id.buttonExportLogs)
         buttonReportIssue = findViewById(R.id.buttonReportIssue)
 
@@ -189,6 +191,8 @@ class MainActivity : AppCompatActivity() {
             diagnostics.setDiagnosticsEnabled(checked)
             Logs.i("ui", "anonymous diagnostics=${if (checked) "on" else "off"}")
         }
+        buttonPhase4Tools.visibility = if (isTester) View.VISIBLE else View.GONE
+        buttonPhase4Tools.setOnClickListener { showPhase4ToolsDialog() }
         buttonExportLogs.visibility = if (isTester) View.VISIBLE else View.GONE
         buttonReportIssue.visibility = if (isTester) View.VISIBLE else View.GONE
         buttonExportLogs.setOnClickListener { exportLogs() }
@@ -555,5 +559,469 @@ class MainActivity : AppCompatActivity() {
             else -> getString(R.string.connect)
         }
         buttonToggle.isEnabled = true
+    }
+
+    private fun showPhase4ToolsDialog() {
+        fun showText(title: String, message: String) {
+            AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(getString(R.string.details_close), null)
+                .show()
+        }
+
+        fun prompt(
+            title: String,
+            hint: String,
+            initial: String = "",
+            multiline: Boolean = false,
+            onOk: (String) -> Unit,
+        ) {
+            val input = EditText(this).apply {
+                setText(initial)
+                setHint(hint)
+                if (multiline) {
+                    minLines = 3
+                }
+            }
+            AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(input)
+                .setPositiveButton("OK") { _, _ -> onOk(input.text?.toString().orEmpty()) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        val actions = arrayOf(
+            "Identity: Create persona",
+            "Identity: List personas",
+            "Identity: Create contact offer",
+            "Chat: Add contact from offer",
+            "Chat: List chats",
+            "Chat: View messages",
+            "Chat: Sync inbox",
+            "Chat: Send 1:1 message",
+            "Chat: Create group",
+            "Chat: Invite to group",
+            "Chat: Join group",
+            "Chat: Set group role",
+            "Chat: Remove from group",
+            "Chat: Send group message",
+            "Community: List",
+            "Community: Create",
+            "Community: Create invite",
+            "Community: Create join request",
+            "Community: Approve join",
+            "Community: Apply join",
+            "Community: Create room",
+            "Community: Send post",
+            "Device: Create Join Request",
+            "Device: Approve Join Request",
+            "Device: Apply Join Package",
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("Phase 4 Tools")
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> {
+                        Bridge.createPersona(this).onSuccess {
+                            showText("Persona created", it)
+                        }.onFailure {
+                            showText("Error", it.message ?: "failed")
+                        }
+                    }
+                    1 -> {
+                        Bridge.listPersonas(this).onSuccess {
+                            showText("Personas", it)
+                        }.onFailure {
+                            showText("Error", it.message ?: "failed")
+                        }
+                    }
+                    2 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            prompt("TTL (seconds)", "e.g. 600", initial = "600") { ttl ->
+                                val ttlSec = ttl.trim().toIntOrNull() ?: 600
+                                Bridge.createContactOffer(this, personaID.trim(), ttlSec).onSuccess {
+                                    showText("Contact offer", it)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    3 -> {
+                        prompt("Alias", "e.g. Alice", initial = "Alice") { alias ->
+                            prompt("Offer token", "sn4:...", multiline = true) { offer ->
+                                Bridge.chatAddContactFromOffer(this, alias.trim(), offer.trim()).onSuccess {
+                                    showText("Contact added", it)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    4 -> {
+                        Bridge.chatList(this).onSuccess {
+                            showText("Chats", it)
+                        }.onFailure {
+                            showText("Error", it.message ?: "failed")
+                        }
+                    }
+                    5 -> {
+                        prompt("Chat ID", "e.g. d:... or g:...") { chatID ->
+                            Bridge.chatMessages(this, chatID.trim()).onSuccess {
+                                showText("Messages", it)
+                            }.onFailure {
+                                showText("Error", it.message ?: "failed")
+                            }
+                        }
+                    }
+                    6 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                Bridge.chatSyncOnce(
+                                    relayURL = relayURL.trim(),
+                                    context = this,
+                                    personaID = personaID.trim(),
+                                ).onSuccess {
+                                    showText("Synced", it)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    7 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Contact ID", "contact id") { contactID ->
+                                    prompt("Message", "text", multiline = true) { text ->
+                                        Bridge.chatSendText(
+                                            relayURL = relayURL.trim(),
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            contactID = contactID.trim(),
+                                            text = text,
+                                        ).onSuccess {
+                                            showText("Sent", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    8 -> {
+                        prompt("Title", "group title", initial = "Group") { title ->
+                            prompt("Member IDs (CSV)", "contact_id1,contact_id2") { memberIDs ->
+                                Bridge.chatCreateGroup(this, title.trim(), memberIDs.trim()).onSuccess {
+                                    showText("Group created", it)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    9 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Group ID", "g:...") { groupID ->
+                                    prompt("Invitee Contact ID", "contact id") { inviteeContactID ->
+                                        Bridge.chatInviteToGroup(
+                                            relayURL = relayURL.trim(),
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            groupID = groupID.trim(),
+                                            inviteeContactID = inviteeContactID.trim(),
+                                        ).onSuccess {
+                                            showText("Invited", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    10 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Group ID", "g:...") { groupID ->
+                                    Bridge.chatJoinGroup(
+                                        relayURL = relayURL.trim(),
+                                        context = this,
+                                        personaID = personaID.trim(),
+                                        groupID = groupID.trim(),
+                                    ).onSuccess {
+                                        showText("Join sent", it)
+                                    }.onFailure {
+                                        showText("Error", it.message ?: "failed")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    11 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Group ID", "g:...") { groupID ->
+                                    prompt("Subject Contact ID", "contact id") { subjectContactID ->
+                                        prompt("Role", "owner|moderator|member", initial = "member") { role ->
+                                            Bridge.chatSetGroupRole(
+                                                relayURL = relayURL.trim(),
+                                                context = this,
+                                                personaID = personaID.trim(),
+                                                groupID = groupID.trim(),
+                                                subjectContactID = subjectContactID.trim(),
+                                                role = role.trim(),
+                                            ).onSuccess {
+                                                showText("Role updated", it)
+                                            }.onFailure {
+                                                showText("Error", it.message ?: "failed")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    12 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Group ID", "g:...") { groupID ->
+                                    prompt("Subject Contact ID", "contact id") { subjectContactID ->
+                                        Bridge.chatRemoveFromGroup(
+                                            relayURL = relayURL.trim(),
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            groupID = groupID.trim(),
+                                            subjectContactID = subjectContactID.trim(),
+                                        ).onSuccess {
+                                            showText("Removed", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    13 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Group ID", "g:...") { groupID ->
+                                    prompt("Message", "text", multiline = true) { text ->
+                                        Bridge.chatSendGroupText(
+                                            relayURL = relayURL.trim(),
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            groupID = groupID.trim(),
+                                            text = text,
+                                        ).onSuccess {
+                                            showText("Sent", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    14 -> {
+                        Bridge.communityList(this).onSuccess {
+                            showText("Communities", it)
+                        }.onFailure {
+                            showText("Error", it.message ?: "failed")
+                        }
+                    }
+                    15 -> {
+                        prompt("Community ID", "leave empty to auto-generate", initial = "") { communityID ->
+                            Bridge.communityCreate(this, communityID.trim()).onSuccess {
+                                showText("Community created", it)
+                            }.onFailure {
+                                showText("Error", it.message ?: "failed")
+                            }
+                        }
+                    }
+                    16 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            prompt("Community ID", "community id") { communityID ->
+                                prompt("TTL (seconds)", "e.g. 86400", initial = "86400") { ttl ->
+                                    prompt("Max uses", "e.g. 1", initial = "1") { maxUses ->
+                                        val ttlSec = ttl.trim().toIntOrNull() ?: 86400
+                                        val maxUsesInt = maxUses.trim().toIntOrNull() ?: 1
+                                        Bridge.communityCreateInvite(
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            communityID = communityID.trim(),
+                                            ttlSec = ttlSec,
+                                            maxUses = maxUsesInt,
+                                        ).onSuccess {
+                                            showText("Invite", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    17 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            prompt("Invite", "sn4inv:...", multiline = true) { invite ->
+                                Bridge.communityCreateJoinRequest(
+                                    context = this,
+                                    personaID = personaID.trim(),
+                                    invite = invite.trim(),
+                                ).onSuccess {
+                                    showText("Join request", it)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    18 -> {
+                        prompt("Persona ID", "issuer persona id") { personaID ->
+                            prompt("Invite", "sn4inv:...", multiline = true) { invite ->
+                                prompt("Join request", "sn4jr:...", multiline = true) { joinRequest ->
+                                    prompt("Role", "owner|moderator|member", initial = "member") { role ->
+                                        Bridge.communityApproveJoin(
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            invite = invite.trim(),
+                                            joinRequest = joinRequest.trim(),
+                                            role = role.trim(),
+                                        ).onSuccess {
+                                            showText("Approval", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    19 -> {
+                        prompt("Persona ID", "applicant persona id") { personaID ->
+                            prompt("Invite", "sn4inv:...", multiline = true) { invite ->
+                                prompt("Join request", "sn4jr:...", multiline = true) { joinRequest ->
+                                    prompt("Approval", "sn4ja:...", multiline = true) { approval ->
+                                        Bridge.communityApplyJoin(
+                                            context = this,
+                                            personaID = personaID.trim(),
+                                            invite = invite.trim(),
+                                            joinRequest = joinRequest.trim(),
+                                            approval = approval.trim(),
+                                        ).onSuccess {
+                                            showText("Joined", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    20 -> {
+                        prompt("Title", "room title", initial = "general") { title ->
+                            prompt("Community ID", "community id") { communityID ->
+                                prompt("Room ID", "room id", initial = "general") { roomID ->
+                                    prompt("Member IDs (CSV)", "contact_id1,contact_id2") { memberIDs ->
+                                        Bridge.chatCreateCommunityRoom(
+                                            context = this,
+                                            title = title.trim(),
+                                            communityID = communityID.trim(),
+                                            roomID = roomID.trim(),
+                                            memberIDsCSV = memberIDs.trim(),
+                                        ).onSuccess {
+                                            showText("Room created", it)
+                                        }.onFailure {
+                                            showText("Error", it.message ?: "failed")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    21 -> {
+                        prompt("Relay URL", "https://relay.example.com") { relayURL ->
+                            prompt("Persona ID", "persona id") { personaID ->
+                                prompt("Community ID", "community id") { communityID ->
+                                    prompt("Room ID", "room id", initial = "general") { roomID ->
+                                        prompt("Post", "text", multiline = true) { text ->
+                                            Bridge.chatSendCommunityPost(
+                                                relayURL = relayURL.trim(),
+                                                context = this,
+                                                personaID = personaID.trim(),
+                                                communityID = communityID.trim(),
+                                                roomID = roomID.trim(),
+                                                text = text,
+                                            ).onSuccess {
+                                                showText("Posted", it)
+                                            }.onFailure {
+                                                showText("Error", it.message ?: "failed")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    22 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            Bridge.createDeviceJoinRequest(this, personaID.trim()).onSuccess {
+                                showText("Join Request", it)
+                            }.onFailure {
+                                showText("Error", it.message ?: "failed")
+                            }
+                        }
+                    }
+                    23 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            prompt("Join Request", "sn4dj:...", multiline = true) { joinRequest ->
+                                Bridge.approveDeviceJoinRequest(this, personaID.trim(), joinRequest.trim()).onSuccess { bundle ->
+                                    val sasResult = Bridge.deviceLinkSAS(bundle)
+                                    val sasMsg = if (sasResult.isSuccess) "\n\nSAS: ${sasResult.getOrNull()}" else ""
+                                    showText("Link Bundle", bundle + sasMsg)
+                                }.onFailure {
+                                    showText("Error", it.message ?: "failed")
+                                }
+                            }
+                        }
+                    }
+                    24 -> {
+                        prompt("Persona ID", "persona id") { personaID ->
+                            prompt("Link Bundle", "sn4dl:...", multiline = true) { joinPackage ->
+                                val sasResult = Bridge.deviceLinkSAS(joinPackage.trim())
+                                if (sasResult.isSuccess) {
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Verify SAS")
+                                        .setMessage("SAS: ${sasResult.getOrNull()}\n\nDo you want to apply this join package?")
+                                        .setPositiveButton("Apply") { _, _ ->
+                                            Bridge.applyDeviceJoinPackage(this, personaID.trim(), joinPackage.trim()).onSuccess {
+                                                showText("Applied", it)
+                                            }.onFailure {
+                                                showText("Error", it.message ?: "failed")
+                                            }
+                                        }
+                                        .setNegativeButton("Cancel", null)
+                                        .show()
+                                } else {
+                                    Bridge.applyDeviceJoinPackage(this, personaID.trim(), joinPackage.trim()).onSuccess {
+                                        showText("Applied", it)
+                                    }.onFailure {
+                                        showText("Error", it.message ?: "failed")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 }

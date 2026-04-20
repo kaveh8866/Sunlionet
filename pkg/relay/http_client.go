@@ -3,6 +3,10 @@ package relay
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +32,13 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 }
 
 func (c *HTTPClient) Push(ctx context.Context, req PushRequest) (MessageID, error) {
+	if req.PoWBits > 0 && strings.TrimSpace(req.PoWNonceB64URL) == "" {
+		nonce, err := findPoWNonce(req.Mailbox, req.Envelope, req.PoWBits, 250_000)
+		if err != nil {
+			return "", err
+		}
+		req.PoWNonceB64URL = nonce
+	}
 	if err := req.Validate(); err != nil {
 		return "", err
 	}
@@ -107,4 +118,33 @@ func (c *HTTPClient) postJSON(ctx context.Context, path string, req any, out any
 		return nil
 	}
 	return json.Unmarshal(b, out)
+}
+
+func findPoWNonce(mailbox MailboxID, envelope Envelope, bits int, maxIter int) (string, error) {
+	if bits <= 0 {
+		return "", nil
+	}
+	if maxIter <= 0 {
+		maxIter = 1
+	}
+	var salt [8]byte
+	if _, err := rand.Read(salt[:]); err != nil {
+		return "", err
+	}
+	var nonce [16]byte
+	copy(nonce[:8], salt[:])
+	for i := 0; i < maxIter; i++ {
+		binary.LittleEndian.PutUint64(nonce[8:], uint64(i))
+		h := sha256.New()
+		_, _ = h.Write([]byte(mailbox))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(envelope))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(nonce[:])
+		sum := h.Sum(nil)
+		if hashHasLeadingZeroBits(sum, bits) {
+			return base64.RawURLEncoding.EncodeToString(nonce[:]), nil
+		}
+	}
+	return "", errors.New("relay: proof of work failed")
 }

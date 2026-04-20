@@ -334,8 +334,6 @@ func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Sto
 	if store == nil || state == nil || len(msgs) == 0 {
 		return
 	}
-	changed := false
-	now := time.Now()
 	for mi := range msgs {
 		envStr := string(msgs[mi].Envelope)
 		env, err := messaging.DecodeEnvelope(envStr)
@@ -354,20 +352,12 @@ func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Sto
 				continue
 			}
 			plaintext = pt
-			state.PreKeys = append(state.PreKeys[:i], state.PreKeys[i+1:]...)
-			state.UpdatedAt = now.Unix()
-			changed = true
 			break
 		}
 		mu.Unlock()
 		if chatSvc != nil && persona != nil && len(plaintext) > 0 {
 			_ = chatSvc.ApplyIncomingWithRelay(ctx, r, persona, msgs[mi], envStr, plaintext)
 		}
-	}
-	if changed {
-		mu.Lock()
-		_ = store.Save(state)
-		mu.Unlock()
 	}
 	_ = personaID
 }

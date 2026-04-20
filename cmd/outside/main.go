@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,15 +14,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"filippo.io/age"
 	"github.com/kaveh/shadownet-agent/pkg/bundle"
 	"github.com/kaveh/shadownet-agent/pkg/outsidectl"
 	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/shadownet-agent/pkg/relay"
 )
 
 type bundleWrapper struct {
@@ -54,6 +58,12 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "relay" {
+		if err := runRelay(os.Args[2:]); err != nil {
+			log.Fatalf("relay: %v", err)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "verify" {
 		if err := runVerify(os.Args[2:]); err != nil {
 			log.Fatalf("verify: %v", err)
@@ -69,6 +79,61 @@ func main() {
 	if err := runGenerate(os.Args[1:]); err != nil {
 		log.Fatalf("generate: %v", err)
 	}
+}
+
+func runRelay(args []string) error {
+	fs := flag.NewFlagSet("relay", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	var (
+		listen               = fs.String("listen", "0.0.0.0:8081", "Listen address (host:port)")
+		dataDir              = fs.String("data-dir", "./relay-data", "Directory for relay storage (envelopes are end-to-end encrypted)")
+		allowNonLocal        = fs.Bool("allow-nonlocal", true, "Allow binding to non-localhost addresses")
+		minPoWBits           = fs.Int("min-pow-bits", 0, "Minimum proof-of-work bits required for push requests (0 disables)")
+		ipRatePerMin         = fs.Int("ip-rate-per-min", 1200, "Max requests per minute per source IP")
+		mailboxRatePerMin    = fs.Int("mailbox-rate-per-min", 240, "Max requests per minute per mailbox")
+		maxPendingPerMailbox = fs.Int("max-pending-per-mailbox", 10000, "Maximum queued messages per mailbox")
+		maxTotalPending      = fs.Int("max-total-pending", 250000, "Maximum queued messages across all mailboxes")
+	)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	r, err := relay.NewFileRelay(*dataDir, relay.FileRelayOptions{
+		MaxPendingPerMailbox: *maxPendingPerMailbox,
+		MaxTotalPending:      *maxTotalPending,
+	})
+	if err != nil {
+		return err
+	}
+	srv, err := relay.NewServer(*listen, r, relay.ServerOptions{
+		AllowNonLocal:          *allowNonLocal,
+		MinPoWBits:             *minPoWBits,
+		IPRateLimitPerMin:      *ipRatePerMin,
+		MailboxRateLimitPerMin: *mailboxRatePerMin,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := srv.Start(); err != nil {
+		return err
+	}
+	log.Printf("relay listening on %s data_dir=%s", *listen, *dataDir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigs:
+	case <-ctx.Done():
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = srv.Shutdown(shutdownCtx)
+	return nil
 }
 
 func runGenerate(args []string) error {

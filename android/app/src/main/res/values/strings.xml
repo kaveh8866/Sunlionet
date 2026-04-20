@@ -12,6 +12,7 @@
     <string name="share_anonymous_diagnostics">Share anonymous diagnostics</string>
     <string name="export_logs">Export Logs</string>
     <string name="report_issue">Report Issue</string>
+    <string name="phase4_tools">Phase 4 Tools</string>
     <string name="tester_safety_message">This is a test version. Behavior may be unstable. Do not rely on it for critical communication.</string>
     <string name="status_disconnected">Disconnected</string>
     <string name="status_connecting">Connecting</string>

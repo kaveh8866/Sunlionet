@@ -172,6 +172,13 @@
             android:text="@string/share_anonymous_diagnostics" />
 
         <Button
+            android:id="@+id/buttonPhase4Tools"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/phase4_tools" />
+
+        <Button
             android:id="@+id/buttonExportLogs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
