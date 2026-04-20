@@ -1,0 +1,16 @@
+title = "SunLionet gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "vercel-access-token"
+description = "Vercel access token"
+regex = '''\bvca_[A-Za-z0-9]{10,}\b'''
+keywords = ["vca_"]
+
+[[rules]]
+id = "vercel-refresh-token"
+description = "Vercel refresh token"
+regex = '''\bvcr_[A-Za-z0-9]{10,}\b'''
+keywords = ["vcr_"]
