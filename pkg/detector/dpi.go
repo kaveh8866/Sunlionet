@@ -70,7 +70,7 @@ func CheckSNIResetWith(ctx context.Context, dialer Dialer, domain string, target
 	}
 	defer conn.Close()
 
-	tlsConn := tls.Client(conn, &tls.Config{ServerName: domain, InsecureSkipVerify: true})
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: domain})
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = tlsConn.SetDeadline(deadline)
 	} else {

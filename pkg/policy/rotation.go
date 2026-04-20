@@ -133,13 +133,13 @@ func (rm *RotationManager) Rotate(ctx context.Context, recentEvents []detector.E
 	// 2. Generate new config
 	configBytes, err := rm.generator.Generate(rm.currentConfig, rm.currentProfile.Endpoint.Host, "uuid", "pubkey")
 	if err != nil {
-		log.Printf("Config generation failed: %v", err)
+		log.Printf("Config generation failed")
 		return
 	}
 
 	// 3. Apply via hot-reload
 	if err := rm.controller.ApplyAndReload(string(configBytes)); err != nil {
-		log.Printf("Hot-reload failed! Blacklisting profile %s. Error: %v", rm.currentProfile.ID, err)
+		log.Printf("Hot-reload failed! Blacklisting profile %s.", rm.currentProfile.ID)
 
 		rm.mu.Lock()
 		rm.blacklist[rm.currentProfile.ID] = time.Now().Add(30 * time.Minute)

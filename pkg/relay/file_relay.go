@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -196,7 +197,7 @@ func (r *FileRelay) Ack(ctx context.Context, req AckRequest) error {
 }
 
 func (r *FileRelay) mailboxDir(m MailboxID) string {
-	return filepath.Join(r.baseDir, "mb_"+string(m))
+	return filepath.Join(r.baseDir, "mb_"+base64.RawURLEncoding.EncodeToString([]byte(m)))
 }
 
 func (r *FileRelay) pullAvailableLocked(mailbox MailboxID, now time.Time, limit int) ([]Message, error) {
