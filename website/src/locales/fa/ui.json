@@ -58,6 +58,7 @@
   "installationPage": {
     "title": "نصب",
     "subtitle": "مسیرهای رایج نصب SunLionet Inside و SunLionet Outside. قبل از اجرا همیشه checksum را بررسی کنید.",
+    "wizardCta": "ویزارد نصب",
     "repoInstallDoc": "مستند نصب مخزن"
   },
   "supportPage": {

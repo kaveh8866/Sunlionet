@@ -50,6 +50,13 @@ export default async function InstallationPage({ params }: { params: Promise<{ l
           actions={
             <>
               <Link
+                href={hrefFor("/installation/wizard")}
+                prefetch={false}
+                className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+              >
+                {copy.wizardCta ?? "Install wizard"}
+              </Link>
+              <Link
                 href={hrefFor("/download")}
                 prefetch={false}
                 className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"

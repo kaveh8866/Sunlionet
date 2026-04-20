@@ -23,6 +23,13 @@ export default function DashboardLayout({
             Runtime
           </Link>
           <Link
+            href="/dashboard/installation/wizard"
+            prefetch={false}
+            className="px-4 py-2 rounded-lg border border-border bg-card/60 hover:opacity-90 transition-opacity text-sm font-semibold"
+          >
+            Install
+          </Link>
+          <Link
             href="/dashboard/global"
             prefetch={false}
             className="px-4 py-2 rounded-lg border border-border bg-card/60 hover:opacity-90 transition-opacity text-sm font-semibold"

@@ -11,12 +11,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
 type PayloadStore struct {
 	dir string
 	gcm cipher.AEAD
+}
+
+type PruneReport struct {
+	Kept          int
+	Deleted       int
+	BytesDeleted  int64
+	SkippedRecent int
 }
 
 func NewPayloadStore(dir string, masterKey []byte) (*PayloadStore, error) {
@@ -105,6 +114,141 @@ func (s *PayloadStore) Has(key string) bool {
 	p := filepath.Join(s.dir, sanitizeKey(key))
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+func (s *PayloadStore) Delete(key string) error {
+	if s == nil {
+		return errors.New("app: payload store is nil")
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errors.New("app: payload key required")
+	}
+	p := filepath.Join(s.dir, sanitizeKey(key))
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (s *PayloadStore) Prune(now time.Time, keepKeys []string, keepUnreferencedFor time.Duration, maxFiles int, maxBytes int64) (PruneReport, error) {
+	if s == nil {
+		return PruneReport{}, errors.New("app: payload store is nil")
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	keepFiles := map[string]struct{}{}
+	for i := range keepKeys {
+		k := strings.TrimSpace(keepKeys[i])
+		if k == "" {
+			continue
+		}
+		keepFiles[sanitizeKey(k)] = struct{}{}
+	}
+
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return PruneReport{}, err
+	}
+
+	type item struct {
+		name    string
+		size    int64
+		modTime time.Time
+		keep    bool
+	}
+	items := make([]item, 0, len(entries))
+	var totalBytes int64
+	totalFiles := 0
+	for i := range entries {
+		e := entries[i]
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "p_") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		sz := info.Size()
+		totalBytes += sz
+		totalFiles++
+		_, keep := keepFiles[name]
+		items = append(items, item{name: name, size: sz, modTime: info.ModTime(), keep: keep})
+	}
+
+	rep := PruneReport{Kept: totalFiles}
+	cutoff := time.Time{}
+	if keepUnreferencedFor > 0 {
+		cutoff = now.Add(-keepUnreferencedFor)
+	}
+
+	deleteFile := func(it item) {
+		p := filepath.Join(s.dir, it.name)
+		if err := os.Remove(p); err != nil {
+			return
+		}
+		rep.Deleted++
+		rep.BytesDeleted += it.size
+		rep.Kept--
+		totalFiles--
+		totalBytes -= it.size
+	}
+
+	for i := range items {
+		it := items[i]
+		if it.keep {
+			continue
+		}
+		if !cutoff.IsZero() && it.modTime.After(cutoff) {
+			rep.SkippedRecent++
+			continue
+		}
+		deleteFile(it)
+	}
+
+	if (maxFiles > 0 && totalFiles > maxFiles) || (maxBytes > 0 && totalBytes > maxBytes) {
+		cands := make([]item, 0, len(items))
+		for i := range items {
+			it := items[i]
+			if it.keep {
+				continue
+			}
+			p := filepath.Join(s.dir, it.name)
+			info, err := os.Stat(p)
+			if err != nil {
+				continue
+			}
+			cands = append(cands, item{name: it.name, size: info.Size(), modTime: info.ModTime(), keep: false})
+		}
+		sort.Slice(cands, func(i, j int) bool {
+			if cands[i].modTime.Equal(cands[j].modTime) {
+				return cands[i].name < cands[j].name
+			}
+			return cands[i].modTime.Before(cands[j].modTime)
+		})
+		for i := range cands {
+			if (maxFiles > 0 && totalFiles <= maxFiles) && (maxBytes > 0 && totalBytes <= maxBytes) {
+				break
+			}
+			if (maxFiles > 0 && totalFiles <= maxFiles) && maxBytes <= 0 {
+				break
+			}
+			if (maxBytes > 0 && totalBytes <= maxBytes) && maxFiles <= 0 {
+				break
+			}
+			deleteFile(cands[i])
+		}
+	}
+	return rep, nil
 }
 
 func sanitizeKey(key string) string {

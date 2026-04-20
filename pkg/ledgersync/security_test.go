@@ -47,6 +47,44 @@ func TestSecurityLayer_InventoryClusterDefer(t *testing.T) {
 	}
 }
 
+func TestSecurityLayer_WarmupAndTrustUpgrade(t *testing.T) {
+	sec := NewSecurityLayer(DefaultSecurityPolicy())
+	now := time.Now()
+	peerID := "peer-ok"
+
+	if tier := sec.TrustTier(peerID, now); tier != TrustLow {
+		t.Fatalf("expected low tier, got %q", tier)
+	}
+
+	for i := 0; i < 4; i++ {
+		sec.ObserveApplyReport(peerID, PeerRoleNormal, ledger.ApplyReport{Applied: 4}, now.Add(time.Duration(i)*time.Second))
+	}
+	if tier := sec.TrustTier(peerID, now.Add(5*time.Second)); tier == TrustLow {
+		t.Fatalf("expected tier to upgrade from low")
+	}
+}
+
+func TestSecurityLayer_WantOversizeDeferOrReject(t *testing.T) {
+	p := DefaultSecurityPolicy()
+	p.MaxWantsPerRound = 4
+	sec := NewSecurityLayer(p)
+	now := time.Now()
+
+	want := ledger.WantMessage{SchemaVersion: ledger.SyncSchemaV1}
+	for i := 0; i < 5; i++ {
+		want.Want = append(want.Want, "id")
+	}
+	if d := sec.ObserveWant("p1", PeerRoleNormal, want, now); d != DecisionDefer {
+		t.Fatalf("expected defer, got %q", d)
+	}
+	for i := 0; i < 10; i++ {
+		want.Want = append(want.Want, "id")
+	}
+	if d := sec.ObserveWant("p1", PeerRoleNormal, want, now.Add(time.Second)); d != DecisionReject {
+		t.Fatalf("expected reject, got %q", d)
+	}
+}
+
 func TestSelectPeers_EnforcesRelayAndAgentCaps(t *testing.T) {
 	m := &noopMesh{}
 	c, err := mesh.NewCrypto()

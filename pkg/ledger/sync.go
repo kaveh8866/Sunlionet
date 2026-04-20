@@ -232,6 +232,7 @@ func (l *Ledger) BuildEventsMessageBounded(want []string, maxEvents int, maxEven
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	seen := map[string]struct{}{}
 	out := make([]Event, 0, min(maxEvents, len(want)))
 	bytesUsed := 0
 	for _, id := range want {
@@ -239,6 +240,10 @@ func (l *Ledger) BuildEventsMessageBounded(want []string, maxEvents int, maxEven
 		if id == "" {
 			continue
 		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
 		ev, ok := l.events[id]
 		if !ok {
 			continue
@@ -275,9 +280,10 @@ func (l *Ledger) ApplyEventsMessage(msg EventsMessage, context string, pol *Poli
 	if msg.SchemaVersion != SyncSchemaV1 {
 		return ApplyReport{}, errors.New("ledger: unsupported sync schema")
 	}
+	events := orderEvents(msg.Events)
 	rep := ApplyReport{}
-	for i := range msg.Events {
-		ev := msg.Events[i]
+	for i := range events {
+		ev := events[i]
 		if l.Have(ev.ID) {
 			rep.Dupe++
 			continue
@@ -311,10 +317,11 @@ func (l *Ledger) ApplyEventsMessageBounded(msg EventsMessage, context string, po
 		return ApplyReport{}, errors.New("ledger: events message too large")
 	}
 
+	events := orderEvents(msg.Events)
 	rep := ApplyReport{}
 	bytesUsed := 0
-	for i := range msg.Events {
-		ev := msg.Events[i]
+	for i := range events {
+		ev := events[i]
 		raw, err := json.Marshal(ev)
 		if err != nil {
 			rep.Rejected++
@@ -340,6 +347,79 @@ func (l *Ledger) ApplyEventsMessageBounded(msg EventsMessage, context string, po
 		rep.Applied++
 	}
 	return rep, nil
+}
+
+func orderEvents(in []Event) []Event {
+	if len(in) <= 1 {
+		return in
+	}
+	out := append([]Event(nil), in...)
+	refCount := map[string]int{}
+	inBatch := map[string]struct{}{}
+	for i := range out {
+		id := strings.TrimSpace(out[i].ID)
+		if id == "" {
+			continue
+		}
+		inBatch[id] = struct{}{}
+	}
+	for i := range out {
+		ev := out[i]
+		if strings.TrimSpace(ev.Prev) != "" {
+			if _, ok := inBatch[ev.Prev]; ok {
+				refCount[ev.Prev]++
+			}
+		}
+		for _, p := range ev.Parents {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if _, ok := inBatch[p]; ok {
+				refCount[p]++
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a := out[i]
+		b := out[j]
+		pa := kindPriority(a.Kind)
+		pb := kindPriority(b.Kind)
+		if pa != pb {
+			return pa < pb
+		}
+		ra := refCount[a.ID]
+		rb := refCount[b.ID]
+		if ra != rb {
+			return ra > rb
+		}
+		if a.CreatedAt != b.CreatedAt {
+			return a.CreatedAt < b.CreatedAt
+		}
+		return a.ID < b.ID
+	})
+	return out
+}
+
+func kindPriority(kind string) int {
+	switch strings.TrimSpace(kind) {
+	case KindIdentityRevoke, KindIdentityRotate:
+		return 0
+	case KindMisbehaviorEquivoc, KindMisbehaviorReplay:
+		return 1
+	case KindGroupMembership, KindGroupCreate, KindGroupJoin:
+		return 2
+	case KindAgentAction:
+		return 3
+	case KindChatMessage:
+		return 4
+	case KindWitnessCheckpoint, KindWitnessAttest:
+		return 6
+	case KindSyncSummary, KindLedgerEvent:
+		return 7
+	default:
+		return 10
+	}
 }
 
 func min(a, b int) int {

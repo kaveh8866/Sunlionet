@@ -19,6 +19,9 @@ var (
 
 const (
 	KindLedgerEvent          = "ledger.event"
+	KindChatMessage          = "chat.message"
+	KindGroupCreate          = "group.create"
+	KindGroupJoin            = "group.join"
 	KindWitnessAttest        = "witness.attest"
 	KindWitnessCheckpoint    = "witness.checkpoint"
 	KindIdentityRotate       = "identity.rotate"
@@ -131,6 +134,9 @@ func validateWithPolicy(ev Event, p Policy) error {
 func isKnownKind(kind string) bool {
 	switch kind {
 	case KindLedgerEvent,
+		KindChatMessage,
+		KindGroupCreate,
+		KindGroupJoin,
 		KindWitnessAttest,
 		KindWitnessCheckpoint,
 		KindIdentityRotate,

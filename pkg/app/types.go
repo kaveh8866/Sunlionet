@@ -9,12 +9,15 @@ type Contact struct {
 }
 
 type Message struct {
-	EventID        string
-	ChatID         string
-	CreatedAt      int64
-	SenderPubB64   string
-	Text           string
-	Direction      string
-	PayloadRef     string
-	PayloadHashB64 string
+	EventID          string
+	ChatID           string
+	CreatedAt        int64
+	SenderPubB64     string
+	Text             string
+	Direction        string
+	State            string
+	PayloadRef       string
+	PayloadHashB64   string
+	PayloadAvailable bool
+	PayloadVerified  bool
 }

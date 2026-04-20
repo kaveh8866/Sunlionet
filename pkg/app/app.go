@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kaveh/sunlionet-agent/pkg/chat"
@@ -24,6 +25,12 @@ import (
 
 const (
 	KindChatMessage = "chat.message"
+)
+
+const (
+	DefaultMaxViewEvents        = 200000
+	DefaultMaxEnvelopeBytes     = 256 * 1024
+	DefaultMaxGroupParticipants = 128
 )
 
 type ChatMessageEvent struct {
@@ -50,10 +57,20 @@ type Config struct {
 	PreKeyPrivs func() ([][32]byte, error)
 
 	AgentPolicy AgentPolicy
+
+	MaxViewEvents        int
+	MaxEnvelopeBytes     int
+	MaxGroupParticipants int
 }
 
 type AgentPolicy struct {
-	Enabled        bool
+	Enabled bool
+
+	AllowReadChats     bool
+	AllowWriteChats    bool
+	AllowGroupActions  bool
+	AllowAssistActions bool
+
 	AllowedActions []string
 }
 
@@ -70,13 +87,45 @@ type App struct {
 
 	preKeyPrivs func() ([][32]byte, error)
 
-	agentPolicy agentPolicy
+	agentPolicy          agentPolicy
+	maxViewEvents        int
+	maxEnvelopeBytes     int
+	maxGroupParticipants int
+	stats                appStats
 
 	mu sync.Mutex
 }
 
+type AppStats struct {
+	PayloadMissing       uint64
+	PayloadHashMismatch  uint64
+	PayloadDecryptFailed uint64
+	OversizeEnvelopeDrop uint64
+	AgentDisabled        uint64
+	AgentActionBlocked   uint64
+	AgentActionAccepted  uint64
+	PayloadsPruned       uint64
+	PayloadBytesPruned   uint64
+}
+
+type appStats struct {
+	payloadMissing       atomic.Uint64
+	payloadHashMismatch  atomic.Uint64
+	payloadDecryptFailed atomic.Uint64
+	oversizeEnvelopeDrop atomic.Uint64
+	agentDisabled        atomic.Uint64
+	agentActionBlocked   atomic.Uint64
+	agentActionAccepted  atomic.Uint64
+	payloadsPruned       atomic.Uint64
+	payloadBytesPruned   atomic.Uint64
+}
+
 type agentPolicy struct {
 	enabled        bool
+	allowReadChat  bool
+	allowWriteChat bool
+	allowGroup     bool
+	allowAssist    bool
 	allowedActions map[string]struct{}
 }
 
@@ -94,15 +143,30 @@ func New(cfg Config) (*App, error) {
 		cfg.PreKeyPrivs = func() ([][32]byte, error) { return nil, nil }
 	}
 	ap := normalizeAgentPolicy(cfg.AgentPolicy)
+	maxViewEvents := cfg.MaxViewEvents
+	if maxViewEvents <= 0 {
+		maxViewEvents = DefaultMaxViewEvents
+	}
+	maxEnvelopeBytes := cfg.MaxEnvelopeBytes
+	if maxEnvelopeBytes <= 0 {
+		maxEnvelopeBytes = DefaultMaxEnvelopeBytes
+	}
+	maxGroupParticipants := cfg.MaxGroupParticipants
+	if maxGroupParticipants <= 0 {
+		maxGroupParticipants = DefaultMaxGroupParticipants
+	}
 	return &App{
-		persona:      cfg.Persona,
-		ledger:       cfg.Ledger,
-		ledgerPolicy: cfg.LedgerPolicy,
-		ledgerStore:  cfg.LedgerStore,
-		sync:         cfg.Sync,
-		payloads:     cfg.Payloads,
-		preKeyPrivs:  cfg.PreKeyPrivs,
-		agentPolicy:  ap,
+		persona:              cfg.Persona,
+		ledger:               cfg.Ledger,
+		ledgerPolicy:         cfg.LedgerPolicy,
+		ledgerStore:          cfg.LedgerStore,
+		sync:                 cfg.Sync,
+		payloads:             cfg.Payloads,
+		preKeyPrivs:          cfg.PreKeyPrivs,
+		agentPolicy:          ap,
+		maxViewEvents:        maxViewEvents,
+		maxEnvelopeBytes:     maxEnvelopeBytes,
+		maxGroupParticipants: maxGroupParticipants,
 	}, nil
 }
 
@@ -129,6 +193,23 @@ func (a *App) SelfSignPubB64() string {
 		return ""
 	}
 	return a.persona.SignPubB64
+}
+
+func (a *App) Stats() AppStats {
+	if a == nil {
+		return AppStats{}
+	}
+	return AppStats{
+		PayloadMissing:       a.stats.payloadMissing.Load(),
+		PayloadHashMismatch:  a.stats.payloadHashMismatch.Load(),
+		PayloadDecryptFailed: a.stats.payloadDecryptFailed.Load(),
+		OversizeEnvelopeDrop: a.stats.oversizeEnvelopeDrop.Load(),
+		AgentDisabled:        a.stats.agentDisabled.Load(),
+		AgentActionBlocked:   a.stats.agentActionBlocked.Load(),
+		AgentActionAccepted:  a.stats.agentActionAccepted.Load(),
+		PayloadsPruned:       a.stats.payloadsPruned.Load(),
+		PayloadBytesPruned:   a.stats.payloadBytesPruned.Load(),
+	}
 }
 
 func (a *App) SendMessage(ctx context.Context, r relay.Relay, to Contact, text string) (string, error) {
@@ -176,6 +257,9 @@ func (a *App) SendMessage(ctx context.Context, r relay.Relay, to Contact, text s
 	if err != nil {
 		return "", err
 	}
+	if a.maxEnvelopeBytes > 0 && len(envStr) > a.maxEnvelopeBytes {
+		return "", errors.New("app: envelope too large")
+	}
 	payloadHashB64 := sha256B64Bytes([]byte(envStr))
 	payloadRef := "payload:sha256:" + payloadHashB64
 
@@ -219,6 +303,10 @@ func (a *App) HandleRelayEnvelope(ctx context.Context, msg relay.Message, envelo
 	if a == nil {
 		return errors.New("app: app is nil")
 	}
+	if a.maxEnvelopeBytes > 0 && len(envelope) > a.maxEnvelopeBytes {
+		a.stats.oversizeEnvelopeDrop.Add(1)
+		return nil
+	}
 	if len(plaintext) == 0 {
 		return nil
 	}
@@ -254,9 +342,13 @@ func (a *App) ListMessages(chatID string) ([]Message, error) {
 	self := a.SelfSignPubB64()
 
 	snap := a.ledger.Snapshot()
+	evs := snap.Events
+	if a.maxViewEvents > 0 && len(evs) > a.maxViewEvents {
+		evs = evs[len(evs)-a.maxViewEvents:]
+	}
 	msgs := make([]Message, 0, 32)
-	for i := range snap.Events {
-		ev := snap.Events[i]
+	for i := range evs {
+		ev := evs[i]
 		if ev.Kind != KindChatMessage {
 			continue
 		}
@@ -277,10 +369,15 @@ func (a *App) ListMessages(chatID string) ([]Message, error) {
 		}
 
 		var text string
+		state := "pending"
+		payloadAvailable := false
+		payloadVerified := false
 		switch dir {
 		case "out":
 			if strings.TrimSpace(pl.PayloadHashB64) != "" {
 				if b, ok, _ := a.payloads.Get("outbox:" + pl.PayloadHashB64); ok {
+					payloadAvailable = true
+					payloadVerified = true
 					if sp, ok2, _ := chat.DecodeAndVerify(b); ok2 {
 						if t, err := extractText(sp); err == nil {
 							text = t
@@ -288,24 +385,50 @@ func (a *App) ListMessages(chatID string) ([]Message, error) {
 					}
 				}
 			}
+			state = "pending"
 		default:
 			if strings.TrimSpace(pl.PayloadRef) != "" {
 				if envBytes, ok, _ := a.payloads.Get(pl.PayloadRef); ok {
-					t, _ := decryptEnvelopeText(string(envBytes), privs)
-					text = t
+					payloadAvailable = true
+					if strings.TrimSpace(pl.PayloadHashB64) != "" {
+						got := sha256B64Bytes(envBytes)
+						if got != strings.TrimSpace(pl.PayloadHashB64) {
+							a.stats.payloadHashMismatch.Add(1)
+							state = "blocked"
+							payloadVerified = false
+							break
+						}
+					}
+					payloadVerified = true
+					t, ok := decryptEnvelopeText(string(envBytes), privs)
+					if ok {
+						text = t
+						state = "synced"
+					} else {
+						a.stats.payloadDecryptFailed.Add(1)
+						state = "blocked"
+					}
+				} else {
+					a.stats.payloadMissing.Add(1)
+					state = "waiting_for_payload"
 				}
+			} else {
+				state = "blocked"
 			}
 		}
 
 		msgs = append(msgs, Message{
-			EventID:        ev.ID,
-			ChatID:         pl.ChatID,
-			CreatedAt:      ev.CreatedAt,
-			SenderPubB64:   pl.FromPubB64,
-			Text:           text,
-			Direction:      dir,
-			PayloadRef:     pl.PayloadRef,
-			PayloadHashB64: pl.PayloadHashB64,
+			EventID:          ev.ID,
+			ChatID:           pl.ChatID,
+			CreatedAt:        ev.CreatedAt,
+			SenderPubB64:     pl.FromPubB64,
+			Text:             text,
+			State:            state,
+			Direction:        dir,
+			PayloadRef:       pl.PayloadRef,
+			PayloadHashB64:   pl.PayloadHashB64,
+			PayloadAvailable: payloadAvailable,
+			PayloadVerified:  payloadVerified,
 		})
 	}
 	sort.Slice(msgs, func(i, j int) bool {
@@ -379,6 +502,9 @@ func (a *App) SendGroupMessage(ctx context.Context, r relay.Relay, groupID strin
 	if len(participants) == 0 {
 		return "", errors.New("app: participants required")
 	}
+	if a.maxGroupParticipants > 0 && len(participants) > a.maxGroupParticipants {
+		return "", errors.New("app: too many participants")
+	}
 	if !a.IsGroupMember(groupID, a.persona.SignPubB64) {
 		return "", errors.New("app: not a group member")
 	}
@@ -408,6 +534,9 @@ func (a *App) SendGroupMessage(ctx context.Context, r relay.Relay, groupID strin
 		}
 		envStr, err := env.Encode()
 		if err != nil {
+			continue
+		}
+		if a.maxEnvelopeBytes > 0 && len(envStr) > a.maxEnvelopeBytes {
 			continue
 		}
 		hashB64 := sha256B64Bytes([]byte(envStr))
@@ -538,17 +667,32 @@ func (a *App) appendGroupMembershipEventLocked(groupID string, action string, su
 }
 
 func (a *App) appendAgentActionLocked(agentID string, action string, scope string, target string, ref string, now time.Time) (string, error) {
-	if a.agentPolicy.enabled {
-		if _, ok := a.agentPolicy.allowedActions[strings.TrimSpace(action)]; !ok {
-			return "", errors.New("app: agent action not allowed")
-		}
+	if !a.agentPolicy.enabled {
+		a.stats.agentDisabled.Add(1)
+		return "", errors.New("app: agent disabled")
 	}
+
+	action = strings.TrimSpace(action)
+	scope = strings.TrimSpace(scope)
+	target = strings.TrimSpace(target)
+	ref = strings.TrimSpace(ref)
+
+	cat, key, ok := classifyAgentAction(scope, action)
+	if !ok {
+		a.stats.agentActionBlocked.Add(1)
+		return "", errors.New("app: agent action not allowed")
+	}
+	if !a.agentPolicy.allowed(key, action, cat) {
+		a.stats.agentActionBlocked.Add(1)
+		return "", errors.New("app: agent action not allowed")
+	}
+	a.stats.agentActionAccepted.Add(1)
 	raw, err := json.Marshal(ledger.AgentActionPayload{
 		AgentID: strings.TrimSpace(agentID),
-		Action:  strings.TrimSpace(action),
-		Scope:   strings.TrimSpace(scope),
-		Target:  strings.TrimSpace(target),
-		Ref:     strings.TrimSpace(ref),
+		Action:  action,
+		Scope:   scope,
+		Target:  target,
+		Ref:     ref,
 	})
 	if err != nil {
 		return "", err
@@ -578,11 +722,123 @@ func (a *App) PublishAllEventsToRelay(ctx context.Context, r relay.Relay, mailbo
 		return 0, errors.New("app: sync is nil")
 	}
 	snap := a.ledger.Snapshot()
-	want := make([]string, 0, len(snap.Events))
-	for i := range snap.Events {
-		want = append(want, snap.Events[i].ID)
+	evs := snap.Events
+	if len(evs) > 5000 {
+		evs = evs[len(evs)-5000:]
+	}
+	sort.SliceStable(evs, func(i, j int) bool {
+		pi := relayEventPriority(evs[i].Kind)
+		pj := relayEventPriority(evs[j].Kind)
+		if pi != pj {
+			return pi < pj
+		}
+		if evs[i].CreatedAt != evs[j].CreatedAt {
+			return evs[i].CreatedAt > evs[j].CreatedAt
+		}
+		return evs[i].ID > evs[j].ID
+	})
+	want := make([]string, 0, len(evs))
+	for i := range evs {
+		want = append(want, evs[i].ID)
 	}
 	return a.sync.PublishEventsToRelay(ctx, r, mailbox, recipientPreKeyPub, syncContext, want, ttlSec, powBits)
+}
+
+func relayEventPriority(kind string) int {
+	switch strings.TrimSpace(kind) {
+	case ledger.KindIdentityRevoke, ledger.KindIdentityRotate:
+		return 0
+	case ledger.KindMisbehaviorEquivoc, ledger.KindMisbehaviorReplay:
+		return 1
+	case ledger.KindGroupMembership, ledger.KindGroupCreate, ledger.KindGroupJoin:
+		return 2
+	case ledger.KindAgentAction:
+		return 3
+	case ledger.KindChatMessage:
+		return 4
+	case ledger.KindWitnessCheckpoint, ledger.KindWitnessAttest:
+		return 6
+	case ledger.KindSyncSummary, ledger.KindLedgerEvent:
+		return 7
+	default:
+		return 10
+	}
+}
+
+type RetentionPolicy struct {
+	KeepUnreferencedFor time.Duration
+	MaxPayloadFiles     int
+	MaxPayloadBytes     int64
+
+	MaxScanEvents int
+}
+
+type RetentionReport struct {
+	ReferencedPayloadKeys int
+	ScannedEvents         int
+	Payloads              PruneReport
+}
+
+func (a *App) Prune(now time.Time, pol RetentionPolicy) (RetentionReport, error) {
+	if a == nil {
+		return RetentionReport{}, errors.New("app: app is nil")
+	}
+	if a.payloads == nil {
+		return RetentionReport{}, errors.New("app: payload store is nil")
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	maxScan := pol.MaxScanEvents
+	if maxScan <= 0 {
+		maxScan = 50000
+	}
+
+	snap := a.ledger.Snapshot()
+	evs := snap.Events
+	if len(evs) > maxScan {
+		evs = evs[len(evs)-maxScan:]
+	}
+
+	keep := map[string]struct{}{}
+	for i := range evs {
+		ev := evs[i]
+		if ev.Kind != KindChatMessage {
+			continue
+		}
+		raw, ok, err := ledger.DecodeInlinePayloadRef(ev.PayloadRef, ledger.MaxInlinePayloadBytes)
+		if err != nil || !ok || len(raw) == 0 {
+			continue
+		}
+		var pl ChatMessageEvent
+		if err := json.Unmarshal(raw, &pl); err != nil {
+			continue
+		}
+		if strings.TrimSpace(pl.PayloadRef) != "" {
+			keep[strings.TrimSpace(pl.PayloadRef)] = struct{}{}
+		}
+		if strings.TrimSpace(pl.PayloadHashB64) != "" {
+			keep["outbox:"+strings.TrimSpace(pl.PayloadHashB64)] = struct{}{}
+		}
+	}
+
+	keys := make([]string, 0, len(keep))
+	for k := range keep {
+		keys = append(keys, k)
+	}
+	rep, err := a.payloads.Prune(now, keys, pol.KeepUnreferencedFor, pol.MaxPayloadFiles, pol.MaxPayloadBytes)
+	if err != nil {
+		return RetentionReport{}, err
+	}
+	if rep.Deleted > 0 {
+		a.stats.payloadsPruned.Add(uint64(rep.Deleted))
+		a.stats.payloadBytesPruned.Add(uint64(rep.BytesDeleted))
+	}
+	return RetentionReport{
+		ReferencedPayloadKeys: len(keys),
+		ScannedEvents:         len(evs),
+		Payloads:              rep,
+	}, nil
 }
 
 func (a *App) PullAndApplyFromRelay(ctx context.Context, r relay.Relay, mailbox relay.MailboxID, recipientPreKeyPriv [32]byte, limit int, ack bool) (ledger.ApplyReport, int, error) {
@@ -812,6 +1068,10 @@ func random16() []byte {
 func normalizeAgentPolicy(p AgentPolicy) agentPolicy {
 	out := agentPolicy{
 		enabled:        p.Enabled,
+		allowReadChat:  p.AllowReadChats,
+		allowWriteChat: p.AllowWriteChats,
+		allowGroup:     p.AllowGroupActions,
+		allowAssist:    p.AllowAssistActions,
 		allowedActions: map[string]struct{}{},
 	}
 	for i := range p.AllowedActions {
@@ -825,4 +1085,67 @@ func normalizeAgentPolicy(p AgentPolicy) agentPolicy {
 		out.allowedActions = map[string]struct{}{}
 	}
 	return out
+}
+
+type agentActionCategory string
+
+const (
+	agentCatReadChat  agentActionCategory = "read_chat"
+	agentCatWriteChat agentActionCategory = "write_chat"
+	agentCatGroup     agentActionCategory = "group"
+	agentCatAssist    agentActionCategory = "assist"
+)
+
+func classifyAgentAction(scope string, action string) (agentActionCategory, string, bool) {
+	scope = strings.TrimSpace(scope)
+	action = strings.TrimSpace(action)
+	if scope == "" || action == "" {
+		return "", "", false
+	}
+	switch scope {
+	case "chat":
+		switch action {
+		case "read", "summarize":
+			return agentCatReadChat, "chat." + action, true
+		case "reply", "send":
+			return agentCatWriteChat, "chat." + action, true
+		case "suggest", "draft":
+			return agentCatAssist, "chat." + action, true
+		default:
+			return "", "", false
+		}
+	case "group":
+		switch action {
+		case "send", "invite", "join", "leave":
+			return agentCatGroup, "group." + action, true
+		default:
+			return "", "", false
+		}
+	default:
+		return "", "", false
+	}
+}
+
+func (p agentPolicy) allowed(canonicalKey string, rawAction string, cat agentActionCategory) bool {
+	if !p.enabled {
+		return false
+	}
+	if _, ok := p.allowedActions[canonicalKey]; ok {
+		return true
+	}
+	if _, ok := p.allowedActions[strings.TrimSpace(rawAction)]; ok {
+		return true
+	}
+	switch cat {
+	case agentCatReadChat:
+		return p.allowReadChat
+	case agentCatWriteChat:
+		return p.allowWriteChat
+	case agentCatGroup:
+		return p.allowGroup
+	case agentCatAssist:
+		return p.allowAssist
+	default:
+		return false
+	}
 }

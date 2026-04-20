@@ -37,9 +37,15 @@ type SecurityPolicy struct {
 	QuarantineBase time.Duration
 	QuarantineMax  time.Duration
 
-	SybilWarmupApplied int
-	MaxRelaysPerRound  int
-	MaxAgentsPerRound  int
+	MaxInventorySize       int
+	MaxHeadsPerRound       int
+	MaxWantsPerRound       int
+	QuarantineAfterRejects int
+
+	SybilWarmupApplied  int
+	NewPeerWarmupRounds int
+	MaxRelaysPerRound   int
+	MaxAgentsPerRound   int
 
 	RelayMaxInboundBytes int
 	AgentMaxInboundBytes int
@@ -59,9 +65,15 @@ func DefaultSecurityPolicy() SecurityPolicy {
 		QuarantineBase: 30 * time.Second,
 		QuarantineMax:  10 * time.Minute,
 
-		SybilWarmupApplied: 3,
-		MaxRelaysPerRound:  1,
-		MaxAgentsPerRound:  1,
+		MaxInventorySize:       256,
+		MaxHeadsPerRound:       64,
+		MaxWantsPerRound:       256,
+		QuarantineAfterRejects: 12,
+
+		SybilWarmupApplied:  3,
+		NewPeerWarmupRounds: 3,
+		MaxRelaysPerRound:   1,
+		MaxAgentsPerRound:   1,
 
 		RelayMaxInboundBytes: 120 * 1024,
 		AgentMaxInboundBytes: 64 * 1024,
@@ -96,8 +108,26 @@ func (p SecurityPolicy) normalize() SecurityPolicy {
 	if out.QuarantineMax < out.QuarantineBase {
 		out.QuarantineMax = out.QuarantineBase
 	}
+	if out.MaxInventorySize <= 0 {
+		out.MaxInventorySize = def.MaxInventorySize
+	}
+	if out.MaxHeadsPerRound <= 0 {
+		out.MaxHeadsPerRound = def.MaxHeadsPerRound
+	}
+	if out.MaxWantsPerRound <= 0 {
+		out.MaxWantsPerRound = def.MaxWantsPerRound
+	}
+	if out.QuarantineAfterRejects <= 0 {
+		out.QuarantineAfterRejects = def.QuarantineAfterRejects
+	}
 	if out.SybilWarmupApplied <= 0 {
 		out.SybilWarmupApplied = def.SybilWarmupApplied
+	}
+	if out.NewPeerWarmupRounds <= 0 {
+		out.NewPeerWarmupRounds = def.NewPeerWarmupRounds
+	}
+	if out.NewPeerWarmupRounds != out.SybilWarmupApplied {
+		out.SybilWarmupApplied = out.NewPeerWarmupRounds
 	}
 	if out.MaxRelaysPerRound <= 0 {
 		out.MaxRelaysPerRound = def.MaxRelaysPerRound
@@ -214,6 +244,49 @@ func (s *SecurityLayer) isWarmLocked(ps *peerTrust) bool {
 	return ps.appliedTotal >= s.policy.SybilWarmupApplied
 }
 
+func (s *SecurityLayer) SetQuarantine(peerID string, role PeerRole, dur time.Duration, now time.Time) {
+	if s == nil || strings.TrimSpace(peerID) == "" {
+		return
+	}
+	if dur <= 0 {
+		dur = s.policy.QuarantineBase
+	}
+	if dur > s.policy.QuarantineMax {
+		dur = s.policy.QuarantineMax
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.ensurePeerLocked(peerID, role, now)
+	ps.quarantineUntil = now.Add(dur)
+	if ps.penalty < dur {
+		ps.penalty = dur
+	}
+}
+
+func (s *SecurityLayer) ClearQuarantine(peerID string, now time.Time) {
+	if s == nil || strings.TrimSpace(peerID) == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.ensurePeerLocked(peerID, "", now)
+	ps.quarantineUntil = time.Time{}
+	ps.penalty = 0
+}
+
+func (s *SecurityLayer) AdjustScore(peerID string, role PeerRole, delta int, now time.Time) {
+	if s == nil || strings.TrimSpace(peerID) == "" || delta == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.ensurePeerLocked(peerID, role, now)
+	ps.score += delta
+	if ps.score > 120 {
+		ps.score = 120
+	}
+}
+
 func (s *SecurityLayer) ObserveInbound(peerID string, role PeerRole, msgType string, size int, now time.Time) PolicyDecision {
 	if s == nil || strings.TrimSpace(peerID) == "" {
 		return DecisionAccept
@@ -250,6 +323,15 @@ func (s *SecurityLayer) ObserveInventory(peerID string, role PeerRole, inv ledge
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ps := s.ensurePeerLocked(peerID, role, now)
+
+	if len(inv.Heads) > s.policy.MaxHeadsPerRound {
+		s.penalizeLocked(ps, 6, now)
+		return DecisionReject
+	}
+	if len(inv.Have) > s.policy.MaxInventorySize {
+		s.penalizeLocked(ps, 8, now)
+		return DecisionReject
+	}
 
 	if digest != "" {
 		if ps.lastInvDigest == digest {
@@ -292,6 +374,38 @@ func (s *SecurityLayer) ObserveInventory(peerID string, role PeerRole, inv ledge
 	return DecisionAccept
 }
 
+func (s *SecurityLayer) ObserveWant(peerID string, role PeerRole, want ledger.WantMessage, now time.Time) PolicyDecision {
+	if s == nil || strings.TrimSpace(peerID) == "" {
+		return DecisionAccept
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.ensurePeerLocked(peerID, role, now)
+	if !ps.quarantineUntil.IsZero() && now.Before(ps.quarantineUntil) {
+		return DecisionReject
+	}
+	if ps.score <= s.policy.MinScore {
+		return DecisionReject
+	}
+	if len(want.Want) > s.policy.MaxWantsPerRound*2 {
+		s.penalizeLocked(ps, 10, now)
+		return DecisionReject
+	}
+	if len(want.Want) > s.policy.MaxWantsPerRound {
+		s.penalizeLocked(ps, 6, now)
+		return DecisionDefer
+	}
+	if ps.role == PeerRoleRelay && len(want.Want) > s.policy.MaxWantsPerRound/2 {
+		s.penalizeLocked(ps, 4, now)
+		return DecisionDefer
+	}
+	if ps.role == PeerRoleAgent && len(want.Want) > s.policy.MaxWantsPerRound/3 {
+		s.penalizeLocked(ps, 4, now)
+		return DecisionDefer
+	}
+	return DecisionAccept
+}
+
 func (s *SecurityLayer) ObserveApplyReport(peerID string, role PeerRole, rep ledger.ApplyReport, now time.Time) {
 	if s == nil || strings.TrimSpace(peerID) == "" {
 		return
@@ -318,6 +432,12 @@ func (s *SecurityLayer) ObserveApplyReport(peerID string, role PeerRole, rep led
 			pen = 30
 		}
 		s.penalizeLocked(ps, pen, now)
+		if s.policy.QuarantineAfterRejects > 0 && ps.rejectedTotal >= s.policy.QuarantineAfterRejects {
+			if ps.penalty <= 0 {
+				ps.penalty = s.policy.QuarantineBase
+			}
+			ps.quarantineUntil = now.Add(ps.penalty)
+		}
 	}
 	if ps.score > 120 {
 		ps.score = 120

@@ -3,6 +3,7 @@ package ledgersync
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,5 +234,70 @@ func TestRelaySync_PublishAndPullEvents(t *testing.T) {
 	}
 	if len(after) != 0 {
 		t.Fatalf("expected mailbox empty after ack")
+	}
+}
+
+func TestService_Stats_DuplicateAndDeferredAndRejected(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	pub, priv, _ := persona.SignKeypair()
+
+	ev, _ := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Kind:       "chat.msg",
+		Payload:    json.RawMessage(`{"t":"x"}`),
+		CreatedAt:  time.Now(),
+	})
+	msg := ledger.EventsMessage{SchemaVersion: ledger.SyncSchemaV1, Events: []ledger.Event{ev}}
+	pt, err := encodeWire("events", "s", "", msg)
+	if err != nil {
+		t.Fatalf("encode wire: %v", err)
+	}
+
+	c, _ := mesh.NewCrypto()
+	l := ledger.New()
+	s, err := New(&noopMesh{}, c, l, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	handled, rep1, err := s.TryApplyWirePlaintext("peer1", pt)
+	if err != nil || !handled || rep1.Applied != 1 {
+		t.Fatalf("expected applied=1, handled=true, err=nil; got handled=%v rep=%+v err=%v", handled, rep1, err)
+	}
+	handled, _, _ = s.TryApplyWirePlaintext("peer1", pt)
+	if !handled {
+		t.Fatalf("expected handled=true on duplicate plaintext")
+	}
+	if st := s.Stats(); st.Duplicate != 1 {
+		t.Fatalf("expected duplicate=1, got %+v", st)
+	}
+
+	ptBig, err := encodeWire("events", "s2", "", map[string]string{"x": strings.Repeat("a", 110*1024)})
+	if err != nil {
+		t.Fatalf("encode big wire: %v", err)
+	}
+	_, _, _ = s.TryApplyWirePlaintext("peer2", ptBig)
+	if st := s.Stats(); st.Deferred == 0 {
+		t.Fatalf("expected deferred>0, got %+v", st)
+	}
+
+	c2, _ := mesh.NewCrypto()
+	l2 := ledger.New()
+	sp := DefaultSecurityPolicy()
+	sp.InitialScore = 10
+	sp.MinScore = 11
+	sp.MediumScore = 12
+	sp.HighScore = 13
+	s2, err := New(&noopMesh{}, c2, l2, nil, nil, Options{SecurityPolicy: sp})
+	if err != nil {
+		t.Fatalf("new2: %v", err)
+	}
+	_, _, _ = s2.TryApplyWirePlaintext("peer3", pt)
+	st2 := s2.Stats()
+	if st2.Rejected == 0 || st2.Quarantined == 0 {
+		t.Fatalf("expected rejected>0 and quarantined>0, got %+v", st2)
 	}
 }

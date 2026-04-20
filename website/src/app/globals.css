@@ -261,3 +261,21 @@ body {
   font-size: 0.85em;
   color: var(--foreground);
 }
+
+.wizard-tap {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wizard-tap:is(a, button) {
+  min-height: 44px;
+}
+
+@media (pointer: coarse) {
+  .wizard-tap:hover {
+    opacity: 1 !important;
+  }
+}
+
+.wizard-safe-area {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+}

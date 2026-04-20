@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/kaveh/sunlionet-agent/pkg/ledger"
 	"github.com/kaveh/sunlionet-agent/pkg/ledgersync"
 	"github.com/kaveh/sunlionet-agent/pkg/mesh"
+	"github.com/kaveh/sunlionet-agent/pkg/messaging"
 	"github.com/kaveh/sunlionet-agent/pkg/relay"
 	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 )
@@ -464,5 +467,373 @@ func TestApp_AgentPolicy(t *testing.T) {
 	}
 	if _, err := a.AgentReply(time.Now(), "agent-1", "chat-1", "ref"); err != nil {
 		t.Fatalf("expected reply to succeed: %v", err)
+	}
+}
+
+func TestApp_ListMessages_WaitingForPayload(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+	a, err := New(Config{
+		Persona:      persona,
+		Ledger:       l,
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+		PreKeyPrivs:  func() ([][32]byte, error) { return nil, nil },
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	chatID := "c1"
+	pl := ChatMessageEvent{
+		ChatID:         chatID,
+		PayloadRef:     "payload:sha256:does-not-exist",
+		PayloadHashB64: "deadbeef",
+		FromPubB64:     "other",
+		ToPubB64:       persona.SignPubB64,
+		ClientID:       "c",
+	}
+	raw, _ := json.Marshal(pl)
+	_, inlineRef, _ := ledger.InlinePayloadRef(raw)
+	pub, priv, _ := persona.SignKeypair()
+	ev, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Prev:       "",
+		Parents:    nil,
+		Kind:       KindChatMessage,
+		Payload:    raw,
+		PayloadRef: inlineRef,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new signed: %v", err)
+	}
+	if _, err := l.Apply(ev, &pol, nil); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	msgs, err := a.ListMessages(chatID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 msg, got %d", len(msgs))
+	}
+	if msgs[0].State != "waiting_for_payload" {
+		t.Fatalf("expected waiting_for_payload, got %q", msgs[0].State)
+	}
+	if msgs[0].PayloadAvailable {
+		t.Fatalf("expected payload to be unavailable")
+	}
+}
+
+func TestApp_ListMessages_BlockedOnHashMismatch(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+	a, err := New(Config{
+		Persona:      persona,
+		Ledger:       l,
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+		PreKeyPrivs:  func() ([][32]byte, error) { return nil, nil },
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	chatID := "c2"
+	env := "not-a-real-envelope"
+	ref := "payload:sha256:" + sha256B64Bytes([]byte(env))
+	if err := ps.Put(ref, []byte(env)); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	pl := ChatMessageEvent{
+		ChatID:         chatID,
+		PayloadRef:     ref,
+		PayloadHashB64: "mismatch",
+		FromPubB64:     "other",
+		ToPubB64:       persona.SignPubB64,
+		ClientID:       "c",
+	}
+	raw, _ := json.Marshal(pl)
+	_, inlineRef, _ := ledger.InlinePayloadRef(raw)
+	pub, priv, _ := persona.SignKeypair()
+	ev, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Prev:       "",
+		Parents:    nil,
+		Kind:       KindChatMessage,
+		Payload:    raw,
+		PayloadRef: inlineRef,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new signed: %v", err)
+	}
+	if _, err := l.Apply(ev, &pol, nil); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	msgs, err := a.ListMessages(chatID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 msg, got %d", len(msgs))
+	}
+	if msgs[0].State != "blocked" {
+		t.Fatalf("expected blocked, got %q", msgs[0].State)
+	}
+	if !msgs[0].PayloadAvailable {
+		t.Fatalf("expected payload to be available")
+	}
+	if msgs[0].PayloadVerified {
+		t.Fatalf("expected payload to be unverified")
+	}
+}
+
+func TestApp_MessageBeforePayload_ThenPayloadArrives(t *testing.T) {
+	alice, _ := identity.NewPersona()
+	bob, _ := identity.NewPersona()
+	bobPK, _ := identity.NewPreKey(24 * time.Hour)
+	bobPriv, _ := bobPK.DecodePrivate()
+	bobPub, _ := bobPK.DecodePublic()
+
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+	a, err := New(Config{
+		Persona:      bob,
+		Ledger:       l,
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+		PreKeyPrivs: func() ([][32]byte, error) {
+			return [][32]byte{bobPriv}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	selfID := chat.ContactIDFromSignPub(bob.SignPubB64)
+	fromID := chat.ContactIDFromSignPub(alice.SignPubB64)
+	chatID := string(chat.DirectChatID(selfID, fromID))
+
+	alicePub, alicePriv, _ := alice.SignKeypair()
+	payload, err := chat.EncodeText(alice.SignPubB64, alicePriv, chatID, "hi later", time.Now())
+	if err != nil {
+		t.Fatalf("encode payload: %v", err)
+	}
+	env, _, err := messaging.EncryptToPreKey(payload, bobPub)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	envStr, err := env.Encode()
+	if err != nil {
+		t.Fatalf("encode env: %v", err)
+	}
+	hashB64 := sha256B64Bytes([]byte(envStr))
+	ref := "payload:sha256:" + hashB64
+
+	pl := ChatMessageEvent{
+		ChatID:         chatID,
+		PayloadRef:     ref,
+		PayloadHashB64: hashB64,
+		FromPubB64:     alice.SignPubB64,
+		ToPubB64:       bob.SignPubB64,
+		ClientID:       "c",
+	}
+	raw, _ := json.Marshal(pl)
+	_, inlineRef, _ := ledger.InlinePayloadRef(raw)
+	ev, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(alice.ID),
+		AuthorPub:  alicePub,
+		AuthorPriv: alicePriv,
+		Seq:        1,
+		Prev:       "",
+		Parents:    nil,
+		Kind:       KindChatMessage,
+		Payload:    raw,
+		PayloadRef: inlineRef,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new signed: %v", err)
+	}
+	if _, err := l.Apply(ev, &pol, nil); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	msgs1, err := a.ListMessages(chatID)
+	if err != nil {
+		t.Fatalf("list1: %v", err)
+	}
+	if len(msgs1) != 1 || msgs1[0].State != "waiting_for_payload" {
+		t.Fatalf("expected waiting_for_payload, got %+v", msgs1)
+	}
+
+	if err := a.HandleRelayEnvelope(context.Background(), relay.Message{}, envStr, payload); err != nil {
+		t.Fatalf("handle envelope: %v", err)
+	}
+	msgs2, err := a.ListMessages(chatID)
+	if err != nil {
+		t.Fatalf("list2: %v", err)
+	}
+	if len(msgs2) != 1 || msgs2[0].Text != "hi later" || msgs2[0].State != "synced" {
+		t.Fatalf("expected synced text, got %+v", msgs2)
+	}
+
+	st := a.Stats()
+	if st.PayloadMissing == 0 {
+		t.Fatalf("expected payload missing counter to increase")
+	}
+}
+
+func TestApp_OversizeEnvelope_Dropped(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+	a, err := New(Config{
+		Persona:          persona,
+		Ledger:           l,
+		LedgerPolicy:     &pol,
+		Payloads:         ps,
+		MaxEnvelopeBytes: 8,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	oversize := strings.Repeat("x", 16)
+	if err := a.HandleRelayEnvelope(context.Background(), relay.Message{}, oversize, []byte("x")); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	st := a.Stats()
+	if st.OversizeEnvelopeDrop != 1 {
+		t.Fatalf("expected oversize drop counter to be 1, got %d", st.OversizeEnvelopeDrop)
+	}
+}
+
+func TestApp_PayloadPrune_RemovesUnreferenced(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+	a, err := New(Config{
+		Persona:      persona,
+		Ledger:       l,
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	keepRef := "payload:sha256:keep"
+	dropRef := "payload:sha256:drop"
+	if err := ps.Put(keepRef, []byte("k")); err != nil {
+		t.Fatalf("put keep: %v", err)
+	}
+	if err := ps.Put(dropRef, []byte("d")); err != nil {
+		t.Fatalf("put drop: %v", err)
+	}
+
+	pl := ChatMessageEvent{
+		ChatID:     "c",
+		PayloadRef: keepRef,
+		FromPubB64: "other",
+		ToPubB64:   persona.SignPubB64,
+		ClientID:   "c",
+	}
+	raw, _ := json.Marshal(pl)
+	_, inlineRef, _ := ledger.InlinePayloadRef(raw)
+	pub, priv, _ := persona.SignKeypair()
+	ev, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Kind:       KindChatMessage,
+		Payload:    raw,
+		PayloadRef: inlineRef,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new signed: %v", err)
+	}
+	if _, err := l.Apply(ev, &pol, nil); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	rep, err := a.Prune(time.Now(), RetentionPolicy{
+		KeepUnreferencedFor: 0,
+		MaxPayloadFiles:     0,
+		MaxPayloadBytes:     0,
+		MaxScanEvents:       1000,
+	})
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if rep.Payloads.Deleted == 0 {
+		t.Fatalf("expected some payloads deleted, got %+v", rep.Payloads)
+	}
+	if !ps.Has(keepRef) {
+		t.Fatalf("expected keepRef to remain")
+	}
+	if ps.Has(dropRef) {
+		t.Fatalf("expected dropRef to be pruned")
+	}
+	st := a.Stats()
+	if st.PayloadsPruned == 0 {
+		t.Fatalf("expected payloads pruned counter to increase")
+	}
+}
+
+func TestApp_AgentPolicy_Categories(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	l := ledger.New()
+	pol := ledger.DefaultPolicy()
+	ps, _ := NewPayloadStore(t.TempDir(), make([]byte, 32))
+
+	a, err := New(Config{
+		Persona:      persona,
+		Ledger:       l,
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+		AgentPolicy: AgentPolicy{
+			Enabled:         true,
+			AllowWriteChats: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if _, err := a.AgentReply(time.Now(), "agent-1", "chat-1", "ref"); err != nil {
+		t.Fatalf("expected reply to succeed: %v", err)
+	}
+
+	b, err := New(Config{
+		Persona:      persona,
+		Ledger:       ledger.New(),
+		LedgerPolicy: &pol,
+		Payloads:     ps,
+		AgentPolicy: AgentPolicy{
+			Enabled:        true,
+			AllowReadChats: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new b: %v", err)
+	}
+	if _, err := b.AgentReply(time.Now(), "agent-1", "chat-1", "ref"); err == nil {
+		t.Fatalf("expected reply to be blocked without write permission")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kaveh/sunlionet-agent/pkg/ledger"
@@ -222,6 +223,7 @@ type Service struct {
 
 	mu    sync.Mutex
 	peers map[string]*peerState
+	stats syncStats
 }
 
 func (s *Service) Ledger() *ledger.Ledger {
@@ -229,6 +231,32 @@ func (s *Service) Ledger() *ledger.Ledger {
 		return nil
 	}
 	return s.ledger
+}
+
+type SyncStats struct {
+	Deferred    uint64
+	Rejected    uint64
+	Duplicate   uint64
+	Quarantined uint64
+}
+
+type syncStats struct {
+	deferred    atomic.Uint64
+	rejected    atomic.Uint64
+	duplicate   atomic.Uint64
+	quarantined atomic.Uint64
+}
+
+func (s *Service) Stats() SyncStats {
+	if s == nil {
+		return SyncStats{}
+	}
+	return SyncStats{
+		Deferred:    s.stats.deferred.Load(),
+		Rejected:    s.stats.rejected.Load(),
+		Duplicate:   s.stats.duplicate.Load(),
+		Quarantined: s.stats.quarantined.Load(),
+	}
 }
 
 func New(m mesh.Mesh, c *mesh.Crypto, l *ledger.Ledger, pol *ledger.Policy, obs *ledger.Observer, opts Options) (*Service, error) {
@@ -427,10 +455,12 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 	now := time.Now()
 	role := s.peerRole(peerID)
 	if !s.allowInbound(peerID, len(pt), now) {
+		s.stats.rejected.Add(1)
 		return nil
 	}
 	mid := msgIDFromPlaintext(pt)
 	if s.seenMsg(peerID, mid, now) {
+		s.stats.duplicate.Add(1)
 		return nil
 	}
 	s.TouchPeer(peerID, now)
@@ -445,8 +475,13 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 	if s.security != nil {
 		switch s.security.ObserveInbound(peerID, role, w.Type, len(pt), now) {
 		case DecisionReject:
+			s.stats.rejected.Add(1)
+			if s.security.TrustTier(peerID, now) == TrustBlocked {
+				s.stats.quarantined.Add(1)
+			}
 			return nil
 		case DecisionDefer:
+			s.stats.deferred.Add(1)
 			return nil
 		default:
 		}
@@ -459,7 +494,9 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 		if err := json.Unmarshal(w.Body, &hm); err != nil {
 			return nil
 		}
-		_ = hm
+		if hm.SchemaVersion != ledger.SyncSchemaV1 {
+			return nil
+		}
 		inv := s.ledger.BuildInventoryMessage(s.opts.MaxHave)
 		reply, err := encodeWire("inv", w.Session, w.Context, inv)
 		if err != nil {
@@ -471,11 +508,19 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 		if err := json.Unmarshal(w.Body, &inv); err != nil {
 			return nil
 		}
+		if inv.SchemaVersion != ledger.SyncSchemaV1 {
+			return nil
+		}
 		if s.security != nil {
 			switch s.security.ObserveInventory(peerID, role, inv, now) {
 			case DecisionReject:
+				s.stats.rejected.Add(1)
+				if s.security.TrustTier(peerID, now) == TrustBlocked {
+					s.stats.quarantined.Add(1)
+				}
 				return nil
 			case DecisionDefer:
+				s.stats.deferred.Add(1)
 				return nil
 			default:
 			}
@@ -492,6 +537,28 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 		if err := json.Unmarshal(w.Body, &want); err != nil {
 			return nil
 		}
+		if want.SchemaVersion != ledger.SyncSchemaV1 {
+			return nil
+		}
+		if s.security != nil {
+			switch s.security.ObserveWant(peerID, role, want, now) {
+			case DecisionReject:
+				s.stats.rejected.Add(1)
+				if s.security.TrustTier(peerID, now) == TrustBlocked {
+					s.stats.quarantined.Add(1)
+				}
+				return nil
+			case DecisionDefer:
+				s.stats.deferred.Add(1)
+				return nil
+			default:
+			}
+		}
+		if s.opts.MaxWant > 0 && len(want.Want) > s.opts.MaxWant {
+			want.Want = want.Want[:s.opts.MaxWant]
+		} else if s.opts.MaxWant <= 0 && len(want.Want) > 256 {
+			want.Want = want.Want[:256]
+		}
 		wantIDs := s.filterOutgoingIDs(want.Want, w.Context)
 		msg := s.ledger.BuildEventsMessageBounded(wantIDs, s.opts.MaxEvents, s.opts.MaxEventBytes, s.opts.MaxEventsMessageBytes)
 		reply, err := encodeWire("events", w.Session, w.Context, msg)
@@ -504,9 +571,21 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 		if err := json.Unmarshal(w.Body, &em); err != nil {
 			return nil
 		}
+		if em.SchemaVersion != ledger.SyncSchemaV1 {
+			return nil
+		}
 		em, dropped := s.filterIncomingEvents(em, w.Context)
 		rep, _ := s.ledger.ApplyEventsMessageBounded(em, w.Context, s.policy, s.observer, s.opts.MaxEvents, s.opts.MaxEventBytes, s.opts.MaxEventsMessageBytes)
 		rep.Rejected += dropped
+		if rep.Dupe > 0 {
+			s.stats.duplicate.Add(uint64(rep.Dupe))
+		}
+		if rep.Rejected > 0 {
+			s.stats.rejected.Add(uint64(rep.Rejected))
+			if s.security != nil && s.security.TrustTier(peerID, now) == TrustBlocked {
+				s.stats.quarantined.Add(1)
+			}
+		}
 		if s.security != nil {
 			s.security.ObserveApplyReport(peerID, role, rep, now)
 		}
@@ -534,10 +613,12 @@ func (s *Service) TryApplyWirePlaintext(peerID string, plaintext []byte) (bool, 
 	}
 	s.setPeerRole(peerID, role, now)
 	if !s.allowInbound(peerID, len(plaintext), now) {
+		s.stats.rejected.Add(1)
 		return true, ledger.ApplyReport{}, nil
 	}
 	mid := msgIDFromPlaintext(plaintext)
 	if s.seenMsg(peerID, mid, now) {
+		s.stats.duplicate.Add(1)
 		return true, ledger.ApplyReport{}, nil
 	}
 	s.TouchPeer(peerID, now)
@@ -555,8 +636,13 @@ func (s *Service) TryApplyWirePlaintext(peerID string, plaintext []byte) (bool, 
 	if s.security != nil {
 		switch s.security.ObserveInbound(peerID, role, w.Type, len(plaintext), now) {
 		case DecisionReject:
+			s.stats.rejected.Add(1)
+			if s.security.TrustTier(peerID, now) == TrustBlocked {
+				s.stats.quarantined.Add(1)
+			}
 			return true, ledger.ApplyReport{}, nil
 		case DecisionDefer:
+			s.stats.deferred.Add(1)
 			return true, ledger.ApplyReport{}, nil
 		default:
 		}
@@ -569,6 +655,15 @@ func (s *Service) TryApplyWirePlaintext(peerID string, plaintext []byte) (bool, 
 	em, dropped := s.filterIncomingEvents(em, w.Context)
 	rep, err := s.ledger.ApplyEventsMessageBounded(em, w.Context, s.policy, s.observer, s.opts.MaxEvents, s.opts.MaxEventBytes, s.opts.MaxEventsMessageBytes)
 	rep.Rejected += dropped
+	if rep.Dupe > 0 {
+		s.stats.duplicate.Add(uint64(rep.Dupe))
+	}
+	if rep.Rejected > 0 {
+		s.stats.rejected.Add(uint64(rep.Rejected))
+		if s.security != nil && s.security.TrustTier(peerID, now) == TrustBlocked {
+			s.stats.quarantined.Add(1)
+		}
+	}
 	if s.security != nil {
 		s.security.ObserveApplyReport(peerID, role, rep, now)
 	}

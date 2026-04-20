@@ -58,6 +58,7 @@
   "installationPage": {
     "title": "Installation",
     "subtitle": "Common install paths for SunLionet Inside and SunLionet Outside. Always verify checksums before running.",
+    "wizardCta": "Install wizard",
     "repoInstallDoc": "Repo install doc"
   },
   "supportPage": {
