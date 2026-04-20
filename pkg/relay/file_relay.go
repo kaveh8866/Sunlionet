@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,6 +30,10 @@ type fileStored struct {
 	Deadline  int64   `json:"deadline_unix,omitempty"`
 	AvailAt   int64   `json:"avail_at_unix,omitempty"`
 	CreatedAt int64   `json:"created_at_unix"`
+}
+
+func messageFileName(id MessageID) string {
+	return "msg_" + string(id) + ".json"
 }
 
 func NewFileRelay(baseDir string, opts FileRelayOptions) (*FileRelay, error) {
@@ -124,7 +127,7 @@ func (r *FileRelay) Push(ctx context.Context, req PushRequest) (MessageID, error
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	dst := filepath.Join(dir, fmt.Sprintf("msg_%s.json", id))
+	dst := filepath.Join(dir, messageFileName(id))
 	if err := writeFileAtomic(dst, data, 0o600); err != nil {
 		return "", err
 	}
@@ -190,7 +193,7 @@ func (r *FileRelay) Ack(ctx context.Context, req AckRequest) error {
 
 	dir := r.mailboxDir(req.Mailbox)
 	for i := range req.IDs {
-		p := filepath.Join(dir, fmt.Sprintf("msg_%s.json", req.IDs[i]))
+		p := filepath.Join(dir, messageFileName(req.IDs[i]))
 		_ = os.Remove(p)
 	}
 	return nil

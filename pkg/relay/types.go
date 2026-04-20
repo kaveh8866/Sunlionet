@@ -15,9 +15,10 @@ type MessageID string
 type Envelope string
 
 const (
-	maxMailboxLen  = 128
-	maxEnvelopeLen = 256 * 1024
-	maxAckIDs      = 2000
+	maxMailboxLen   = 128
+	maxEnvelopeLen  = 256 * 1024
+	maxMessageIDLen = 128
+	maxAckIDs       = 2000
 )
 
 func validateMailboxID(m MailboxID) error {
@@ -33,6 +34,20 @@ func validateMailboxID(m MailboxID) error {
 			continue
 		}
 		return errors.New("relay: mailbox has invalid characters")
+	}
+	return nil
+}
+
+func validateMessageID(id MessageID) error {
+	if id == "" {
+		return errors.New("relay: message id required")
+	}
+	if len(id) > maxMessageIDLen {
+		return fmt.Errorf("relay: message id too large: %d", len(id))
+	}
+	b, err := base64.RawURLEncoding.DecodeString(string(id))
+	if err != nil || len(b) != 16 {
+		return errors.New("relay: invalid message id")
 	}
 	return nil
 }
@@ -55,8 +70,8 @@ type Message struct {
 }
 
 func (m Message) Validate() error {
-	if m.ID == "" {
-		return errors.New("relay: message id required")
+	if err := validateMessageID(m.ID); err != nil {
+		return err
 	}
 	if err := validateMailboxID(m.Mailbox); err != nil {
 		return err
@@ -163,6 +178,11 @@ func (r AckRequest) Validate() error {
 	}
 	if len(r.IDs) > maxAckIDs {
 		return fmt.Errorf("relay: too many ids: %d", len(r.IDs))
+	}
+	for i := range r.IDs {
+		if err := validateMessageID(r.IDs[i]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
