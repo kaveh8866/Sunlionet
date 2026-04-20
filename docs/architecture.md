@@ -8,7 +8,7 @@ Inside runs on the user device and owns all real-time decisions. It is designed 
 
 **Control plane components**
 
-- Supervisor (`shadownetd`): starts/stops detector, policy, sing-box controller, mesh, and Signal receiver (legacy name during transition)
+- Supervisor (`SUNLIONETd`): starts/stops detector, policy, sing-box controller, mesh, and Signal receiver (legacy name during transition)
 - Detector: produces network-interference events (timeouts, resets, DNS poisoning suspicion, UDP disruption suspicion)
 - Policy Engine (deterministic): handles routine decisions without any AI
 - LLM Advisor (bounded): invoked sparingly when events are ambiguous; must output strict JSON selecting only from allowed actions/mutations

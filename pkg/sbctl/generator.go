@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 // LLMDecision represents the structured output from the LLM

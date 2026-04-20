@@ -9,11 +9,11 @@ fun envOrProp(name: String): String =
 		?: ""
 
 android {
-	namespace = "com.shadownet.agent"
+	namespace = "com.sunlionet.agent"
 	compileSdk = 34
 
 	defaultConfig {
-		applicationId = "com.shadownet.agent"
+		applicationId = "com.sunlionet.agent"
 		minSdk = 26
 		targetSdk = 34
 		versionCode = 2
@@ -72,7 +72,7 @@ android {
 
 tasks.register("verifyGoMobileAar") {
 	doLast {
-		val aar = file("libs/shadownet.aar")
+		val aar = file("libs/SUNLIONET.aar")
 		if (!aar.exists()) {
 			throw GradleException("Missing Go mobile binding: ${aar.path}. Run scripts/gomobile_bind_android.ps1 to generate it.")
 		}
@@ -140,7 +140,7 @@ dependencies {
 	implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
 	implementation("androidx.security:security-crypto:1.1.0-alpha06")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-	val mobileAar = file("libs/shadownet.aar")
+	val mobileAar = file("libs/SUNLIONET.aar")
 	if (mobileAar.exists()) {
 		implementation(files(mobileAar))
 	}

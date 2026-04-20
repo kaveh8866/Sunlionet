@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 func TestInsideRealMode_RenderOnly_Smoke(t *testing.T) {

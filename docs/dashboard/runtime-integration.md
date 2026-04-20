@@ -63,7 +63,7 @@ The browser calls the Next.js API routes:
 To override the upstream base URL (server-side only):
 
 - `SUNLIONET_RUNTIME_API_BASE=http://127.0.0.1:8080`
-- `SHADOWNET_RUNTIME_API_BASE=http://127.0.0.1:8080` (legacy)
+- `SUNLIONET_RUNTIME_API_BASE=http://127.0.0.1:8080` (legacy)
 
 ## Troubleshooting
 

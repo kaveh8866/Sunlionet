@@ -71,7 +71,7 @@ read -p "Bundle URI (or press enter to skip and wait for Bluetooth Mesh): " BUND
 
 if [ -n "$BUNDLE_URI" ]; then
     echo "Validating Ed25519 signature and importing..."
-    # ./shadownet-agent import --uri "$BUNDLE_URI" --keyfile /opt/sunlionet/master.key
+    # ./SUNLIONET-agent import --uri "$BUNDLE_URI" --keyfile /opt/sunlionet/master.key
     echo -e "${GREEN}Import successful! 3 profiles saved to encrypted store.${NC}"
 else
     echo "Skipped. Agent will start in Mesh Discovery Mode."
@@ -90,5 +90,5 @@ echo -e "\n${GREEN}====================================================${NC}"
 echo -e "${GREEN} Setup Complete! SunLionet is ready to run.         ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 echo "To start the autonomous daemon:"
-echo "sudo systemctl enable --now sunlionet.service (or shadownet.service legacy)"
-echo "Or run manually: /opt/sunlionet/bin/shadownet-agent -store /var/lib/sunlionet/store.enc"
+echo "sudo systemctl enable --now sunlionet.service (or SUNLIONET.service legacy)"
+echo "Or run manually: /opt/sunlionet/bin/SUNLIONET-agent -store /var/lib/sunlionet/store.enc"

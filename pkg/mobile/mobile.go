@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/aipolicy"
-	"github.com/kaveh/shadownet-agent/pkg/assistant"
-	"github.com/kaveh/shadownet-agent/pkg/chat"
-	"github.com/kaveh/shadownet-agent/pkg/community"
-	"github.com/kaveh/shadownet-agent/pkg/devsync"
-	"github.com/kaveh/shadownet-agent/pkg/identity"
-	"github.com/kaveh/shadownet-agent/pkg/messaging"
-	"github.com/kaveh/shadownet-agent/pkg/mobilebridge"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/relay"
+	"github.com/kaveh/sunlionet-agent/pkg/aipolicy"
+	"github.com/kaveh/sunlionet-agent/pkg/assistant"
+	"github.com/kaveh/sunlionet-agent/pkg/chat"
+	"github.com/kaveh/sunlionet-agent/pkg/community"
+	"github.com/kaveh/sunlionet-agent/pkg/devsync"
+	"github.com/kaveh/sunlionet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/messaging"
+	"github.com/kaveh/sunlionet-agent/pkg/mobilebridge"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/relay"
 )
 
 func StartAgent(config string) error {

@@ -7,16 +7,16 @@ import (
 
 func validManifestJSON() string {
 	return `{
-		"schema":"shadownet.release-manifest.v1",
+		"schema":"SUNLIONET.release-manifest.v1",
 		"version":"v0.1.0",
 		"artifacts":[
 			{
-				"name":"shadownet-inside-v0.1.0-linux-amd64.tar.gz",
+				"name":"SUNLIONET-inside-v0.1.0-linux-amd64.tar.gz",
 				"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 				"size":1234
 			}
 		],
-		"mapping":{"preferred":{"android-arm64":["shadownet-inside-v0.1.0-android-arm64"]}}
+		"mapping":{"preferred":{"android-arm64":["SUNLIONET-inside-v0.1.0-android-arm64"]}}
 	}`
 }
 
@@ -28,7 +28,7 @@ func TestLoad_ValidManifest(t *testing.T) {
 	if m.Version != "v0.1.0" {
 		t.Fatalf("unexpected version: %s", m.Version)
 	}
-	if got := m.Find("shadownet-inside-v0.1.0-linux-amd64.tar.gz"); got == nil {
+	if got := m.Find("SUNLIONET-inside-v0.1.0-linux-amd64.tar.gz"); got == nil {
 		t.Fatalf("expected artifact to be found")
 	}
 }

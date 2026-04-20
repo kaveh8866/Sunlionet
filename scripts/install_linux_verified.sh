@@ -31,19 +31,19 @@ sha256sum -c "${ARCHIVE}.sha256"
 tar -xzf "${ARCHIVE}"
 if [ -f "./sunlionet-inside" ]; then
   sudo install -m 0755 "./sunlionet-inside" /usr/local/bin/sunlionet-inside
-elif [ -f "./shadownet-inside" ]; then
-  sudo install -m 0755 "./shadownet-inside" /usr/local/bin/sunlionet-inside
+elif [ -f "./SUNLIONET-inside" ]; then
+  sudo install -m 0755 "./SUNLIONET-inside" /usr/local/bin/sunlionet-inside
 fi
 
 if [ -f "./sunlionet-outside" ]; then
   sudo install -m 0755 "./sunlionet-outside" /usr/local/bin/sunlionet-outside
-elif [ -f "./shadownet-outside" ]; then
-  sudo install -m 0755 "./shadownet-outside" /usr/local/bin/sunlionet-outside
+elif [ -f "./SUNLIONET-outside" ]; then
+  sudo install -m 0755 "./SUNLIONET-outside" /usr/local/bin/sunlionet-outside
 fi
 
 if command -v ln >/dev/null 2>&1; then
-  if [ -f /usr/local/bin/sunlionet-inside ]; then sudo ln -sf sunlionet-inside /usr/local/bin/shadownet-inside 2>/dev/null || true; fi
-  if [ -f /usr/local/bin/sunlionet-outside ]; then sudo ln -sf sunlionet-outside /usr/local/bin/shadownet-outside 2>/dev/null || true; fi
+  if [ -f /usr/local/bin/sunlionet-inside ]; then sudo ln -sf sunlionet-inside /usr/local/bin/SUNLIONET-inside 2>/dev/null || true; fi
+  if [ -f /usr/local/bin/sunlionet-outside ]; then sudo ln -sf sunlionet-outside /usr/local/bin/SUNLIONET-outside 2>/dev/null || true; fi
 fi
 
 echo "verified and installed sunlionet binaries to /usr/local/bin"

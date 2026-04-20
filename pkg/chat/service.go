@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/identity"
-	"github.com/kaveh/shadownet-agent/pkg/messaging"
-	"github.com/kaveh/shadownet-agent/pkg/relay"
+	"github.com/kaveh/sunlionet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/messaging"
+	"github.com/kaveh/sunlionet-agent/pkg/relay"
 )
 
 type Service struct {

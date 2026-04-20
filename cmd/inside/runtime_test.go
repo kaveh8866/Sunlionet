@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/kaveh/shadownet-agent/pkg/runtimecfg"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 )
 
 func TestBuildRuntime_ModeSim_UsesSimulationImplementations(t *testing.T) {

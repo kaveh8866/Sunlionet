@@ -122,7 +122,7 @@ sunlionet-inside reset-learning --state-dir <path> --master-key <key>
 If you are running older releases that still ship legacy binaries, the command may be:
 
 ```bash
-shadownet-inside reset-learning --state-dir <path> --master-key <key>
+SUNLIONET-inside reset-learning --state-dir <path> --master-key <key>
 ```
 
 Runtime toggle:

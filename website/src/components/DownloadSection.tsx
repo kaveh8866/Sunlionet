@@ -315,7 +315,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       return {
         download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
         verify: `shasum -a 256 -c ${file}.sha256`,
-        install: isTar ? `tar -xzf ${file}\n./sunlionet-${role} || ./shadownet-${role}` : `./${file}`,
+        install: isTar ? `tar -xzf ${file}\n./sunlionet-${role} || ./SUNLIONET-${role}` : `./${file}`,
       };
     }
 

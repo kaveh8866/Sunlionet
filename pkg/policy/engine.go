@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 type ActionType string

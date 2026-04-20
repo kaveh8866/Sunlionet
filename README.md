@@ -13,7 +13,7 @@ It ships as:
 - SunLionet App: the Android wrapper for SunLionet Inside (VPN integration + configuration import UI).
 - SunLionet Dashboard: the web UI for local operator visibility (including localhost-only runtime status).
 
-Migration note: this repository is still named `shadownet-agent` during the transition. Some paths, package imports, release artifacts, and protocol identifiers may still use legacy `shadownet-*` naming until the release pipeline is fully renamed.
+Migration note: this repository is still named `SUNLIONET-agent` during the transition. Some paths, package imports, release artifacts, and protocol identifiers may still use legacy `SUNLIONET-*` naming until the release pipeline is fully renamed.
 
 Documentation site (GitHub Pages): https://kaveh8866.github.io/Sunlionet/
 

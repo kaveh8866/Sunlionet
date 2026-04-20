@@ -3,7 +3,7 @@ package signalrx
 import (
 	"context"
 
-	"github.com/kaveh/shadownet-agent/pkg/runtimecfg"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 )
 
 type SignalReceiver interface {

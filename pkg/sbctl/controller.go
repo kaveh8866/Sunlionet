@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"text/template"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 var ErrBinaryNotFound = errors.New("sing-box binary not found")

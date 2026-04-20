@@ -28,7 +28,7 @@ func EncryptToPreKey(plaintext []byte, recipientPreKeyPub [32]byte) (*Envelope, 
 }
 
 func EncryptToPreKeyWithSender(plaintext []byte, senderPriv [32]byte, senderPub [32]byte, recipientPreKeyPub [32]byte) (*Envelope, [32]byte, error) {
-	key, err := DeriveSharedKey(senderPriv, recipientPreKeyPub, "shadownet-msg-v1")
+	key, err := DeriveSharedKey(senderPriv, recipientPreKeyPub, "SUNLIONET-msg-v1")
 	if err != nil {
 		return nil, [32]byte{}, err
 	}
@@ -70,7 +70,7 @@ func DecryptWithPreKey(env *Envelope, recipientPreKeyPriv [32]byte) ([]byte, [32
 	var ephPub [32]byte
 	copy(ephPub[:], ephPubBytes)
 
-	key, err := DeriveSharedKey(recipientPreKeyPriv, ephPub, "shadownet-msg-v1")
+	key, err := DeriveSharedKey(recipientPreKeyPriv, ephPub, "SUNLIONET-msg-v1")
 	if err != nil {
 		return nil, [32]byte{}, err
 	}

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 func TestDecodeStrict_RejectsUnknownFields(t *testing.T) {

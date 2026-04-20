@@ -3,9 +3,9 @@ package llm
 import (
 	"fmt"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/policy"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/policy"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 const sysPrompt = `You are a "Resilient Connectivity Strategist", an expert AI agent operating in a highly restrictive network with DPI and active interference.

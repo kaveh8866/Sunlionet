@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/identity"
 )
 
 type Service struct {

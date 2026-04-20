@@ -21,23 +21,23 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	detreal "github.com/kaveh/shadownet-agent/pkg/detector/real"
-	detsim "github.com/kaveh/shadownet-agent/pkg/detector/sim"
-	"github.com/kaveh/shadownet-agent/pkg/e2e"
-	"github.com/kaveh/shadownet-agent/pkg/importctl"
-	"github.com/kaveh/shadownet-agent/pkg/mesh"
-	meshreal "github.com/kaveh/shadownet-agent/pkg/mesh/real"
-	meshsim "github.com/kaveh/shadownet-agent/pkg/mesh/sim"
-	"github.com/kaveh/shadownet-agent/pkg/orchestrator"
-	"github.com/kaveh/shadownet-agent/pkg/policy"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/report"
-	"github.com/kaveh/shadownet-agent/pkg/runtimecfg"
-	"github.com/kaveh/shadownet-agent/pkg/sbctl"
-	"github.com/kaveh/shadownet-agent/pkg/signalrx"
-	signalreal "github.com/kaveh/shadownet-agent/pkg/signalrx/real"
-	signalsim "github.com/kaveh/shadownet-agent/pkg/signalrx/sim"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	detreal "github.com/kaveh/sunlionet-agent/pkg/detector/real"
+	detsim "github.com/kaveh/sunlionet-agent/pkg/detector/sim"
+	"github.com/kaveh/sunlionet-agent/pkg/e2e"
+	"github.com/kaveh/sunlionet-agent/pkg/importctl"
+	"github.com/kaveh/sunlionet-agent/pkg/mesh"
+	meshreal "github.com/kaveh/sunlionet-agent/pkg/mesh/real"
+	meshsim "github.com/kaveh/sunlionet-agent/pkg/mesh/sim"
+	"github.com/kaveh/sunlionet-agent/pkg/orchestrator"
+	"github.com/kaveh/sunlionet-agent/pkg/policy"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/report"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
+	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
+	"github.com/kaveh/sunlionet-agent/pkg/signalrx"
+	signalreal "github.com/kaveh/sunlionet-agent/pkg/signalrx/real"
+	signalsim "github.com/kaveh/sunlionet-agent/pkg/signalrx/sim"
 )
 
 var version = "dev"
@@ -177,7 +177,7 @@ func run() error {
 	if opts.StateDir == "" {
 		opts.StateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		if opts.StateDir == "" {
-			opts.StateDir = os.Getenv("SHADOWNET_STATE_DIR")
+			opts.StateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		}
 	}
 	if opts.StateDir == "" {
@@ -186,17 +186,17 @@ func run() error {
 	if opts.MasterKey == "" {
 		opts.MasterKey = os.Getenv("SUNLIONET_MASTER_KEY")
 		if opts.MasterKey == "" {
-			opts.MasterKey = os.Getenv("SHADOWNET_MASTER_KEY")
+			opts.MasterKey = os.Getenv("SUNLIONET_MASTER_KEY")
 		}
 	}
 	masterKey, err := profile.ParseMasterKey(opts.MasterKey)
 	if err != nil {
-		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SHADOWNET_MASTER_KEY)", err)
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SUNLIONET_MASTER_KEY)", err)
 	}
 	if opts.TemplatesDir == "" {
 		opts.TemplatesDir = os.Getenv("SUNLIONET_TEMPLATES_DIR")
 		if opts.TemplatesDir == "" {
-			opts.TemplatesDir = os.Getenv("SHADOWNET_TEMPLATES_DIR")
+			opts.TemplatesDir = os.Getenv("SUNLIONET_TEMPLATES_DIR")
 		}
 	}
 	if opts.TemplatesDir == "" {
@@ -205,25 +205,25 @@ func run() error {
 	if opts.TrustedSignerPubsB64 == "" {
 		opts.TrustedSignerPubsB64 = os.Getenv("SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
 		if opts.TrustedSignerPubsB64 == "" {
-			opts.TrustedSignerPubsB64 = os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+			opts.TrustedSignerPubsB64 = os.Getenv("SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
 		}
 	}
 	if opts.AgeIdentity == "" {
 		opts.AgeIdentity = os.Getenv("SUNLIONET_AGE_IDENTITY")
 		if opts.AgeIdentity == "" {
-			opts.AgeIdentity = os.Getenv("SHADOWNET_AGE_IDENTITY")
+			opts.AgeIdentity = os.Getenv("SUNLIONET_AGE_IDENTITY")
 		}
 	}
 	if opts.SingBoxBin == "" {
 		opts.SingBoxBin = os.Getenv("SUNLIONET_SINGBOX_BIN")
 		if opts.SingBoxBin == "" {
-			opts.SingBoxBin = os.Getenv("SHADOWNET_SINGBOX_BIN")
+			opts.SingBoxBin = os.Getenv("SUNLIONET_SINGBOX_BIN")
 		}
 	}
 	if opts.RuntimeAPIAddr == "" {
 		opts.RuntimeAPIAddr = os.Getenv("SUNLIONET_RUNTIME_API_ADDR")
 		if opts.RuntimeAPIAddr == "" {
-			opts.RuntimeAPIAddr = os.Getenv("SHADOWNET_RUNTIME_API_ADDR")
+			opts.RuntimeAPIAddr = os.Getenv("SUNLIONET_RUNTIME_API_ADDR")
 		}
 	}
 
@@ -276,7 +276,7 @@ func runConnect(args []string) error {
 	if opts.StateDir == "" {
 		opts.StateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		if opts.StateDir == "" {
-			opts.StateDir = os.Getenv("SHADOWNET_STATE_DIR")
+			opts.StateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		}
 	}
 	if opts.StateDir == "" {
@@ -285,17 +285,17 @@ func runConnect(args []string) error {
 	if opts.MasterKey == "" {
 		opts.MasterKey = os.Getenv("SUNLIONET_MASTER_KEY")
 		if opts.MasterKey == "" {
-			opts.MasterKey = os.Getenv("SHADOWNET_MASTER_KEY")
+			opts.MasterKey = os.Getenv("SUNLIONET_MASTER_KEY")
 		}
 	}
 	masterKey, err := profile.ParseMasterKey(opts.MasterKey)
 	if err != nil {
-		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SHADOWNET_MASTER_KEY)", err)
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SUNLIONET_MASTER_KEY)", err)
 	}
 	if opts.TemplatesDir == "" {
 		opts.TemplatesDir = os.Getenv("SUNLIONET_TEMPLATES_DIR")
 		if opts.TemplatesDir == "" {
-			opts.TemplatesDir = os.Getenv("SHADOWNET_TEMPLATES_DIR")
+			opts.TemplatesDir = os.Getenv("SUNLIONET_TEMPLATES_DIR")
 		}
 	}
 	if opts.TemplatesDir == "" {
@@ -304,25 +304,25 @@ func runConnect(args []string) error {
 	if opts.TrustedSignerPubsB64 == "" {
 		opts.TrustedSignerPubsB64 = os.Getenv("SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
 		if opts.TrustedSignerPubsB64 == "" {
-			opts.TrustedSignerPubsB64 = os.Getenv("SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+			opts.TrustedSignerPubsB64 = os.Getenv("SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
 		}
 	}
 	if opts.AgeIdentity == "" {
 		opts.AgeIdentity = os.Getenv("SUNLIONET_AGE_IDENTITY")
 		if opts.AgeIdentity == "" {
-			opts.AgeIdentity = os.Getenv("SHADOWNET_AGE_IDENTITY")
+			opts.AgeIdentity = os.Getenv("SUNLIONET_AGE_IDENTITY")
 		}
 	}
 	if opts.SingBoxBin == "" {
 		opts.SingBoxBin = os.Getenv("SUNLIONET_SINGBOX_BIN")
 		if opts.SingBoxBin == "" {
-			opts.SingBoxBin = os.Getenv("SHADOWNET_SINGBOX_BIN")
+			opts.SingBoxBin = os.Getenv("SUNLIONET_SINGBOX_BIN")
 		}
 	}
 	if opts.RuntimeAPIAddr == "" {
 		opts.RuntimeAPIAddr = os.Getenv("SUNLIONET_RUNTIME_API_ADDR")
 		if opts.RuntimeAPIAddr == "" {
-			opts.RuntimeAPIAddr = os.Getenv("SHADOWNET_RUNTIME_API_ADDR")
+			opts.RuntimeAPIAddr = os.Getenv("SUNLIONET_RUNTIME_API_ADDR")
 		}
 	}
 
@@ -932,7 +932,7 @@ func defaultStateDir() string {
 	if runtime.GOOS == "linux" {
 		if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
 			sun := filepath.Join(xdg, "sunlionet")
-			legacy := filepath.Join(xdg, "shadownet")
+			legacy := filepath.Join(xdg, "SUNLIONET")
 			if _, err := os.Stat(sun); err == nil {
 				return sun
 			}
@@ -942,7 +942,7 @@ func defaultStateDir() string {
 			return sun
 		}
 		sun := filepath.Join(home, ".local", "state", "sunlionet")
-		legacy := filepath.Join(home, ".local", "state", "shadownet")
+		legacy := filepath.Join(home, ".local", "state", "SUNLIONET")
 		if _, err := os.Stat(sun); err == nil {
 			return sun
 		}
@@ -952,7 +952,7 @@ func defaultStateDir() string {
 		return sun
 	}
 	sun := filepath.Join(home, ".sunlionet")
-	legacy := filepath.Join(home, ".shadownet")
+	legacy := filepath.Join(home, ".SUNLIONET")
 	if _, err := os.Stat(sun); err == nil {
 		return sun
 	}
@@ -971,7 +971,7 @@ func parseTrustedSignerKeys(keysCSV string, fallbackPath string) ([]ed25519.Publ
 	}
 	keysCSV = strings.TrimSpace(keysCSV)
 	if keysCSV == "" {
-		return nil, fmt.Errorf("missing trusted signer keys: set --trusted-signer-pub-b64url or SUNLIONET_TRUSTED_SIGNER_PUB_B64URL / SHADOWNET_TRUSTED_SIGNER_PUB_B64URL")
+		return nil, fmt.Errorf("missing trusted signer keys: set --trusted-signer-pub-b64url or SUNLIONET_TRUSTED_SIGNER_PUB_B64URL / SUNLIONET_TRUSTED_SIGNER_PUB_B64URL")
 	}
 
 	parts := strings.FieldsFunc(keysCSV, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ' ' })
@@ -997,7 +997,7 @@ func loadAgeIdentity(value string, fallbackPath string) (*age.X25519Identity, er
 	}
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil, fmt.Errorf("missing age identity: set --age-identity or SUNLIONET_AGE_IDENTITY / SHADOWNET_AGE_IDENTITY")
+		return nil, fmt.Errorf("missing age identity: set --age-identity or SUNLIONET_AGE_IDENTITY / SUNLIONET_AGE_IDENTITY")
 	}
 	ageIdentity, err := age.ParseX25519Identity(value)
 	if err != nil {
@@ -1018,7 +1018,7 @@ func runResetLearning(args []string) error {
 	if strings.TrimSpace(stateDir) == "" {
 		stateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		if strings.TrimSpace(stateDir) == "" {
-			stateDir = os.Getenv("SHADOWNET_STATE_DIR")
+			stateDir = os.Getenv("SUNLIONET_STATE_DIR")
 		}
 	}
 	if strings.TrimSpace(stateDir) == "" {
@@ -1027,12 +1027,12 @@ func runResetLearning(args []string) error {
 	if strings.TrimSpace(masterKeyArg) == "" {
 		masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
 		if strings.TrimSpace(masterKeyArg) == "" {
-			masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+			masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
 		}
 	}
 	masterKey, err := profile.ParseMasterKey(masterKeyArg)
 	if err != nil {
-		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SHADOWNET_MASTER_KEY)", err)
+		return fmt.Errorf("missing or invalid master key: %w (set --master-key or SUNLIONET_MASTER_KEY / SUNLIONET_MASTER_KEY)", err)
 	}
 
 	adaptiveStore, err := policy.NewAdaptiveStore(filepath.Join(stateDir, "adaptive.enc"), masterKey)

@@ -11,10 +11,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/policy"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/sbctl"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/policy"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
 )
 
 // LocalLlamaCPPClient implements the Advisor interface via a local llama.cpp server

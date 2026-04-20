@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 type DecisionResult struct {

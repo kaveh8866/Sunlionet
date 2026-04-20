@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
 )
 
 func TestSimulation_HTTP403_InjectionDetected(t *testing.T) {

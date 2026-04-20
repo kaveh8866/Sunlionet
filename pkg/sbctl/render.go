@@ -14,7 +14,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 type RenderResult struct {

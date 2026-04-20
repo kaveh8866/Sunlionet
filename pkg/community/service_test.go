@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/identity"
 )
 
 func TestServiceInviteApproveApplyJoin(t *testing.T) {

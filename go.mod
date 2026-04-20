@@ -1,4 +1,4 @@
-module github.com/kaveh/shadownet-agent
+module github.com/kaveh/sunlionet-agent
 
 go 1.24.0
 

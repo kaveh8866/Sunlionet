@@ -20,14 +20,14 @@ This guide provides three installation paths for SunLionet on Linux:
 This path is fast and suitable when you already trust your download channel.
 
 ```bash
-BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/latest/download"
+BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/latest/download"
 curl -fsSL "${BASE_URL}/sunlionet-linux-amd64.tar.gz" | tar -xz
 sudo install -m 0755 sunlionet-inside /usr/local/bin/sunlionet-inside
 sudo install -m 0755 sunlionet-outside /usr/local/bin/sunlionet-outside
 sunlionet-inside --help
 ```
 
-If you are installing from older releases that still ship legacy artifact names, replace `sunlionet-...` with `shadownet-...`.
+If you are installing from older releases that still ship legacy artifact names, replace `sunlionet-...` with `SUNLIONET-...`.
 
 Expected output (last command): usage/help text from `sunlionet-inside`.
 
@@ -37,7 +37,7 @@ This path verifies both file integrity and signed checksum metadata.
 
 ```bash
 VERSION="v0.1.0"
-BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/download/${VERSION}"
+BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/download/${VERSION}"
 
 wget "${BASE_URL}/sunlionet-linux-amd64.tar.gz"
 wget "${BASE_URL}/checksums.txt"
@@ -62,7 +62,7 @@ Expected verification output:
 
 ```bash
 VERSION="0.1.0"
-BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/download/v${VERSION}"
+BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/download/v${VERSION}"
 wget "${BASE_URL}/sunlionet_${VERSION}_amd64.deb"
 sudo dpkg -i "sunlionet_${VERSION}_amd64.deb"
 ```
@@ -76,8 +76,8 @@ sudo dpkg -r sunlionet
 ## 4) Developer Build
 
 ```bash
-git clone https://github.com/kaveh8866/shadownet-agent.git
-cd shadownet-agent
+git clone https://github.com/kaveh8866/SUNLIONET-agent.git
+cd SUNLIONET-agent
 go build -trimpath -tags inside -ldflags="-s -w -X main.version=v0.1.0" -o sunlionet-inside ./cmd/inside
 go build -trimpath -tags outside -ldflags="-s -w -X main.version=v0.1.0" -o sunlionet-outside ./cmd/outside
 ```

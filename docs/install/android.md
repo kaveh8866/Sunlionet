@@ -14,7 +14,7 @@ SunLionet Android release is distributed as a signed APK (`app-release.apk`).
 
 ```bash
 VERSION="v0.1.0"
-BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/download/${VERSION}"
+BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/download/${VERSION}"
 wget "${BASE_URL}/app-release.apk"
 ```
 

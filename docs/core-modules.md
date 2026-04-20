@@ -46,7 +46,7 @@ The Secure Store ensures that all config material and event logs are safely encr
 - **Trusted Contacts**: List of Ed25519 public keys allowed to send `snb://v2` config bundles via Signal.
 - **Wipe-on-Suspicion**: The `WipeOnSuspicion()` function overwrites the local database file with random bytes and zeros out the master key in memory when triggered by a panic switch.
 
-## 4. Integration with shadownetd Supervisor (legacy name during transition)
+## 4. Integration with SUNLIONETd Supervisor (legacy name during transition)
 The supervisor loop orchestrates the pipeline:
 1. `Detector` emits an event to the `EventChan`.
 2. The `Supervisor` appends the event to the ring buffer.

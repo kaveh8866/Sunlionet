@@ -193,7 +193,11 @@ func (r *FileRelay) Ack(ctx context.Context, req AckRequest) error {
 
 	dir := r.mailboxDir(req.Mailbox)
 	for i := range req.IDs {
-		p := filepath.Join(dir, messageFileName(req.IDs[i]))
+		id := req.IDs[i]
+		if err := validateMessageID(id); err != nil {
+			continue
+		}
+		p := filepath.Join(dir, messageFileName(id))
 		_ = os.Remove(p)
 	}
 	return nil

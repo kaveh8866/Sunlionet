@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/policy"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/tests/simulation/dpisim"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/policy"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/tests/simulation/dpisim"
 )
 
 type fakeResolver struct {

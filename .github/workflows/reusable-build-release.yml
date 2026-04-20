@@ -62,11 +62,11 @@ jobs:
           #!/usr/bin/env sh
           set -eu
           mode="${1:-inside}"
-          bin="shadownet-${mode}"
+          bin="SUNLIONET-${mode}"
           src="./${bin}"
           dst="/usr/local/bin/${bin}"
           install -m 0755 "$src" "$dst"
-          mkdir -p /etc/shadownet
+          mkdir -p /etc/SUNLIONET
           if [ -f "./${bin}.service" ]; then
             install -m 0644 "./${bin}.service" "/etc/systemd/system/${bin}.service"
             systemctl daemon-reload || true
@@ -75,16 +75,16 @@ jobs:
           SH
           chmod +x "$DIST/install-linux.sh"
 
-          cat > "$DIST/shadownet-inside.service" <<'UNIT'
+          cat > "$DIST/SUNLIONET-inside.service" <<'UNIT'
           [Unit]
-          Description=ShadowNet Agent (Inside)
+          Description=SUNLIONET Agent (Inside)
           After=network-online.target
           Wants=network-online.target
 
           [Service]
           Type=simple
-          EnvironmentFile=-/etc/shadownet/inside.env
-          ExecStart=/usr/local/bin/shadownet-inside
+          EnvironmentFile=-/etc/SUNLIONET/inside.env
+          ExecStart=/usr/local/bin/SUNLIONET-inside
           Restart=always
           RestartSec=2
 
@@ -92,16 +92,16 @@ jobs:
           WantedBy=multi-user.target
           UNIT
 
-          cat > "$DIST/shadownet-outside.service" <<'UNIT'
+          cat > "$DIST/SUNLIONET-outside.service" <<'UNIT'
           [Unit]
-          Description=ShadowNet Agent (Outside)
+          Description=SUNLIONET Agent (Outside)
           After=network-online.target
           Wants=network-online.target
 
           [Service]
           Type=simple
-          EnvironmentFile=-/etc/shadownet/outside.env
-          ExecStart=/usr/local/bin/shadownet-outside
+          EnvironmentFile=-/etc/SUNLIONET/outside.env
+          ExecStart=/usr/local/bin/SUNLIONET-outside
           Restart=always
           RestartSec=2
 
@@ -140,11 +140,11 @@ jobs:
             local goarch="$4"
             local format="$5"
 
-            local base="shadownet-${mode}-${VERSION}-${goos}-${goarch}"
+            local base="SUNLIONET-${mode}-${VERSION}-${goos}-${goarch}"
             local work
             work="$(mktemp -d)"
 
-            local bin="shadownet-${mode}"
+            local bin="SUNLIONET-${mode}"
             if [ "$goos" = "windows" ]; then
               bin="${bin}.exe"
             fi
@@ -153,10 +153,10 @@ jobs:
 
             cp -f "${DIST}/install-linux.sh" "${work}/install-linux.sh"
             if [ "$mode" = "inside" ]; then
-              cp -f "${DIST}/shadownet-inside.service" "${work}/shadownet-inside.service"
+              cp -f "${DIST}/SUNLIONET-inside.service" "${work}/SUNLIONET-inside.service"
             fi
             if [ "$mode" = "outside" ]; then
-              cp -f "${DIST}/shadownet-outside.service" "${work}/shadownet-outside.service"
+              cp -f "${DIST}/SUNLIONET-outside.service" "${work}/SUNLIONET-outside.service"
             fi
 
             if [ "$format" = "targz" ]; then
@@ -173,7 +173,7 @@ jobs:
             local tags="$2"
             local goos="$3"
             local goarch="$4"
-            local out="${DIST}/shadownet-${mode}-${VERSION}-${goos}-${goarch}"
+            local out="${DIST}/SUNLIONET-${mode}-${VERSION}-${goos}-${goarch}"
             build_bin "$mode" "$tags" "$goos" "$goarch" "$out"
           }
 
@@ -182,7 +182,7 @@ jobs:
             local tags="$2"
             local goos="$3"
             local goarch="$4"
-            local out="${DIST}/shadownet-${mode}"
+            local out="${DIST}/SUNLIONET-${mode}"
             build_bin "$mode" "$tags" "$goos" "$goarch" "$out"
           }
 
@@ -201,35 +201,35 @@ jobs:
           build_raw_named inside inside linux amd64
           build_raw_named outside outside linux amd64
           work_linux="$(mktemp -d)"
-          cp -f "${DIST}/shadownet-inside" "${work_linux}/shadownet-inside"
-          cp -f "${DIST}/shadownet-outside" "${work_linux}/shadownet-outside"
+          cp -f "${DIST}/SUNLIONET-inside" "${work_linux}/SUNLIONET-inside"
+          cp -f "${DIST}/SUNLIONET-outside" "${work_linux}/SUNLIONET-outside"
           cp -f "${DIST}/install-linux.sh" "${work_linux}/install-linux.sh"
-          cp -f "${DIST}/shadownet-inside.service" "${work_linux}/shadownet-inside.service"
-          cp -f "${DIST}/shadownet-outside.service" "${work_linux}/shadownet-outside.service"
-          tar -czf "${DIST}/shadownet-linux-amd64.tar.gz" -C "${work_linux}" .
+          cp -f "${DIST}/SUNLIONET-inside.service" "${work_linux}/SUNLIONET-inside.service"
+          cp -f "${DIST}/SUNLIONET-outside.service" "${work_linux}/SUNLIONET-outside.service"
+          tar -czf "${DIST}/SUNLIONET-linux-amd64.tar.gz" -C "${work_linux}" .
           rm -rf "${work_linux}"
 
-          cp -f "${DIST}/shadownet-inside-${VERSION}-linux-arm64" "${DIST}/shadownet-inside-${VERSION}-raspberrypi-arm64"
+          cp -f "${DIST}/SUNLIONET-inside-${VERSION}-linux-arm64" "${DIST}/SUNLIONET-inside-${VERSION}-raspberrypi-arm64"
 
-          git archive --format=tar.gz -o "${DIST}/shadownet-agent-${VERSION}-source.tar.gz" HEAD
+          git archive --format=tar.gz -o "${DIST}/SUNLIONET-agent-${VERSION}-source.tar.gz" HEAD
 
           if [ "${{ inputs.enable_packages }}" = "true" ]; then
             DEB_VERSION="${VERSION#v}"
             deb_root="$(mktemp -d)"
             mkdir -p "${deb_root}/DEBIAN" "${deb_root}/usr/local/bin" "${deb_root}/etc/systemd/system"
-            cp -f "${DIST}/shadownet-inside" "${deb_root}/usr/local/bin/shadownet-inside"
-            cp -f "${DIST}/shadownet-outside" "${deb_root}/usr/local/bin/shadownet-outside"
-            cp -f "${DIST}/shadownet-inside.service" "${deb_root}/etc/systemd/system/shadownet-inside.service"
-            cp -f "${DIST}/shadownet-outside.service" "${deb_root}/etc/systemd/system/shadownet-outside.service"
-            chmod 0755 "${deb_root}/usr/local/bin/shadownet-inside" "${deb_root}/usr/local/bin/shadownet-outside"
-            chmod 0644 "${deb_root}/etc/systemd/system/shadownet-inside.service" "${deb_root}/etc/systemd/system/shadownet-outside.service"
+            cp -f "${DIST}/SUNLIONET-inside" "${deb_root}/usr/local/bin/SUNLIONET-inside"
+            cp -f "${DIST}/SUNLIONET-outside" "${deb_root}/usr/local/bin/SUNLIONET-outside"
+            cp -f "${DIST}/SUNLIONET-inside.service" "${deb_root}/etc/systemd/system/SUNLIONET-inside.service"
+            cp -f "${DIST}/SUNLIONET-outside.service" "${deb_root}/etc/systemd/system/SUNLIONET-outside.service"
+            chmod 0755 "${deb_root}/usr/local/bin/SUNLIONET-inside" "${deb_root}/usr/local/bin/SUNLIONET-outside"
+            chmod 0644 "${deb_root}/etc/systemd/system/SUNLIONET-inside.service" "${deb_root}/etc/systemd/system/SUNLIONET-outside.service"
 
             cat > "${deb_root}/DEBIAN/control" <<CONTROL
-Package: shadownet
+Package: SUNLIONET
 Version: ${DEB_VERSION}
 Architecture: amd64
-Maintainer: ShadowNet
-Description: ShadowNet agent
+Maintainer: SUNLIONET
+Description: SUNLIONET agent
 CONTROL
 
             cat > "${deb_root}/DEBIAN/postinst" <<'POSTINST'
@@ -249,14 +249,14 @@ fi
 POSTRM
             chmod 0755 "${deb_root}/DEBIAN/postinst" "${deb_root}/DEBIAN/postrm"
 
-            dpkg-deb --build "${deb_root}" "${DIST}/shadownet_${DEB_VERSION}_amd64.deb"
+            dpkg-deb --build "${deb_root}" "${DIST}/SUNLIONET_${DEB_VERSION}_amd64.deb"
 
             if command -v fpm >/dev/null 2>&1; then
-              fpm -s dir -t rpm -n shadownet -v "${DEB_VERSION}" -a x86_64 \
-                --description "ShadowNet agent" --maintainer "ShadowNet" \
-                -C "${deb_root}" usr/local/bin/shadownet-inside usr/local/bin/shadownet-outside \
-                etc/systemd/system/shadownet-inside.service etc/systemd/system/shadownet-outside.service \
-                -p "${DIST}/shadownet-${DEB_VERSION}.x86_64.rpm"
+              fpm -s dir -t rpm -n SUNLIONET -v "${DEB_VERSION}" -a x86_64 \
+                --description "SUNLIONET agent" --maintainer "SUNLIONET" \
+                -C "${deb_root}" usr/local/bin/SUNLIONET-inside usr/local/bin/SUNLIONET-outside \
+                etc/systemd/system/SUNLIONET-inside.service etc/systemd/system/SUNLIONET-outside.service \
+                -p "${DIST}/SUNLIONET-${DEB_VERSION}.x86_64.rpm"
             else
               echo "fpm not available; skipping optional rpm build."
             fi
@@ -282,10 +282,10 @@ POSTRM
             fi
 
             cp -f "android/app/build/outputs/apk/release/app-release.apk" "${DIST}/app-release.apk"
-            cp -f "android/app/build/outputs/apk/release/app-release.apk" "${DIST}/shadownet-android-${VERSION}-app-release.apk"
+            cp -f "android/app/build/outputs/apk/release/app-release.apk" "${DIST}/SUNLIONET-android-${VERSION}-app-release.apk"
           fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: shadownet-release-${{ inputs.version }}
+          name: SUNLIONET-release-${{ inputs.version }}
           path: dist/*

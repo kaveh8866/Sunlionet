@@ -2,16 +2,16 @@
 
 ## Linux
 
-- [ ] Download `shadownet-linux-amd64.tar.gz` and verify with `checksums.txt` + `checksums.sig`.
+- [ ] Download `SUNLIONET-linux-amd64.tar.gz` and verify with `checksums.txt` + `checksums.sig`.
 - [ ] Extract tarball and run:
-  - [ ] `./shadownet-inside --help`
-  - [ ] `./shadownet-outside --help`
+  - [ ] `./SUNLIONET-inside --help`
+  - [ ] `./SUNLIONET-outside --help`
 - [ ] Install Debian package:
-  - [ ] `sudo dpkg -i shadownet_0.1.0_amd64.deb`
-  - [ ] `shadownet-inside --help`
-  - [ ] `shadownet-outside --help`
+  - [ ] `sudo dpkg -i SUNLIONET_0.1.0_amd64.deb`
+  - [ ] `SUNLIONET-inside --help`
+  - [ ] `SUNLIONET-outside --help`
 - [ ] Uninstall package:
-  - [ ] `sudo dpkg -r shadownet`
+  - [ ] `sudo dpkg -r SUNLIONET`
 
 ## Android
 

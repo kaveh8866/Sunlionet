@@ -10,8 +10,8 @@
 ### Build
 
 ```bash
-go build -tags inside -o bin/shadownet-inside ./cmd/inside/
-go build -tags outside -o bin/shadownet-outside ./cmd/outside/
+go build -tags inside -o bin/SUNLIONET-inside ./cmd/inside/
+go build -tags outside -o bin/SUNLIONET-outside ./cmd/outside/
 ```
 
 ### Test

@@ -1,4 +1,3 @@
-module github.com/kaveh/shadownet-agent/website
+module github.com/kaveh/sunlionet-agent/website
 
 go 1.25.0
-

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 type Candidate struct {

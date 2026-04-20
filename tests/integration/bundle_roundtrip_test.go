@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/kaveh/shadownet-agent/pkg/bundle"
-	"github.com/kaveh/shadownet-agent/pkg/importctl"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/bundle"
+	"github.com/kaveh/sunlionet-agent/pkg/importctl"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 func TestOutsideToInside_BundleRoundTrip_RevocationsApplied(t *testing.T) {

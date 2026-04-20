@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/aipolicy"
+	"github.com/kaveh/sunlionet-agent/pkg/aipolicy"
 )
 
 type Controller struct {

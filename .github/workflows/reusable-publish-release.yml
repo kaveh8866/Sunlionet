@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: shadownet-release-verified-${{ inputs.version }}
+          name: SUNLIONET-release-verified-${{ inputs.version }}
           path: dist
 
       - name: Publish GitHub Release

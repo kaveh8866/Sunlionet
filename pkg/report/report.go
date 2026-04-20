@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 type Report struct {
@@ -54,7 +54,7 @@ type agentState struct {
 func Generate(stateDir string, masterKey []byte) Report {
 	now := time.Now()
 	out := Report{
-		Schema:          "shadownet.report.v1",
+		Schema:          "SUNLIONET.report.v1",
 		AppVersion:      Version,
 		GeneratedAtUnix: now.Unix(),
 		GeneratedHour:   now.Truncate(time.Hour).Unix(),

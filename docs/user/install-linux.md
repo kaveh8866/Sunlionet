@@ -15,18 +15,18 @@
 ## Install
 
 1. Extract package:
-   - `tar -xzf shadownet-inside-<version>-linux-<arch>.tar.gz`
+   - `tar -xzf SUNLIONET-inside-<version>-linux-<arch>.tar.gz`
 2. Move binary:
-   - `sudo install -m 0755 inside /usr/local/bin/shadownet-inside`
+   - `sudo install -m 0755 inside /usr/local/bin/SUNLIONET-inside`
 3. Prepare state dir:
-   - `mkdir -p ~/.local/state/shadownet`
+   - `mkdir -p ~/.local/state/SUNLIONET`
 
 ## First Run
 
 1. Import bundle:
-   - `shadownet-inside --master-key <32-byte-key> --import /path/to/bundle.snb.json --trusted-signer-pub-b64url <pub> --age-identity <identity> --render-only`
+   - `SUNLIONET-inside --master-key <32-byte-key> --import /path/to/bundle.snb.json --trusted-signer-pub-b64url <pub> --age-identity <identity> --render-only`
 2. Validate config:
-   - `shadownet-inside --master-key <32-byte-key> --validate-only`
+   - `SUNLIONET-inside --master-key <32-byte-key> --validate-only`
 
 ## Optional systemd (advanced)
 

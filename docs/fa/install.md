@@ -33,8 +33,8 @@
 ```bash
 mkdir -p bin
 
-go build -tags inside -ldflags="-s -w" -o bin/shadownet-inside ./cmd/inside/
-go build -tags outside -ldflags="-s -w" -o bin/shadownet-outside ./cmd/outside/
+go build -tags inside -ldflags="-s -w" -o bin/SUNLIONET-inside ./cmd/inside/
+go build -tags outside -ldflags="-s -w" -o bin/SUNLIONET-outside ./cmd/outside/
 ```
 
 ## اجرای تست‌ها

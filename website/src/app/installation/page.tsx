@@ -104,7 +104,7 @@ sha256sum -c "${linuxAmd64}.sha256"`}
                 language="bash"
                 code={`tar -xzf ${linuxAmd64}
 sudo ./install-linux.sh inside
-sudo systemctl enable --now sunlionet-inside.service || sudo systemctl enable --now shadownet-inside.service`}
+sudo systemctl enable --now sunlionet-inside.service || sudo systemctl enable --now SUNLIONET-inside.service`}
               />
             </div>
             <div className="mt-3 text-sm text-muted-foreground">

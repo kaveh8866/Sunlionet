@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/kaveh/shadownet-agent/pkg/bundle"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/bundle"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 // Importer handles receiving and validating outside configs

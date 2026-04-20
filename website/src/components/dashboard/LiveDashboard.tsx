@@ -18,8 +18,8 @@ import { formatUnixAgo } from "./format";
 
 type LiveMode = DashboardFiltersState["liveMode"];
 
-const snapshotBaseUrl = process.env.NEXT_PUBLIC_SHADOWNET_DASHBOARD_SNAPSHOT_URL ?? "";
-const streamBaseUrl = process.env.NEXT_PUBLIC_SHADOWNET_DASHBOARD_STREAM_URL ?? "";
+const snapshotBaseUrl = process.env.NEXT_PUBLIC_SUNLIONET_DASHBOARD_SNAPSHOT_URL ?? "";
+const streamBaseUrl = process.env.NEXT_PUBLIC_SUNLIONET_DASHBOARD_STREAM_URL ?? "";
 
 const viewTitle: Record<DashboardView, string> = {
   global: "Global View",
@@ -221,8 +221,8 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
         <div className="lg:col-span-9 grid gap-6">
           {!displaySnapshot ? (
             <div className="rounded-xl border border-border bg-card/60 p-4 text-sm text-muted-foreground">
-              No live dashboard feed detected. Configure NEXT_PUBLIC_SHADOWNET_DASHBOARD_SNAPSHOT_URL or
-              NEXT_PUBLIC_SHADOWNET_DASHBOARD_STREAM_URL to enable operator snapshots.
+              No live dashboard feed detected. Configure NEXT_PUBLIC_SUNLIONET_DASHBOARD_SNAPSHOT_URL or
+              NEXT_PUBLIC_SUNLIONET_DASHBOARD_STREAM_URL to enable operator snapshots.
             </div>
           ) : view === "protocols" ? (
             <div className="grid md:grid-cols-2 gap-6">

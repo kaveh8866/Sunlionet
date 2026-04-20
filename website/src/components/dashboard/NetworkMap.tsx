@@ -24,7 +24,7 @@ type GeoFeature = {
   properties?: GeoProperties;
 };
 
-const mapSourceEnv = process.env.NEXT_PUBLIC_SHADOWNET_MAP_URL;
+const mapSourceEnv = process.env.NEXT_PUBLIC_SUNLIONET_MAP_URL;
 const defaultGeography: unknown = mapSourceEnv && mapSourceEnv.length > 0 ? mapSourceEnv : (worldTopo as unknown);
 
 const centerForView = (view: DashboardSnapshot["view"]): [number, number] => {

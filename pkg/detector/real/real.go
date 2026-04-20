@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/orchestrator"
-	"github.com/kaveh/shadownet-agent/pkg/runtimecfg"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/orchestrator"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 )
 
 type Config struct {

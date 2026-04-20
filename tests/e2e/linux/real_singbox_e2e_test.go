@@ -21,20 +21,20 @@ func TestInside_RealSingBox_HTTPProbe(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-only e2e")
 	}
-	if os.Getenv("SHADOWNET_E2E") != "1" {
-		t.Skip("set SHADOWNET_E2E=1 to enable")
+	if os.Getenv("SUNLIONET_E2E") != "1" {
+		t.Skip("set SUNLIONET_E2E=1 to enable")
 	}
 
 	if _, err := exec.LookPath("sing-box"); err != nil {
 		t.Skip("sing-box not installed in PATH")
 	}
 
-	bundle := os.Getenv("SHADOWNET_E2E_BUNDLE")
-	trusted := os.Getenv("SHADOWNET_E2E_TRUSTED_SIGNER_PUB_B64URL")
-	ageID := os.Getenv("SHADOWNET_E2E_AGE_IDENTITY")
-	masterKey := os.Getenv("SHADOWNET_E2E_MASTER_KEY")
+	bundle := os.Getenv("SUNLIONET_E2E_BUNDLE")
+	trusted := os.Getenv("SUNLIONET_E2E_TRUSTED_SIGNER_PUB_B64URL")
+	ageID := os.Getenv("SUNLIONET_E2E_AGE_IDENTITY")
+	masterKey := os.Getenv("SUNLIONET_E2E_MASTER_KEY")
 	if bundle == "" || trusted == "" || ageID == "" || masterKey == "" {
-		t.Skip("missing SHADOWNET_E2E_* env vars (see docs/testing/e2e-validation.md)")
+		t.Skip("missing SUNLIONET_E2E_* env vars (see docs/testing/e2e-validation.md)")
 	}
 
 	root := repoRoot(t)

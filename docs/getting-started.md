@@ -9,7 +9,7 @@ It ships as:
 - SunLionet App: the Android wrapper for SunLionet Inside (VPN integration + configuration import UI).
 - SunLionet Dashboard: a web UI that can show local runtime status (no cloud required).
 
-Migration note: this repository is still named `shadownet-agent` during the transition, so some internal identifiers and older release artifacts may still use legacy `shadownet-*` naming.
+Migration note: this repository is still named `SUNLIONET-agent` during the transition, so some internal identifiers and older release artifacts may still use legacy `SUNLIONET-*` naming.
 
 ## First-Time Setup (Linux user path)
 
@@ -23,7 +23,7 @@ Minimal flow (example for Linux amd64):
 
 ```bash
 VERSION="v0.1.0"
-BASE_URL="https://github.com/kaveh8866/shadownet-agent/releases/download/${VERSION}"
+BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/download/${VERSION}"
 
 curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz"
 curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz.sha256"

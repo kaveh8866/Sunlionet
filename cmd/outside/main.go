@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/kaveh/shadownet-agent/pkg/bundle"
-	"github.com/kaveh/shadownet-agent/pkg/outsidectl"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/relay"
+	"github.com/kaveh/sunlionet-agent/pkg/bundle"
+	"github.com/kaveh/sunlionet-agent/pkg/outsidectl"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/relay"
 )
 
 type bundleWrapper struct {

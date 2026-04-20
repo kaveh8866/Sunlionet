@@ -44,10 +44,10 @@ make lint
 
 ## Version Injection for CLI
 
-Build `shadownet-inside` with an explicit version string:
+Build `SUNLIONET-inside` with an explicit version string:
 
 ```bash
-go build -ldflags "-X main.version=0.1.0" -tags inside -o bin/shadownet-inside ./cmd/inside
+go build -ldflags "-X main.version=0.1.0" -tags inside -o bin/SUNLIONET-inside ./cmd/inside
 ```
 
 ## Troubleshooting

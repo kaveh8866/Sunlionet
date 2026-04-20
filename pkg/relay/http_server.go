@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ type ServerOptions struct {
 	MinPoWBits             int
 	IPRateLimitPerMin      int
 	MailboxRateLimitPerMin int
+	AuthToken              string
 }
 
 func (o ServerOptions) normalize() ServerOptions {
@@ -53,6 +55,7 @@ func (o ServerOptions) normalize() ServerOptions {
 	if out.MailboxRateLimitPerMin > 6000 {
 		out.MailboxRateLimitPerMin = 6000
 	}
+	out.AuthToken = strings.TrimSpace(out.AuthToken)
 	return out
 }
 
@@ -81,7 +84,15 @@ func NewServer(addr string, relay Relay, opts ServerOptions) (*Server, error) {
 	opts = opts.normalize()
 
 	mux := http.NewServeMux()
+	applySecurityHeaders := func(w http.ResponseWriter) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
+	}
 	writeJSON := func(w http.ResponseWriter, status int, v any) {
+		applySecurityHeaders(w)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(status)
@@ -106,6 +117,23 @@ func NewServer(addr string, relay Relay, opts ServerOptions) (*Server, error) {
 	}
 
 	lim := newTokenLimiter()
+	requireAuth := func(w http.ResponseWriter, r *http.Request) bool {
+		if opts.AuthToken == "" {
+			return true
+		}
+		authz := strings.TrimSpace(r.Header.Get("Authorization"))
+		const bearerPrefix = "Bearer "
+		if !strings.HasPrefix(authz, bearerPrefix) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return false
+		}
+		token := strings.TrimSpace(strings.TrimPrefix(authz, bearerPrefix))
+		if subtle.ConstantTimeCompare([]byte(token), []byte(opts.AuthToken)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return false
+		}
+		return true
+	}
 	allowRequest := func(r *http.Request, mailbox MailboxID) error {
 		ip := remoteIP(r)
 		if ip == "" {
@@ -129,7 +157,10 @@ func NewServer(addr string, relay Relay, opts ServerOptions) (*Server, error) {
 
 	mux.HandleFunc("/v1/push", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if !requireAuth(w, r) {
 			return
 		}
 		var req PushRequest
@@ -159,7 +190,10 @@ func NewServer(addr string, relay Relay, opts ServerOptions) (*Server, error) {
 
 	mux.HandleFunc("/v1/pull", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if !requireAuth(w, r) {
 			return
 		}
 		var req PullRequest
@@ -181,7 +215,10 @@ func NewServer(addr string, relay Relay, opts ServerOptions) (*Server, error) {
 
 	mux.HandleFunc("/v1/ack", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if !requireAuth(w, r) {
 			return
 		}
 		var req AckRequest

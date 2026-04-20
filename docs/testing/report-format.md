@@ -13,13 +13,13 @@
 
 ## Schema
 
-- `schema`: `shadownet.report.v1`
+- `schema`: `SUNLIONET.report.v1`
 
 ## Example
 
 ```json
 {
-  "schema": "shadownet.report.v1",
+  "schema": "SUNLIONET.report.v1",
   "app_version": "v0.1.0",
   "generated_at_unix": 1776280000,
   "generated_hour_unix": 1776280000,
@@ -73,7 +73,7 @@ Used for controlled rollout triage. Generated only when the tester explicitly ta
 
 ```json
 {
-  "schema": "shadownet.logs.v1",
+  "schema": "SUNLIONET.logs.v1",
   "version": "v0.1.0-test3",
   "tester_mode": true,
   "share_anonymous_diagnostics": false,

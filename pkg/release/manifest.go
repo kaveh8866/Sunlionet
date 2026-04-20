@@ -13,7 +13,7 @@ import (
 	"sort"
 )
 
-const SchemaV1 = "shadownet.release-manifest.v1"
+const SchemaV1 = "SUNLIONET.release-manifest.v1"
 
 type Manifest struct {
 	Schema    string      `json:"schema"`

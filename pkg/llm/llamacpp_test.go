@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/sbctl"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
 )
 
 func TestProposeAction_Success(t *testing.T) {

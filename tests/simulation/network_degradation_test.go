@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/tests/simulation/dpisim"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/tests/simulation/dpisim"
 )
 
 func TestSimulation_UDPLatencySpike_NotTreatedAsBlocked(t *testing.T) {

@@ -35,7 +35,7 @@
             android:screenOrientation="portrait" />
 
         <service
-            android:name=".ShadowNetVpnService"
+            android:name=".SUNLIONETVpnService"
             android:enabled="true"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE">

@@ -5,7 +5,7 @@ This repository currently targets:
 - SunLionet Inside: Linux + Android (signed APK and Termux CLI path)
 - SunLionet Outside: any OS with stable internet (Linux/macOS/Windows)
 
-Migration note: this repository is still named `shadownet-agent` during the transition. Some internal identifiers and older release artifacts may still use legacy `shadownet-*` naming.
+Migration note: this repository is still named `SUNLIONET-agent` during the transition. Some internal identifiers and older release artifacts may still use legacy `SUNLIONET-*` naming.
 
 If you are installing for the first time, start here:
 

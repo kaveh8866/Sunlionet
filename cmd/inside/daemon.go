@@ -14,15 +14,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/chat"
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/identity"
-	"github.com/kaveh/shadownet-agent/pkg/llm"
-	"github.com/kaveh/shadownet-agent/pkg/messaging"
-	"github.com/kaveh/shadownet-agent/pkg/policy"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
-	"github.com/kaveh/shadownet-agent/pkg/relay"
-	"github.com/kaveh/shadownet-agent/pkg/sbctl"
+	"github.com/kaveh/sunlionet-agent/pkg/chat"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/identity"
+	"github.com/kaveh/sunlionet-agent/pkg/llm"
+	"github.com/kaveh/sunlionet-agent/pkg/messaging"
+	"github.com/kaveh/sunlionet-agent/pkg/policy"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/relay"
+	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
 )
 
 var (
@@ -41,8 +41,8 @@ var (
 
 func init() {
 	flag.StringVar(&llamaURL, "llama-url", "http://127.0.0.1:8080", "Local llama.cpp API endpoint")
-	flag.StringVar(&storePath, "store", "/var/lib/sunlionet/store.enc", "Path to AES-GCM encrypted config DB (legacy default was /var/lib/shadownet/store.enc)")
-	flag.StringVar(&templateDir, "templates", "/opt/sunlionet/templates", "Path to sing-box JSON templates (legacy default was /opt/shadownet/templates)")
+	flag.StringVar(&storePath, "store", "/var/lib/sunlionet/store.enc", "Path to AES-GCM encrypted config DB (legacy default was /var/lib/SUNLIONET/store.enc)")
+	flag.StringVar(&templateDir, "templates", "/opt/sunlionet/templates", "Path to sing-box JSON templates (legacy default was /opt/SUNLIONET/templates)")
 	flag.StringVar(&masterKeyArg, "master-key", "", "Master key for local encrypted storage (32 raw bytes, 64 hex chars, or base64/base64url encoding of 32 bytes)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable verbose logging and LLM reasoning output")
 	flag.IntVar(&batteryLevel, "battery", 100, "Simulated battery level (Android)")
@@ -62,15 +62,15 @@ func main() {
 
 	if storePath == "/var/lib/sunlionet/store.enc" {
 		if _, err := os.Stat(storePath); err != nil {
-			if _, legacyErr := os.Stat("/var/lib/shadownet/store.enc"); legacyErr == nil {
-				storePath = "/var/lib/shadownet/store.enc"
+			if _, legacyErr := os.Stat("/var/lib/SUNLIONET/store.enc"); legacyErr == nil {
+				storePath = "/var/lib/SUNLIONET/store.enc"
 			}
 		}
 	}
 	if templateDir == "/opt/sunlionet/templates" {
 		if _, err := os.Stat(templateDir); err != nil {
-			if _, legacyErr := os.Stat("/opt/shadownet/templates"); legacyErr == nil {
-				templateDir = "/opt/shadownet/templates"
+			if _, legacyErr := os.Stat("/opt/SUNLIONET/templates"); legacyErr == nil {
+				templateDir = "/opt/SUNLIONET/templates"
 			}
 		}
 	}
@@ -78,18 +78,18 @@ func main() {
 	if masterKeyArg == "" {
 		masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
 		if masterKeyArg == "" {
-			masterKeyArg = os.Getenv("SHADOWNET_MASTER_KEY")
+			masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
 		}
 	}
 	if relayURL == "" {
 		relayURL = os.Getenv("SUNLIONET_RELAY_URL")
 		if relayURL == "" {
-			relayURL = os.Getenv("SHADOWNET_RELAY_URL")
+			relayURL = os.Getenv("SUNLIONET_RELAY_URL")
 		}
 	}
 	masterKey, err := profile.ParseMasterKey(masterKeyArg)
 	if err != nil {
-		log.Fatalf("Missing or invalid master key: %v (set --master-key, SUNLIONET_MASTER_KEY, or SHADOWNET_MASTER_KEY)", err)
+		log.Fatalf("Missing or invalid master key: %v (set --master-key, SUNLIONET_MASTER_KEY, or SUNLIONET_MASTER_KEY)", err)
 	}
 
 	// 1. Initialize Encrypted Store

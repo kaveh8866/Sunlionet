@@ -6,7 +6,7 @@
 
 SunLionet is an offline-first, bundle-based privacy and resilient communication system designed for high-risk, restricted networks (including users in Iran). It ships as two coordinated binaries from one shared codebase.
 
-Migration note: this repository is still named `shadownet-agent` during the transition, so some internal identifiers may still use legacy `shadownet-*` naming.
+Migration note: this repository is still named `SUNLIONET-agent` during the transition, so some internal identifiers may still use legacy `SUNLIONET-*` naming.
 
 - English docs: this site
 - فارسی: [صفحه فارسی](fa/index.md)

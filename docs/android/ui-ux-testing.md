@@ -15,7 +15,7 @@ This document tracks practical UI/UX coverage for the Android app main flow.
 
 Instrumentation tests are in:
 
-- `android/app/src/androidTest/java/com/shadownet/agent/MainActivityTest.kt`
+- `android/app/src/androidTest/java/com/SUNLIONET/agent/MainActivityTest.kt`
 
 Covered checks:
 

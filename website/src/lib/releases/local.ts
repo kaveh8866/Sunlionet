@@ -51,7 +51,7 @@ function artifactKind(fileName: string): ReleaseArtifactKind {
 }
 
 function parseRoleAndTarget(tag: string, fileName: string): { role?: "inside" | "outside"; target?: string } {
-  const prefixes = ["sunlionet-", "shadownet-"];
+  const prefixes = ["sunlionet-", "SUNLIONET-"];
   const prefix = prefixes.find((p) => fileName.startsWith(p));
   if (!prefix) return {};
   const rest = fileName.slice(prefix.length);

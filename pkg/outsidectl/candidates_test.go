@@ -3,7 +3,7 @@ package outsidectl
 import (
 	"testing"
 
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 func TestNormalizeRejectsTemplateRefTraversalAndSeparators(t *testing.T) {

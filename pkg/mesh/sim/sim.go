@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/kaveh/shadownet-agent/pkg/runtimecfg"
+	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 )
 
 var errQueueFull = errors.New("mesh: queue full")

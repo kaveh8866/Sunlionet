@@ -1,6 +1,6 @@
 package bundle
 
-import "github.com/kaveh/shadownet-agent/pkg/profile"
+import "github.com/kaveh/sunlionet-agent/pkg/profile"
 
 // BundleHeader represents the authenticated metadata wrapping the encrypted payload
 type BundleHeader struct {

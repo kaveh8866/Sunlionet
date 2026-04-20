@@ -5,8 +5,6 @@ if command -v systemctl >/dev/null 2>&1; then
     remove|purge)
       systemctl disable --now sunlionet-inside.service >/dev/null 2>&1 || true
       systemctl disable --now sunlionet-outside.service >/dev/null 2>&1 || true
-      systemctl disable --now shadownet-inside.service >/dev/null 2>&1 || true
-      systemctl disable --now shadownet-outside.service >/dev/null 2>&1 || true
       ;;
   esac
   systemctl daemon-reload || true

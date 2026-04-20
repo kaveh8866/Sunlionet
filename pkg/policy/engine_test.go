@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaveh/shadownet-agent/pkg/detector"
-	"github.com/kaveh/shadownet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/detector"
+	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
 
 func TestRankProfiles_FiltersCooldownAndSortsByScore(t *testing.T) {
