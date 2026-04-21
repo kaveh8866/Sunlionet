@@ -1,51 +1,15 @@
-import path from "node:path";
-import { readdir, readFile } from "node:fs/promises";
 import { LocalizedLink } from "./LocalizedLink";
+import { getLocalReleases } from "../lib/releases/local";
 
-const repoUrl = "https://github.com/kaveh8866/sunlionet-core";
+const repoUrl = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
 const licenseUrl = `${repoUrl}/blob/main/LICENSE`;
-
-type ReleaseInfo = {
-  version: string;
-  buildRef?: string;
-};
-
-function parseSemver(version: string) {
-  const m = /^v(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!m) return null;
-  return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]) };
-}
-
-function compareRelease(a: string, b: string) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return a.localeCompare(b);
-  if (pa.major !== pb.major) return pa.major - pb.major;
-  if (pa.minor !== pb.minor) return pa.minor - pb.minor;
-  return pa.patch - pb.patch;
-}
-
-async function getLatestRelease(): Promise<ReleaseInfo | null> {
-  try {
-    const downloadsDir = path.join(process.cwd(), "public", "downloads");
-    const entries = await readdir(downloadsDir, { withFileTypes: true });
-    const versions = entries
-      .filter((e) => e.isDirectory() && e.name.startsWith("v"))
-      .map((e) => e.name)
-      .sort(compareRelease);
-    const version = versions.at(-1);
-    if (!version) return null;
-
-    const versionFile = path.join(downloadsDir, version, "VERSION.txt");
-    const buildRef = (await readFile(versionFile, "utf8")).trim() || undefined;
-    return { version, buildRef };
-  } catch {
-    return null;
-  }
-}
+const buildSha = process.env.NEXT_PUBLIC_GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA;
+const buildShaShort = buildSha ? buildSha.slice(0, 7) : null;
+const buildShaUrl = buildSha ? `${repoUrl}/commit/${buildSha}` : null;
 
 export async function SiteFooter() {
-  const release = await getLatestRelease();
+  const releases = await getLocalReleases();
+  const release = releases[0] ?? null;
 
   return (
     <footer className="border-t border-border bg-card/30 py-12 mt-16">
@@ -59,8 +23,15 @@ export async function SiteFooter() {
             </p>
             {release ? (
               <div className="mt-4 text-xs font-mono text-muted-foreground">
-                Release {release.version}
+                Release {release.tag}
                 {release.buildRef ? ` · ${release.buildRef}` : null}
+              </div>
+            ) : null}
+            {buildShaUrl && buildShaShort ? (
+              <div className="mt-2 text-xs font-mono text-muted-foreground">
+                <a href={buildShaUrl} className="hover:text-foreground transition-colors" target="_blank" rel="noreferrer">
+                  Source @ {buildShaShort}
+                </a>
               </div>
             ) : null}
           </div>

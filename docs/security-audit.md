@@ -107,6 +107,7 @@ Public-facing HTTP endpoints should provide baseline security headers and option
 - Go: `go test ./...`, `go vet ./...`
 - Go vuln scan: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` (expected: no vulnerabilities)
 - CI controls: CodeQL + gitleaks + govulncheck configured
+- LLM-based security review automation (if enabled) must be scoped to internal PRs only and must never run with secrets on fork PRs
 
 ## Manual Pen Test Checklist (Recommended)
 

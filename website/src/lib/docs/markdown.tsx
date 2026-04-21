@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { CodeBlockShell } from "../../components/ui/CodeBlockShell";
 
+const repoUrl = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/i, "");
+
 export type TocItem = {
   id: string;
   text: string;
@@ -101,6 +103,25 @@ function resolveHref(href: string, baseSlug: string[], basePrefix?: string, rout
     if (withoutExt === "index") return `${prefix}/${base}${hash}`;
     if (withoutExt.endsWith("/index")) return `${prefix}/${base}/${withoutExt.slice(0, -"/index".length)}${hash}`;
     return `${prefix}/${base}/${withoutExt}${hash}`;
+  }
+
+  if (/\.[a-z0-9]+$/i.test(withoutHash)) {
+    const rel = withoutHash.replace(/\\/g, "/");
+    const baseDir = baseSlug.slice(0, -1).join("/");
+    const joined = `${baseDir ? `${baseDir}/` : ""}${rel}`;
+    const normalized = joined
+      .split("/")
+      .reduce<string[]>((acc, seg) => {
+        if (seg === "." || seg === "") return acc;
+        if (seg === "..") {
+          acc.pop();
+          return acc;
+        }
+        acc.push(seg);
+        return acc;
+      }, [])
+      .join("/");
+    return `${repoUrl}/blob/main/${normalized}${hash}`;
   }
 
   return trimmed;

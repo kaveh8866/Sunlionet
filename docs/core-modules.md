@@ -1,52 +1,48 @@
 # SunLionet: Core Control Plane Architecture
 
-This document specifies the technical implementation of the Core Control Plane modules for SunLionet, addressing real-time network-interference detection, deterministic policy routing, and secure storage.
+This document maps core control-plane modules to the current codebase. Where a module is not implemented (or exists only in a non-release build), it is labeled explicitly.
 
 ## 1. Detector Subsystem
-The Detector subsystem provides continuous, stealthy monitoring of network health and censorship events.
+The Detector subsystem provides monitoring of network health and censorship signals.
 
 ### Detection Methods
-- **DNS Poisoning Check**: Validates DNS resolution against a small set of known test domains. If responses look like poisoning (e.g., unexpected private IPs or known sinkholes), it flags suspected DNS poisoning.
-- **SNI/TLS Reset Detection**: Initiates a TLS handshake to a test SNI. A TCP RST immediately after ClientHello is a strong indicator of active interference.
-- **HTTP Injection Detection**: Sends a plain HTTP GET to a known URL. Unexpected 403/redirects or injected HTML indicates middlebox tampering.
-- **QUIC/UDP Drop Detection**: Sends a 1-byte UDP ping. If dropped while TCP works, it flags suspected UDP throttling/blocking.
-- **Baseline Connectivity**: Periodically checks known reachable endpoints to distinguish between targeted interference and a total outage.
-
-### Operational Tactics
-- **Jitter**: All active probes use randomized wait intervals (e.g., `time.Sleep(60 + rand.Intn(60))`) to reduce fingerprinting risk from steady heartbeats.
-- **Probe Budget**: Limits active probing (e.g., max 10 TCP/UDP probes per hour) to stay under the radar.
-- **Passive Monitoring**: Hooks into sing-box stats and OS network metrics (like TCP retransmissions) to infer health without sending synthetic packets.
+- Implemented in the release build (`sunlionet-inside`):
+  - Baseline TCP connectivity probe + latency measurement.
+  - DNS poisoning suspicion check.
+  - UDP reachability check (coarse “UDP blocked” signal).
+  - Code: `pkg/detector/real/real.go` and `pkg/detector/*`.
+- Not implemented in the release build (conceptual/planned):
+  - SNI/TLS reset detection.
+  - HTTP injection detection.
+  - QUIC-specific detection.
 
 ## 2. Policy Engine (Deterministic)
-The Policy Engine handles 80-90% of routing decisions using hardcoded rules before escalating to the LLM advisor.
+The Policy Engine ranks candidates deterministically and produces a safe fallback decision path when optional orchestrators are unavailable.
 
 ### Health Scoring and Ranking
-Profiles are evaluated continuously and ranked using the following metrics:
-- **`score`**: Composite EWMA (Exponential Weighted Moving Average) score.
-- **`success_ewma`**: Ratio of successful connections to total attempts.
-- **`median_handshake_ms`**: Latency penalty for slow handshakes.
-- **`last_fail_reason`**: e.g., "udp_block_suspected" or "dns_poison_critical".
-- **`cooldown_until`**: A UNIX timestamp. Profiles in cooldown are excluded from selection.
+Implemented in the release build:
 
-### Decision Rules
-- **DNS Poisoning**: Switch to a secure DNS tunnel profile immediately. Cooldown current profile for 30 minutes.
-- **UDP Blocking**: Switch from UDP-based families (Hysteria2, TUIC) to TCP-based ones (Reality, ShadowTLS).
-- **Handshake Bursts**: Switch profile within the same protocol family (assuming the specific endpoint IP/port was blocked).
+- Ranking and filtering logic: `pkg/policy/engine.go` (EWMA success, latency penalties/bonuses, cooldown filtering, trust weighting).
+- Optional adaptive learning and diversity guards: `pkg/policy/adaptive.go` + `pkg/policy/adaptive_store.go` (encrypted at-rest).
+- Optional external “orchestrator” integration (Pi): `pkg/orchestrator/*` + `cmd/inside` flags. Orchestrator output is enforced by safety constraints and falls back to deterministic policy on failure.
+
+LLM-based decisioning exists in a non-release runtime path (`cmd/inside` with build tag `daemon`) and is not part of the current public release boundary.
 
 ## 3. Secure Local Store
-The Secure Store ensures that all config material and event logs are safely encrypted at rest.
+The Secure Store ensures that configuration state is encrypted at rest on disk. Runtime event streams are separate and are intentionally bounded/sanitized.
 
 ### Storage Architecture
-- **Linux/macOS**: Encrypted using `age` (X25519) and AES-GCM.
-- **Android**: To be implemented via Android Keystore and SQLCipher in the wrapper application.
+- **Go (Inside/Outside)**: Encrypted JSON storage using AES-256-GCM with a 32-byte master key (see `pkg/profile/store.go` and other `pkg/*/store.go`).
+- **Android**: Keystore-backed encrypted preferences for app secrets/state (see `android/app/src/main/java/com/sunlionet/agent/SecureStore.kt`).
 
 ### Components
-- **Seed Profiles**: Stores all known proxy templates and credentials.
-- **Bounded Event Ring Buffer**: Retains only the last 50 events in memory/disk. Older events are overwritten to reduce forensic exposure. Logs do not contain visited domains, only proxy metadata and interference signals.
-- **Trusted Contacts**: List of Ed25519 public keys allowed to send `snb://v2` config bundles via Signal.
-- **Wipe-on-Suspicion**: The `WipeOnSuspicion()` function overwrites the local database file with random bytes and zeros out the master key in memory when triggered by a panic switch.
+- Seed profiles and templates (encrypted at rest): `pkg/profile/*`.
+- Trusted signer allowlist (import boundary): `pkg/importctl/import.go` and `pkg/bundle/verify.go`.
+- Wipe-on-suspicion behavior (current): `pkg/profile/store.go` deletes the encrypted store file on request.
 
 ## 4. Integration with SUNLIONETd Supervisor (legacy name during transition)
+Conceptual (non-release): the supervisor/daemon architecture described below reflects an earlier or experimental control loop (see `cmd/inside/daemon.go`) and is not the default release runtime.
+
 The supervisor loop orchestrates the pipeline:
 1. `Detector` emits an event to the `EventChan`.
 2. The `Supervisor` appends the event to the ring buffer.

@@ -82,7 +82,7 @@ jobs:
               }
             )
           manifest = {
-            "schema": "SUNLIONET.release-manifest.v1",
+            "schema": "sunlionet.release-manifest.v1",
             "version": version,
             "artifacts": artifacts,
             "verification": {

@@ -35,9 +35,8 @@ type LocalRelease = {
   };
 };
 
-const repoOwner = "kaveh8866";
-const repoName = "sunlionet-core";
-const githubRepo = `https://github.com/${repoOwner}/${repoName}`;
+const githubRepo = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
+const repoName = githubRepo.split("/").filter(Boolean).at(-1) ?? "Sunlionet";
 const githubReleases = `${githubRepo}/releases`;
 const githubTagTarballBase = `${githubRepo}/archive/refs/tags`;
 
@@ -220,7 +219,10 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
   const copy = uiCopy[lang];
   const origin = useOrigin();
   const { detection, supportsAutoRecommendation } = useOsDetection();
-  const arch = useMemo(() => detectArchFromNavigator(), []);
+  const [arch, setArch] = useState<DetectedArch>("unknown");
+  useEffect(() => {
+    setArch(detectArchFromNavigator());
+  }, []);
   const resolvedBasePrefix = basePrefix?.trim() ? basePrefix : "";
   const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
 

@@ -9,7 +9,7 @@ SunLionet release verification uses two layers:
 
 Download these files from the same release tag:
 
-- target artifact (for example `SUNLIONET-linux-amd64.tar.gz` or `app-release.apk`)
+- target artifact (for example `sunlionet-linux-amd64.tar.gz` or `app-release.apk`)
 - `checksums.txt`
 - `checksums.sig`
 - `checksums.pub`
@@ -18,7 +18,7 @@ Download these files from the same release tag:
 ## Verification Commands
 
 ```bash
-ARTIFACT="SUNLIONET-linux-amd64.tar.gz"
+ARTIFACT="sunlionet-linux-amd64.tar.gz"
 grep " ${ARTIFACT}\$" checksums.txt > "${ARTIFACT}.sha256"
 sha256sum -c "${ARTIFACT}.sha256"
 cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt

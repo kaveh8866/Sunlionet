@@ -2,6 +2,8 @@ export const dynamic = "force-static";
 
 import Link from "next/link";
 
+const repoUrl = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
+
 export default async function VideoPage({ params }: { params: Promise<{ lang?: string }> }) {
   const resolved = await params;
   const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
@@ -11,21 +13,12 @@ export default async function VideoPage({ params }: { params: Promise<{ lang?: s
     <div className="container mx-auto px-4 py-16 max-w-4xl">
       <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Video</h1>
       <p className="mt-4 text-muted-foreground leading-relaxed">
-        SunLionet overview video (local file, no telemetry). If the player doesn’t load, use the direct download link below.
+        SunLionet overview video (local file, no telemetry).
       </p>
 
       <div className="mt-8 rounded-2xl border border-border bg-card/60 p-4 shadow-[0_0_0_1px_var(--border)]">
-        <video
-          className="w-full rounded-xl bg-black aspect-video"
-          controls
-          playsInline
-          preload="metadata"
-          src="/media/SunLionet.mp4"
-        />
-        <div className="mt-3 text-sm text-muted-foreground">
-          <a className="text-primary hover:opacity-90" href="/media/SunLionet.mp4" download>
-            Download video
-          </a>
+        <div className="text-sm text-muted-foreground leading-relaxed">
+          Video file is not bundled in this build.
         </div>
       </div>
 
@@ -57,7 +50,7 @@ export default async function VideoPage({ params }: { params: Promise<{ lang?: s
         <div className="mt-6 text-sm text-muted-foreground">
           <a
             className="text-primary hover:opacity-90"
-            href="https://github.com/kaveh8866/sunlionet-core"
+            href={repoUrl}
             target="_blank"
             rel="noreferrer"
           >

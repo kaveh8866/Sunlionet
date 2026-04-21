@@ -26,15 +26,15 @@
 ابزارهای اختیاری:
 
 - `sing-box` (برای اجرای واقعی اتصال)
-- یک runtime محلی LLM (مثل llama.cpp) برای مسیر advisor محدود
+- یک runtime محلی LLM (مثل llama.cpp) فقط برای build آزمایشی daemon با tag `inside,daemon`
 
 ## ساخت (Build)
 
 ```bash
 mkdir -p bin
 
-go build -tags inside -ldflags="-s -w" -o bin/SUNLIONET-inside ./cmd/inside/
-go build -tags outside -ldflags="-s -w" -o bin/SUNLIONET-outside ./cmd/outside/
+go build -tags inside -ldflags="-s -w" -o bin/sunlionet-inside ./cmd/inside/
+go build -tags outside -ldflags="-s -w" -o bin/sunlionet-outside ./cmd/outside/
 ```
 
 ## اجرای تست‌ها
@@ -61,5 +61,5 @@ Inside از یک API مرکزی دانلود نمی‌کند. seed اولیه ا
 
 ## نکات اندروید
 
-این مخزن فعلاً **APK تولیدی اندروید** منتشر نمی‌کند. برای توسعه، Inside را به‌صورت CLI در Termux اجرا کنید و wrapper (VPN/foreground-service) را یک پروژه جداگانه اندروید در نظر بگیرید.
+این مخزن در مسیر release، **APK اندروید** را تولید می‌کند. برای توسعه، می‌توانید Inside را به‌صورت CLI در Termux اجرا کنید یا wrapper اندروید را مستقیم از پوشه `android/` بسازید.
 

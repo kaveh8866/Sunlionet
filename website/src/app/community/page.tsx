@@ -5,7 +5,7 @@ import { siteCopy } from "../../content/siteCopy";
 
 export const dynamic = "force-static";
 
-const repoUrl = "https://github.com/kaveh8866/sunlionet-core";
+const repoUrl = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
 
 export default async function CommunityPage({ params }: { params: Promise<{ lang?: string }> }) {
   const resolved = await params;
@@ -83,4 +83,3 @@ export default async function CommunityPage({ params }: { params: Promise<{ lang
     </div>
   );
 }
-

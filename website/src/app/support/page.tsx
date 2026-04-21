@@ -5,6 +5,8 @@ import { RevolutReferralCard } from "../../components/RevolutReferralCard";
 import { primaryQrValue, supportConfig } from "../../config/support";
 import { resolveUILang, uiCopy } from "../../lib/uiCopy";
 
+const repoUrl = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
+
 export const metadata: Metadata = {
   title: "Support SunLionet – Donate or Earn with Revolut",
   description:
@@ -97,7 +99,7 @@ export default async function SupportPage({ params }: { params: Promise<{ lang?:
           <li>
             Contribute code on{" "}
             <a
-              href="https://github.com/kaveh8866/sunlionet-core"
+              href={repoUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:opacity-90"

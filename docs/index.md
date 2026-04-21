@@ -25,14 +25,17 @@ Migration note: this repository is still named `SUNLIONET-agent` during the tran
 ## Key documents
 
 - Getting started: [getting-started.md](getting-started.md)
+- Production map: [production-map.md](production-map.md)
 - Architecture: [architecture.md](architecture.md)
 - Installation: [install.md](install.md)
 - sing-box profiles & mutation strategy: [profiles.md](profiles.md)
 - Bundle format (sign/encrypt/version): [bundle-format.md](bundle-format.md)
 - Signal protocol: [signal.md](signal.md)
 - Threat model: [threat-model.md](threat-model.md)
+- Security boundaries: [security/boundaries.md](security/boundaries.md)
+- Release blockers: [release/checklist.md](release/checklist.md)
 - LLM setup notes: [LLM_SETUP.md](LLM_SETUP.md)
 
 ## Reports
 
-- Iran internet blackout: [iran-internet-blackout.md](iran-internet-blackout.md) (PDF: [iran-internet-blackout.pdf](iran-internet-blackout.pdf))
+- Iran internet blackout: https://github.com/kaveh8866/Sunlionet/blob/main/wiki/Iran-Internet-Blackout.md

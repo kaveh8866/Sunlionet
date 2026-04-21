@@ -56,10 +56,16 @@ export function SiteHeader() {
   }, [normalizedPath]);
 
   const homeHref = basePrefix || "/";
-  const hrefFor = (href: string) => (basePrefix ? `${basePrefix}${href === "/" ? "" : href}` : href);
+  const hrefFor = (href: string) => {
+    if (href.startsWith("/dashboard")) return href;
+    if (basePrefix) return `${basePrefix}${href === "/" ? "" : href}`;
+    return href;
+  };
   const currentLang = getUILangFromPathname(pathname);
   const otherLang = currentLang === "fa" ? "en" : "fa";
-  const otherLangHref = `/${otherLang}${normalizedPath === "/" ? "" : normalizedPath}`;
+  const otherLangHref = normalizedPath.startsWith("/dashboard")
+    ? `/${otherLang}`
+    : `/${otherLang}${normalizedPath === "/" ? "" : normalizedPath}`;
   const labels = uiCopy[currentLang].nav;
 
   return (

@@ -10,8 +10,8 @@
 ### Build
 
 ```bash
-go build -tags inside -o bin/SUNLIONET-inside ./cmd/inside/
-go build -tags outside -o bin/SUNLIONET-outside ./cmd/outside/
+go build -tags inside -o bin/sunlionet-inside ./cmd/inside/
+go build -tags outside -o bin/sunlionet-outside ./cmd/outside/
 ```
 
 ### Test
@@ -55,4 +55,3 @@ go vet -tags outside ./...
 
 - Do not open a public issue for exploit details.
 - Prefer private contact channels listed in the repository.
-

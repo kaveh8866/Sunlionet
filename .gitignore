@@ -24,3 +24,9 @@
 /.idea/
 *.iml
 
+# Local automation / agent workspace
+/.claude/
+/.tmp/
+/.trae/skills/
+/.github/claude-security-review/
+

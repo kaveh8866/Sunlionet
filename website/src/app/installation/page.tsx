@@ -6,9 +6,7 @@ import { resolveUILang, uiCopy } from "../../lib/uiCopy";
 
 export const dynamic = "force-static";
 
-const repoOwner = "kaveh8866";
-const repoName = "sunlionet-core";
-const githubRepo = `https://github.com/${repoOwner}/${repoName}`;
+const githubRepo = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kaveh8866/Sunlionet").replace(/\.git$/, "");
 const githubDocsInstall = `${githubRepo}/blob/main/docs/install.md`;
 
 function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {

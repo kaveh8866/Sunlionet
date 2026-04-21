@@ -38,7 +38,7 @@ This repository pins its Go toolchain in [go.mod](file:///C:/Users/Kaveh/Desktop
 Optional tools:
 
 - `sing-box` (runtime for real connectivity)
-- a local LLM runtime (e.g., llama.cpp) for the bounded advisor path
+- a local LLM runtime (e.g., llama.cpp) is only required for the non-release daemon build (`inside && daemon`); the public release path does not require an LLM runtime
 
 ## Build
 

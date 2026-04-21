@@ -1,6 +1,6 @@
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { cache } from "react";
+import { cache as reactCache } from "react";
 
 export type ReleaseArtifactKind = "tar.gz" | "zip" | "bin";
 
@@ -79,9 +79,23 @@ function parseSha256FileContents(contents: string) {
   return { hash: m[1].toLowerCase(), fileName: m[2] };
 }
 
-export const getLocalReleases = cache(async (): Promise<LocalRelease[]> => {
+async function resolveDownloadsDir() {
+  const candidates = [path.join(process.cwd(), "public", "downloads"), path.join(process.cwd(), "website", "public", "downloads")];
+  for (const candidate of candidates) {
+    try {
+      const s = await stat(candidate);
+      if (s.isDirectory()) return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+export async function getLocalReleasesUncached(): Promise<LocalRelease[]> {
   try {
-    const downloadsDir = path.join(process.cwd(), "public", "downloads");
+    const downloadsDir = await resolveDownloadsDir();
+    if (!downloadsDir) return [];
     const entries = await readdir(downloadsDir, { withFileTypes: true });
     const versionDirs = entries
       .filter((e) => e.isDirectory() && e.name.startsWith("v"))
@@ -167,4 +181,8 @@ export const getLocalReleases = cache(async (): Promise<LocalRelease[]> => {
   } catch {
     return [];
   }
-});
+}
+
+const cacheFn: typeof reactCache = typeof reactCache === "function" ? reactCache : ((fn) => fn);
+
+export const getLocalReleases = cacheFn(getLocalReleasesUncached);

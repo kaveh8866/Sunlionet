@@ -23,6 +23,15 @@ export function LocalizedLink({ href, ...props }: Props) {
 
   const resolvedHref = useMemo(() => {
     if (!href.startsWith("/")) return href;
+    if (
+      href === "/icon.png" ||
+      href.startsWith("/api/") ||
+      href.startsWith("/downloads/") ||
+      href.startsWith("/media/") ||
+      href.startsWith("/dashboard")
+    ) {
+      return href;
+    }
     if (!prefix) return href;
     if (href === "/") return prefix;
     if (href === prefix || href.startsWith(`${prefix}/`)) return href;

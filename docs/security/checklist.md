@@ -1,5 +1,7 @@
 # Security Audit Checklist
 
+See also: [Security Boundaries](boundaries.md) and [Release Blockers](../release/checklist.md).
+
 ## Input Validation
 - Verify all imported bundles with trusted signer keys only.
 - Reject unsigned, tampered, expired, or schema-incompatible bundles.

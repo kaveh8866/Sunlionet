@@ -26,9 +26,9 @@ This document focuses on the dual-version model: SunLionet Inside operates in a 
   - Fail-closed signature verification: [import.go](../pkg/importctl/import.go)
   - Trusted public keys configured out-of-band
 
-- LLM misuse / data leakage
-  - LLM sees no secrets or full configs
-  - Strict JSON-only bounded output and deterministic policy fallback
+- Optional orchestrator/LLM misuse / data leakage
+  - Release runtime uses deterministic policy + optional external orchestrator with explicit safety enforcement.
+  - Non-release daemon build includes an LLM client; any future LLM integration must preserve “no secrets/no full configs” and fail-closed behavior.
 
 - Signal compromise / metadata risk
   - Prefer disappearing messages

@@ -15,18 +15,18 @@
 ## Install
 
 1. Extract package:
-   - `tar -xzf SUNLIONET-inside-<version>-linux-<arch>.tar.gz`
+   - `tar -xzf sunlionet-inside-<version>-linux-<arch>.tar.gz`
 2. Move binary:
-   - `sudo install -m 0755 inside /usr/local/bin/SUNLIONET-inside`
+   - `sudo install -m 0755 sunlionet-inside /usr/local/bin/sunlionet-inside`
 3. Prepare state dir:
-   - `mkdir -p ~/.local/state/SUNLIONET`
+   - `mkdir -p ~/.local/state/sunlionet`
 
 ## First Run
 
 1. Import bundle:
-   - `SUNLIONET-inside --master-key <32-byte-key> --import /path/to/bundle.snb.json --trusted-signer-pub-b64url <pub> --age-identity <identity> --render-only`
+   - `sunlionet-inside --master-key <32-byte-key> --import /path/to/bundle.snb.json --trusted-signer-pub-b64url <pub> --age-identity <identity> --render-only`
 2. Validate config:
-   - `SUNLIONET-inside --master-key <32-byte-key> --validate-only`
+   - `sunlionet-inside --master-key <32-byte-key> --validate-only`
 
 ## Optional systemd (advanced)
 

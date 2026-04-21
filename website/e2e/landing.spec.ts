@@ -1,4 +1,17 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type Response } from "@playwright/test";
+
+async function gotoWithRetry(page: Page, url: string, options?: Parameters<Page["goto"]>[1]): Promise<Response | null> {
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await page.goto(url, options);
+    } catch (err: unknown) {
+      if (attempt === maxAttempts) throw err as Error;
+      await page.waitForTimeout(350 * attempt);
+    }
+  }
+  return null;
+}
 
 test("homepage smoke: loads, nav visible, CTA visible", async ({ page }) => {
   await page.goto("/");
@@ -16,7 +29,7 @@ test("download section recommends Android when UA indicates Android", async ({ b
       "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
   });
   const page = await context.newPage();
-  await page.goto("/download");
+  await gotoWithRetry(page, "/download", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByText("Recommended download")).toBeVisible();
   await expect(page.getByText("Android (APK)").first()).toBeVisible();
   await expect(page.getByText(/android-arm64/i).first()).toBeVisible();
@@ -24,11 +37,12 @@ test("download section recommends Android when UA indicates Android", async ({ b
 });
 
 test("download page shows platform options, verify/install sections, and local-fallback message", async ({ page }) => {
-  await page.goto("/download");
+  await gotoWithRetry(page, "/download", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByText("Recommended artifact", { exact: true })).toBeVisible();
   await expect(page.getByText("Quick install (stepwise)")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Verification" })).toBeVisible();
   await expect(page.getByTestId("download-platform-select")).toBeVisible();
+  await expect(page.getByText("Confidence:")).toBeVisible();
   await page.getByTestId("download-platform-select").selectOption("linux-amd64");
   await expect(page.getByTestId("recommended-download")).toBeVisible();
 

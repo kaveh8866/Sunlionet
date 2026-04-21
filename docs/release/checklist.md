@@ -1,6 +1,50 @@
-# Release Checklist
+# Release Checklist (Release Blockers + Publication)
 
 This checklist is for preparing and publishing a public SunLionet release (example: `v0.1.0`).
+
+## Release Blockers (Cannot Ship Unless True)
+
+### Secrets and Sensitive Data
+- No plaintext secrets at rest where prohibited:
+  - Go state stores remain encrypted-at-rest (AES-GCM) and never write plaintext profiles/templates/identity to disk.
+  - Android uses keystore-backed encrypted storage for app secrets and state.
+- No secrets/tokens/seed material in logs:
+  - Go runtime API events remain sanitized and bounded.
+  - Android logs are bounded/sanitized and release builds do not ship verbose logging enabled.
+- Repo passes secret scanning:
+  - `gitleaks` passes in CI for the release tag.
+
+### Bundle Import and Trust
+- Import validation is explicit and testable:
+  - Signature verification is fail-closed against an explicit trusted signer allowlist.
+  - Payload canonicalization and strict validation is enforced.
+  - Replay and conflict behavior is deterministic (duplicate IDs/endpoints rejected).
+- Signer trust model is documented:
+  - Trust anchors, signing meaning, and transport assumptions are described in docs.
+
+### State Corruption and Recovery
+- Corrupted state has deterministic recovery behavior:
+  - Encrypted stores and runtime state handle missing/corrupt files without undefined behavior.
+- Failed config/profile rotation has rollback behavior:
+  - A failed profile attempt does not silently “accept” a broken config.
+  - Max-attempt limits prevent thrashing and loops.
+
+### Hostile-Network Behavior
+- Hostile-network behavior has test hooks:
+  - Simulation and integration tests exist to exercise degraded/blocked network behavior.
+  - Real-mode smoke tests exist for basic connect/import flows (where supported).
+
+### Android Security Boundaries
+- Android permission/consent/security-sensitive flows are bounded:
+  - VPN consent is explicit user action.
+  - Import UI does not accept unverified/untrusted bundles as “active”.
+  - Stored secrets remain in encrypted storage (no plaintext fallbacks).
+
+### CI / Release Boundary
+- CI security review tooling only runs in approved/trusted modes:
+  - LLM-based security review workflow is restricted to internal branches/PRs (fork PRs are skipped).
+- Release artifacts and docs are consistent:
+  - Artifact names, install instructions, and verification steps match what CI produces.
 
 ## Artifacts
 

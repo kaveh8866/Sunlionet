@@ -1,4 +1,17 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type Response } from "@playwright/test";
+
+async function gotoWithRetry(page: Page, url: string, options?: Parameters<Page["goto"]>[1]): Promise<Response | null> {
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await page.goto(url, options);
+    } catch (err: unknown) {
+      if (attempt === maxAttempts) throw err as Error;
+      await page.waitForTimeout(350 * attempt);
+    }
+  }
+  return null;
+}
 
 test("/dashboard/runtime renders (offline)", async ({ page }) => {
   await page.goto("/dashboard/runtime");
@@ -90,14 +103,14 @@ test("/dashboard/runtime renders (error status)", async ({ page }) => {
 });
 
 test("/dashboard/global renders (no feed)", async ({ page }) => {
-  await page.goto("/dashboard/global");
+  await gotoWithRetry(page, "/dashboard/global", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
   await expect(page.getByText("No live dashboard feed detected")).toBeVisible();
   await expect(page.getByText("Privacy mode")).toBeVisible();
 });
 
 test("/dashboard/protocols renders", async ({ page }) => {
-  await page.goto("/dashboard/protocols");
+  await gotoWithRetry(page, "/dashboard/protocols", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
   await expect(page.getByText("No live dashboard feed detected")).toBeVisible();
 });

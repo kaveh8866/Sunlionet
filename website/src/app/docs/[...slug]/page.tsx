@@ -14,7 +14,6 @@ const legacyRedirects: Record<string, string> = {
   "install-ios": "/docs/install",
   "install-raspberrypi": "/docs/user/install-linux",
   mobile: "/docs/android/architecture",
-  signal: "/docs/signal",
   security: "/docs/user/safety",
   verification: "/docs/outside/verification",
 };
@@ -105,23 +104,30 @@ export default async function DocPage({
   const displaySlug =
     prefersFa && normalized[0] === "fa" ? normalized.slice(1).filter((p) => p !== "index") : resolved.doc.slug.filter((p) => p !== "index");
 
-  const crumbs = [
-    { href: `${resolvedBase}/docs`, label: prefersFa ? "مستندات" : "Docs" },
-    ...displaySlug.map((p, idx) => {
-      const full = displaySlug.slice(0, idx + 1);
-      return { href: `${resolvedBase}/docs/${full.join("/")}`, label: p };
-    }),
-  ];
+  const crumbs: Array<{ href: string | null; label: string }> = [{ href: `${resolvedBase}/docs`, label: prefersFa ? "مستندات" : "Docs" }];
+  for (let idx = 0; idx < displaySlug.length; idx += 1) {
+    const p = displaySlug[idx];
+    if (!p) continue;
+    const full = displaySlug.slice(0, idx + 1);
+    const direct = await readDocMarkdownBySlug(full);
+    const indexFallback = direct ? null : await readDocMarkdownBySlug([...full, "index"]);
+    const href = direct || indexFallback ? `${resolvedBase}/docs/${full.join("/")}` : null;
+    crumbs.push({ href, label: p });
+  }
 
   return (
     <div className="grid gap-8">
       <div className="text-xs font-mono tracking-wide text-muted-foreground uppercase">
         {crumbs.map((c, idx) => (
-          <span key={c.href}>
+          <span key={`${idx}-${c.label}`}>
             {idx === 0 ? null : " / "}
-            <Link href={c.href} prefetch={false} className="hover:text-foreground transition-colors">
-              {c.label}
-            </Link>
+            {c.href ? (
+              <Link href={c.href} prefetch={false} className="hover:text-foreground transition-colors">
+                {c.label}
+              </Link>
+            ) : (
+              <span>{c.label}</span>
+            )}
           </span>
         ))}
       </div>

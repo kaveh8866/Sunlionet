@@ -30,9 +30,26 @@ export default async function DocsLayout({
 }) {
   const resolved = await params;
   const lang = resolved.lang === "fa" ? "fa" : "en";
+  const isFa = lang === "fa";
   const basePrefix = `/${lang}`;
   const entries = await getDocsIndex();
-  const index = new Map(entries.map((e) => [e.slug.join("/"), { title: e.title, href: docHref(basePrefix, e.slug) }]));
+  const index = new Map(
+    entries
+      .filter((e) => (isFa ? e.slug[0] === "fa" : e.slug[0] !== "fa"))
+      .map((e) => {
+        const displaySlug = isFa ? e.slug.slice(1) : e.slug;
+        return [displaySlug.join("/"), { title: e.title, href: docHref(basePrefix, displaySlug) }];
+      }),
+  );
+
+  const farsiIndex = new Map(
+    entries
+      .filter((e) => e.slug[0] === "fa")
+      .map((e) => {
+        const displaySlug = e.slug.slice(1);
+        return [displaySlug.join("/"), { title: e.title, href: docHref("/fa", displaySlug) }];
+      }),
+  );
 
   const overview = [
     pick(index, ["index"]),
@@ -69,12 +86,14 @@ export default async function DocsLayout({
     pick(index, ["governance", "resilience"]),
   ].filter(Boolean) as NavItem[];
 
-  const farsi = [
-    pick(index, ["fa", "index"]),
-    pick(index, ["fa", "install"]),
-    pick(index, ["fa", "user", "safety"]),
-    pick(index, ["fa", "outside", "verification"]),
-  ].filter(Boolean) as NavItem[];
+  const farsi = isFa
+    ? []
+    : ([
+        pick(farsiIndex, ["index"]),
+        pick(farsiIndex, ["install"]),
+        pick(farsiIndex, ["user", "safety"]),
+        pick(farsiIndex, ["outside", "verification"]),
+      ].filter(Boolean) as NavItem[]);
 
   const sections: Array<{ title: string; items: NavItem[] }> = [
     { title: "Overview", items: overview },

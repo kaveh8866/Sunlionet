@@ -135,8 +135,10 @@ For the detailed threat model and dual-agent design, see `/docs`.
 ## Documentation
 
 - [Core Modules Architecture](docs/core-modules.md) (Detector, Policy Engine, Secure Store)
+- [Production Map (What Ships)](docs/production-map.md)
 - [Website & Docs Specification](docs/website-spec.md)
 - [Architecture Details](docs/architecture.md)
+- [Security Boundaries](docs/security/boundaries.md)
 - [Bundle Format](docs/bundle-format.md)
 - [Signal Integration](docs/signal.md)
 - [Installation Guide](docs/install.md) (English)

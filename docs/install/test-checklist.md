@@ -2,16 +2,16 @@
 
 ## Linux
 
-- [ ] Download `SUNLIONET-linux-amd64.tar.gz` and verify with `checksums.txt` + `checksums.sig`.
+- [ ] Download `sunlionet-linux-amd64.tar.gz` and verify with `checksums.txt` + `checksums.sig`.
 - [ ] Extract tarball and run:
-  - [ ] `./SUNLIONET-inside --help`
-  - [ ] `./SUNLIONET-outside --help`
+  - [ ] `./sunlionet-inside --help`
+  - [ ] `./sunlionet-outside --help`
 - [ ] Install Debian package:
-  - [ ] `sudo dpkg -i SUNLIONET_0.1.0_amd64.deb`
-  - [ ] `SUNLIONET-inside --help`
-  - [ ] `SUNLIONET-outside --help`
+  - [ ] `sudo dpkg -i sunlionet_0.1.0_amd64.deb`
+  - [ ] `sunlionet-inside --help`
+  - [ ] `sunlionet-outside --help`
 - [ ] Uninstall package:
-  - [ ] `sudo dpkg -r SUNLIONET`
+  - [ ] `sudo dpkg -r sunlionet`
 
 ## Android
 
