@@ -1,3 +1,7 @@
+export function generateStaticParams() {
+  return [{ lang: "en" }, { lang: "fa" }];
+}
+
 export default async function LangLayout({
   children,
   params,

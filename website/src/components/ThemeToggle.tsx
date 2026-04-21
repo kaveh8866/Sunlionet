@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Theme = "light" | "dark";
 
@@ -18,11 +18,7 @@ function setTheme(theme: Theme) {
 }
 
 export function ThemeToggle() {
-  const [theme, setThemeState] = useState<Theme>("dark");
-
-  useEffect(() => {
-    setThemeState(getCurrentTheme());
-  }, []);
+  const [theme, setThemeState] = useState<Theme>(() => getCurrentTheme());
 
   const nextTheme = useMemo<Theme>(() => (theme === "dark" ? "light" : "dark"), [theme]);
 

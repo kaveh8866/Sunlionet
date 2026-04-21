@@ -51,15 +51,18 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
   const sseRef = useRef<EventSource | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
-  const privacyThreshold = snapshot?.privacyThreshold ?? 20;
+  const privacyThreshold = 20;
 
   const canUseStream = useMemo(() => typeof window !== "undefined" && !!streamBaseUrl, []);
   const canUseSnapshotUrl = useMemo(() => typeof window !== "undefined" && !!snapshotBaseUrl, []);
 
+  const liveSnapshot = useMemo(() => (filters.liveMode === "off" ? null : snapshot), [filters.liveMode, snapshot]);
+  const liveError = useMemo(() => (filters.liveMode === "off" ? null : error), [filters.liveMode, error]);
+
   const displaySnapshot = useMemo(() => {
-    if (!snapshot) return null;
-    return applyPrivacyFilter(snapshot, { mode: filters.privacyMode ? "public" : "trusted" });
-  }, [filters.privacyMode, snapshot]);
+    if (!liveSnapshot) return null;
+    return applyPrivacyFilter(liveSnapshot, { mode: filters.privacyMode ? "public" : "trusted" });
+  }, [filters.privacyMode, liveSnapshot]);
 
   const selectedRegion: RegionAggregate | null = useMemo(() => {
     if (!selectedRegionName) return null;
@@ -113,16 +116,18 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
       setSnapshot(null);
       setStatus({ mode: "off", note: "live feed unavailable" });
     }
-  }, [canUseSnapshotUrl, privacyThreshold, view]);
+  }, [canUseSnapshotUrl, view]);
 
   useEffect(() => {
     stopAll();
-    setError(null);
-    setSnapshot(null);
+
+    const setStatusAsync = (next: { mode: "poll" | "sse" | "off"; note: string }) => {
+      void Promise.resolve().then(() => setStatus(next));
+    };
 
     const mode: LiveMode = filters.liveMode;
     if (mode === "off") {
-      setStatus({ mode: "off", note: "live updates disabled" });
+      setStatusAsync({ mode: "off", note: "live updates disabled" });
       return () => stopAll();
     }
 
@@ -156,7 +161,7 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
           },
         });
         sseRef.current = es;
-        setStatus({ mode: "sse", note: reason });
+        setStatusAsync({ mode: "sse", note: reason });
       } catch {
         startPoll("stream init failed; polling");
       }
@@ -176,7 +181,7 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
         startPoll("polling");
         return () => stopAll();
       }
-      setStatus({ mode: "off", note: "no live feed configured" });
+      setStatusAsync({ mode: "off", note: "no live feed configured" });
       return () => stopAll();
     }
 
@@ -194,15 +199,15 @@ export const LiveDashboard = ({ view }: { view: DashboardView }) => {
               {status.mode} • {status.note}
             </div>
             <div className="text-xs font-mono text-muted-foreground">
-              updated {snapshot ? formatUnixAgo(snapshot.generatedAtUnix) : "—"}
+              updated {liveSnapshot ? formatUnixAgo(liveSnapshot.generatedAtUnix) : "—"}
             </div>
           </div>
           <div className="mt-2 text-sm text-muted-foreground max-w-3xl">
             All values are coarse, bucketed, privacy-thresholded, and safe for public viewing by default.
           </div>
-          {error ? (
+          {liveError ? (
             <div className="mt-2 text-xs font-mono text-red-400 border border-border rounded px-3 py-2 bg-card/60">
-              live feed unavailable: {error}
+              live feed unavailable: {liveError}
             </div>
           ) : null}
         </div>

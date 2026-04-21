@@ -4,7 +4,7 @@ Write-Host "====================================================" -ForegroundCol
 Write-Host "       SunLionet: Go Installer for Windows          " -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Cyan
 
-$GoVersion = "1.24.0"
+$GoVersion = "1.25.0"
 $DownloadUrl = "https://go.dev/dl/go${GoVersion}.windows-amd64.msi"
 $InstallerPath = "$env:TEMP\go_installer.msi"
 

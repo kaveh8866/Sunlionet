@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        go-version: ['1.24.x', '1.25.x']
+        go-version: ['1.25.x', '1.26.x']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -31,10 +31,10 @@ jobs:
       - name: go version
         run: go version
       - name: go mod tidy
-        if: runner.os == 'Linux' && matrix.go-version == '1.24.x'
+        if: runner.os == 'Linux' && matrix.go-version == '1.25.x'
         run: go mod tidy
       - name: Verify tidy is clean
-        if: runner.os == 'Linux' && matrix.go-version == '1.24.x'
+        if: runner.os == 'Linux' && matrix.go-version == '1.25.x'
         shell: bash
         run: git diff --exit-code go.mod go.sum
       - name: go build
@@ -106,11 +106,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22.5'
       - name: Cache Go modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod

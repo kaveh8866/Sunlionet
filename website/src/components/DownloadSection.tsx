@@ -85,10 +85,7 @@ function detectArchFromNavigator(): DetectedArch {
 }
 
 function useOrigin() {
-  const [origin, setOrigin] = useState<string>("");
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+  const [origin] = useState<string>(() => (typeof window === "undefined" ? "" : window.location.origin));
   return origin;
 }
 
@@ -253,10 +250,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
   const copy = uiCopy[lang];
   const origin = useOrigin();
   const { detection, supportsAutoRecommendation } = useOsDetection();
-  const [arch, setArch] = useState<DetectedArch>("unknown");
-  useEffect(() => {
-    setArch(detectArchFromNavigator());
-  }, []);
+  const [arch] = useState<DetectedArch>(() => detectArchFromNavigator());
   const resolvedBasePrefix = basePrefix?.trim() ? basePrefix : "";
   const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
 

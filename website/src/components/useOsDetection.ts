@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 export type DetectedOS =
   | "android"
@@ -65,19 +65,9 @@ function detectFromNavigator(): OsDetection {
 }
 
 export function useOsDetection() {
-  const [detection, setDetection] = useState<OsDetection>(() => ({
-    os: "unknown",
-    device: "unknown",
-    label: "Unknown",
-    confidence: 0,
-  }));
-
-  useEffect(() => {
-    setDetection(detectFromNavigator());
-  }, []);
+  const [detection] = useState<OsDetection>(() => detectFromNavigator());
 
   const supportsAutoRecommendation = useMemo(() => detection.os !== "unknown" && detection.confidence >= 0.6, [detection]);
 
   return { detection, supportsAutoRecommendation };
 }
-

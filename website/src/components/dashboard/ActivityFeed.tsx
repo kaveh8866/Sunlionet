@@ -19,7 +19,7 @@ export const ActivityFeed = ({
   severity: "all" | DashboardSnapshot["activity"][number]["severity"];
   timeWindow: "15m" | "1h" | "24h";
 }) => {
-  const cutoff = Math.floor(Date.now() / 1000) - windowToSec(timeWindow);
+  const cutoff = snapshot.generatedAtUnix - windowToSec(timeWindow);
   const items = snapshot.activity
     .slice()
     .filter((a) => a.tsUnix >= cutoff)
