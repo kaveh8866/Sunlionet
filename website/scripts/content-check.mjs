@@ -1,5 +1,7 @@
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 
 const CONTENT_TYPES = ["blog", "docs", "pages", "updates"];
 
@@ -97,5 +99,92 @@ for (const t of CONTENT_TYPES) {
 }
 
 if (!ok) process.exit(1);
-console.log("content parity OK");
 
+async function existsFile(p) {
+  try {
+    const s = await stat(p);
+    return s.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function sha256File(filePath) {
+  const hash = createHash("sha256");
+  await new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", resolve);
+  });
+  return hash.digest("hex").toLowerCase();
+}
+
+function parseSha256Line(line) {
+  const m = /^([a-fA-F0-9]{64})\s+(\S+)$/.exec(line.trim());
+  if (!m) return null;
+  return { hash: m[1].toLowerCase(), fileName: m[2] };
+}
+
+async function checkDownloads() {
+  const downloadsDir = path.join(process.cwd(), "public", "downloads");
+  const hasDownloads = await existsDir(downloadsDir);
+  if (!hasDownloads) return true;
+
+  let downloadsOk = true;
+  const entries = await readdir(downloadsDir, { withFileTypes: true });
+  const versionDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith("v")).map((e) => e.name);
+  versionDirs.sort((a, b) => a.localeCompare(b));
+
+  for (const tag of versionDirs) {
+    const dir = path.join(downloadsDir, tag);
+    const files = await readdir(dir, { withFileTypes: true });
+    const fileSet = new Set(files.filter((f) => f.isFile()).map((f) => f.name));
+
+    for (const name of fileSet) {
+      if (name === "VERSION.txt") continue;
+      if (name.endsWith(".sha256")) continue;
+      if (name === "checksums.txt" || name === "checksums.sig" || name === "checksums.pub" || name === "checksums.pub.sha256") continue;
+
+      const shaFile = `${name}.sha256`;
+      if (!fileSet.has(shaFile)) {
+        downloadsOk = false;
+        console.error(`[downloads] ${tag}: missing ${shaFile}`);
+        continue;
+      }
+
+      const shaPath = path.join(dir, shaFile);
+      const raw = (await readFile(shaPath, "utf8")).split(/\r?\n/).find((l) => l.trim().length) ?? "";
+      const parsed = parseSha256Line(raw);
+      if (!parsed) {
+        downloadsOk = false;
+        console.error(`[downloads] ${tag}: invalid sha256 file ${shaFile}`);
+        continue;
+      }
+      if (parsed.fileName !== name) {
+        downloadsOk = false;
+        console.error(`[downloads] ${tag}: sha256 file ${shaFile} references ${parsed.fileName} (expected ${name})`);
+        continue;
+      }
+
+      const filePath = path.join(dir, name);
+      if (!(await existsFile(filePath))) {
+        downloadsOk = false;
+        console.error(`[downloads] ${tag}: referenced file missing ${name}`);
+        continue;
+      }
+
+      const actual = await sha256File(filePath);
+      if (actual !== parsed.hash) {
+        downloadsOk = false;
+        console.error(`[downloads] ${tag}: checksum mismatch for ${name}: expected ${parsed.hash}, got ${actual}`);
+      }
+    }
+  }
+
+  return downloadsOk;
+}
+
+const downloadsOk = await checkDownloads();
+if (!downloadsOk) process.exit(1);
+console.log("content + downloads OK");

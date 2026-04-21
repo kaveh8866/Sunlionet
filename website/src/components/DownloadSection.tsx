@@ -39,6 +39,8 @@ const githubRepo = (process.env.NEXT_PUBLIC_REPO_URL ?? "https://github.com/kave
 const repoName = githubRepo.split("/").filter(Boolean).at(-1) ?? "Sunlionet";
 const githubReleases = `${githubRepo}/releases`;
 const githubTagTarballBase = `${githubRepo}/archive/refs/tags`;
+const iosAppStoreUrl = process.env.NEXT_PUBLIC_IOS_APPSTORE_URL?.trim() || "";
+const iosTestFlightUrl = process.env.NEXT_PUBLIC_IOS_TESTFLIGHT_URL?.trim() || "";
 
 function formatBytes(sizeBytes: number) {
   const units = ["B", "KB", "MB", "GB"] as const;
@@ -63,6 +65,10 @@ function formatDate(unix?: number) {
 
 function normalizeUA(s: string) {
   return s.toLowerCase();
+}
+
+function psSingleQuoteLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 type DetectedArch = "amd64" | "arm64" | "unknown";
@@ -166,10 +172,26 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-type PlatformKey = "linux-amd64" | "linux-arm64" | "raspberrypi-arm64" | "android" | "source" | "unknown";
+type PlatformKey =
+  | "windows-amd64"
+  | "macos-arm64"
+  | "macos-amd64"
+  | "linux-amd64"
+  | "linux-arm64"
+  | "raspberrypi-arm64"
+  | "android"
+  | "ios"
+  | "source"
+  | "unknown";
 
 function platformLabel(k: PlatformKey) {
   switch (k) {
+    case "windows-amd64":
+      return "Windows x86_64";
+    case "macos-arm64":
+      return "macOS Apple Silicon (arm64)";
+    case "macos-amd64":
+      return "macOS Intel (x86_64)";
     case "linux-amd64":
       return "Linux x86_64";
     case "linux-arm64":
@@ -177,7 +199,9 @@ function platformLabel(k: PlatformKey) {
     case "raspberrypi-arm64":
       return "Raspberry Pi (ARM64)";
     case "android":
-      return "Android (APK)";
+      return "Android";
+    case "ios":
+      return "iOS";
     case "source":
       return "Source code";
     default:
@@ -187,7 +211,17 @@ function platformLabel(k: PlatformKey) {
 
 function pickPlatform(os: DetectedOS, arch: DetectedArch): PlatformKey {
   if (os === "android") return "android";
+  if (os === "ios") return "ios";
   if (os === "raspberrypi") return "raspberrypi-arm64";
+  if (os === "windows") {
+    if (arch === "amd64") return "windows-amd64";
+    return "unknown";
+  }
+  if (os === "macos") {
+    if (arch === "arm64") return "macos-arm64";
+    if (arch === "amd64") return "macos-amd64";
+    return "unknown";
+  }
   if (os === "linux") {
     if (arch === "arm64") return "linux-arm64";
     if (arch === "amd64") return "linux-amd64";
@@ -242,13 +276,21 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
   const recommendedArtifact = useMemo(() => {
     if (!selectedRelease) return null;
+    if (effectivePlatform === "windows-amd64") return findArtifact(selectedRelease, role, "windows-amd64");
+    if (effectivePlatform === "macos-arm64") return findArtifact(selectedRelease, role, "darwin-arm64");
+    if (effectivePlatform === "macos-amd64") return findArtifact(selectedRelease, role, "darwin-amd64");
     if (effectivePlatform === "linux-amd64") return findArtifact(selectedRelease, role, "linux-amd64");
     if (effectivePlatform === "linux-arm64") return findArtifact(selectedRelease, role, "linux-arm64");
     if (effectivePlatform === "raspberrypi-arm64") return findArtifact(selectedRelease, role, "linux-arm64");
     if (effectivePlatform === "android") {
       if (role !== "inside") return null;
+      const apk = selectedRelease.artifacts.find((a) => a.fileName.toLowerCase().endsWith(".apk"));
+      if (apk) return apk;
       return (
-        selectedRelease.artifacts.find((a) => a.fileName === "app-release.apk" || a.fileName.endsWith("-app-release.apk")) ??
+        selectedRelease.artifacts.find((a) => {
+          const name = a.fileName.toLowerCase();
+          return name === "app-release.apk" || name.endsWith("-app-release.apk");
+        }) ??
         findArtifact(selectedRelease, "inside", "android-arm64")
       );
     }
@@ -258,7 +300,28 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
   const recommendedSupport: { level: "stable" | "experimental" | "planned" | "unsupported"; note: string } = useMemo(() => {
     if (effectivePlatform === "android") {
       if (role !== "inside") return { level: "unsupported", note: "Outside is not supported on Android. Run Outside on a separate machine." };
-      return { level: "experimental", note: "Inside runs as a Termux CLI binary and release APK. Verify checksums/signature before sideloading." };
+      const hasApk = Boolean(recommendedArtifact?.fileName?.toLowerCase()?.endsWith(".apk"));
+      return {
+        level: "experimental",
+        note: hasApk
+          ? "Android APK is available for direct install (sideload). Verify checksums/signature before installing."
+          : "Android APK is not published in this build. Use the Termux CLI binary fallback, or download the APK from GitHub Releases when available.",
+      };
+    }
+    if (effectivePlatform === "ios") {
+      return { level: "planned", note: "iOS builds are not currently published from this site. Use the official App Store/TestFlight link when available." };
+    }
+    if (effectivePlatform === "windows-amd64") {
+      return {
+        level: "experimental",
+        note: "Windows bundles are provided, but the primary supported path is still Linux. Verify checksums before running.",
+      };
+    }
+    if (effectivePlatform === "macos-arm64") {
+      return { level: "experimental", note: "macOS bundles are available for Apple Silicon (arm64). Verify checksums before running." };
+    }
+    if (effectivePlatform === "macos-amd64") {
+      return { level: "unsupported", note: "No macOS Intel bundle is published in this build. Use Apple Silicon bundle or build from source." };
     }
     if (effectivePlatform === "raspberrypi-arm64") {
       return { level: "experimental", note: "Uses the Linux arm64 bundle. Treat as experimental until long-running field testing is complete." };
@@ -267,18 +330,22 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       return { level: "stable", note: "Linux bundles are the current MVP path (tarball + install script + systemd unit)." };
     }
     return { level: "unsupported", note: "Auto-detection is inconclusive. Use the platform grid and verify before running." };
-  }, [effectivePlatform, role]);
+  }, [effectivePlatform, role, recommendedArtifact?.fileName]);
 
   const releasePageUrl = selectedRelease ? `${githubReleases}/tag/${selectedRelease.tag}` : githubReleases;
   const sourceTarballUrl = selectedRelease ? `${githubTagTarballBase}/${selectedRelease.tag}.tar.gz` : `${githubRepo}/archive/refs/heads/main.tar.gz`;
 
+  const isAbsoluteUrl = (href: string) => /^https?:\/\//i.test(href);
+
   const artifactUrl = useMemo(() => {
     if (!origin || !recommendedArtifact) return null;
+    if (isAbsoluteUrl(recommendedArtifact.href)) return recommendedArtifact.href;
     return `${origin}${recommendedArtifact.href}`;
   }, [origin, recommendedArtifact]);
 
   const shaUrl = useMemo(() => {
     if (!origin || !recommendedArtifact?.sha256Href) return null;
+    if (isAbsoluteUrl(recommendedArtifact.sha256Href)) return recommendedArtifact.sha256Href;
     return `${origin}${recommendedArtifact.sha256Href}`;
   }, [origin, recommendedArtifact]);
 
@@ -291,14 +358,22 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
     const sigReady = Boolean(verificationFiles?.checksumsHref && verificationFiles?.signatureHref && verificationFiles?.keyHref);
 
     if (effectivePlatform === "android") {
+      const isApk = file.toLowerCase().endsWith(".apk");
       return {
-        download: `wget -O app-release.apk ${artifactUrl}\nwget -O app-release.apk.sha256 ${shaUrl ?? "<sha256-url>"}\n${
-          verificationFiles?.checksumsHref ? `wget -O checksums.txt ${origin}${verificationFiles.checksumsHref}\n` : ""
-        }${verificationFiles?.signatureHref ? `wget -O checksums.sig ${origin}${verificationFiles.signatureHref}\n` : ""}${
-          verificationFiles?.keyHref ? `wget -O checksums.pub ${origin}${verificationFiles.keyHref}\n` : ""
-        }`,
-        verify: `sha256sum -c app-release.apk.sha256${sigReady ? `\ncosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt` : ""}`,
-        install: `adb install -r app-release.apk`,
+        language: "bash",
+        download: isApk
+          ? `wget -O ${file} ${artifactUrl}\nwget -O ${file}.sha256 ${shaUrl ?? "<sha256-url>"}\n${
+              verificationFiles?.checksumsHref ? `wget -O checksums.txt ${origin}${verificationFiles.checksumsHref}\n` : ""
+            }${verificationFiles?.signatureHref ? `wget -O checksums.sig ${origin}${verificationFiles.signatureHref}\n` : ""}${
+              verificationFiles?.keyHref ? `wget -O checksums.pub ${origin}${verificationFiles.keyHref}\n` : ""
+            }`
+          : `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
+        verify: isApk
+          ? `sha256sum -c ${file}.sha256${sigReady ? `\ncosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt` : ""}`
+          : `sha256sum -c ${file}.sha256`,
+        install: isApk
+          ? `adb install -r ${file}`
+          : `echo 'WARNING: This is a CLI binary, not a signed APK. Verify checksum and only run if you trust the source.'\nchmod +x "${file}"\n./"${file}"`,
       };
     }
 
@@ -307,14 +382,39 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       const signatureCmd = verificationFiles?.signatureHref ? `curl -fL -O ${origin}${verificationFiles.signatureHref}` : "curl -fL -O <signature-url>";
       const keyCmd = verificationFiles?.keyHref ? `curl -fL -O ${origin}${verificationFiles.keyHref}` : "curl -fL -O <cosign-pubkey-url>";
       return {
+        language: "bash",
         download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n${checksumsCmd}\n${signatureCmd}\n${keyCmd}\n`,
         verify: `sha256sum -c ${file}.sha256\ncosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`,
         install: isTar ? `tar -xzf ${file}\nsudo ./install-linux.sh ${role}` : `chmod +x ${file}\n./${file}`,
       };
     }
 
-    if (detection.os === "macos") {
+    if (effectivePlatform === "windows-amd64") {
+      const psArtifactUrl = psSingleQuoteLiteral(artifactUrl);
+      const psShaUrl = psSingleQuoteLiteral(shaUrl ?? "<sha256-url>");
+      const psFile = psSingleQuoteLiteral(file);
+      const psShaFile = psSingleQuoteLiteral(`${file}.sha256`);
+      const psDest = psSingleQuoteLiteral(`.\\sunlionet-${role}`);
       return {
+        language: "powershell",
+        download:
+          `$artifactUrl = ${psArtifactUrl}\n` +
+          `$shaUrl = ${psShaUrl}\n` +
+          `$file = ${psFile}\n` +
+          `$shaFile = ${psShaFile}\n` +
+          `Invoke-WebRequest -Uri $artifactUrl -OutFile $file\n` +
+          `Invoke-WebRequest -Uri $shaUrl -OutFile $shaFile\n`,
+        verify:
+          `$expected = (Get-Content $shaFile).Split(" ")[0].ToLower()\n` +
+          `$actual = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()\n` +
+          `if ($actual -ne $expected) { throw "SHA256 mismatch: expected $expected, got $actual" }\n`,
+        install: `$dest = ${psDest}\nExpand-Archive -Path $file -DestinationPath $dest -Force`,
+      };
+    }
+
+    if (effectivePlatform === "macos-arm64" || effectivePlatform === "macos-amd64") {
+      return {
+        language: "bash",
         download: `curl -fL -O ${artifactUrl}\ncurl -fL -O ${shaUrl ?? "<sha256-url>"}\n`,
         verify: `shasum -a 256 -c ${file}.sha256`,
         install: isTar ? `tar -xzf ${file}\n./sunlionet-${role} || ./SUNLIONET-${role}` : `./${file}`,
@@ -322,7 +422,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
     }
 
     return null;
-  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, detection.os, origin, verificationFiles]);
+  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, origin, verificationFiles]);
 
   const hasLocalReleases = releases.length > 0;
 
@@ -339,6 +439,27 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
   const platformChoices: { key: PlatformKey; description: string; support: string; method: string; target?: string }[] = useMemo(
     () => [
+      {
+        key: "windows-amd64",
+        description: "Windows x86_64 bundle (zip). Intended for development/testing while Linux remains the primary supported path.",
+        support: "Experimental",
+        method: "ZIP + verify SHA256 + unzip",
+        target: "windows-amd64",
+      },
+      {
+        key: "macos-arm64",
+        description: "macOS Apple Silicon (arm64) bundle (tarball).",
+        support: "Experimental",
+        method: "Tarball + verify SHA256",
+        target: "darwin-arm64",
+      },
+      {
+        key: "macos-amd64",
+        description: "macOS Intel bundles are not currently published (use source build or Apple Silicon bundle).",
+        support: "Not published",
+        method: "Source build",
+        target: "darwin-amd64",
+      },
       {
         key: "linux-amd64",
         description: "Static bundle for Linux x86_64. Includes install script + systemd unit.",
@@ -362,9 +483,15 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       },
       {
         key: "android",
-        description: "Signed APK sideload flow (primary). Optional Termux CLI fallback.",
+        description: "Signed APK sideload flow (when published). Optional Termux CLI fallback.",
         support: "Experimental",
         method: "APK + verify SHA256/signature + sideload",
+      },
+      {
+        key: "ios",
+        description: "iOS builds are not currently published from this site (App Store/TestFlight planned).",
+        support: "Planned",
+        method: "App Store/TestFlight",
       },
       {
         key: "source",
@@ -383,6 +510,20 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
   const hasChecksum = Boolean(recommendedArtifact?.sha256 && recommendedArtifact?.sha256Href);
   const hasSignature = Boolean(verificationFiles?.checksumsHref && verificationFiles?.signatureHref && verificationFiles?.keyHref);
+
+  const missingArtifactMessage = useMemo(() => {
+    if (!selectedRelease) return "No release metadata is available in this build.";
+    const platform = effectivePlatform === "unknown" ? "Unknown platform" : platformLabel(effectivePlatform);
+    const targets = supportedTargets(selectedRelease);
+    const available = targets.length ? `Available targets: ${targets.join(", ")}.` : "No targets are available in this release.";
+    if (effectivePlatform === "ios") {
+      return "No iOS installer is published in this build. Use the official App Store/TestFlight link when available, or build from source where applicable.";
+    }
+    if (effectivePlatform === "macos-amd64") {
+      return `No matching artifact for ${platform} (${role}). This build does not publish a macOS Intel bundle. ${available} Use source build as fallback.`;
+    }
+    return `No matching artifact for ${platform} (${role}). ${available} Use source build or choose a different platform from the grid.`;
+  }, [selectedRelease, effectivePlatform, role]);
 
   return (
     <section id="downloads" className="w-full">
@@ -506,6 +647,11 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                     Type: <span className="font-mono">{recommendedArtifact.kind}</span> • Size:{" "}
                     <span className="font-mono">{formatBytes(recommendedArtifact.sizeBytes)}</span>
                   </div>
+                  {effectivePlatform === "android" && !recommendedArtifact.fileName.toLowerCase().endsWith(".apk") ? (
+                    <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+                      Android APK is not published for this release. This download is the Termux CLI binary (android-arm64).
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     <a
                       href={recommendedArtifact.href}
@@ -542,14 +688,16 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         Cosign key
                       </a>
                     ) : null}
-                    <a
-                      href={`${githubRepo}/blob/main/website/public${recommendedArtifact.href}`}
-                      className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Browse source
-                    </a>
+                    {!isAbsoluteUrl(recommendedArtifact.href) ? (
+                      <a
+                        href={`${githubRepo}/blob/main/website/public${recommendedArtifact.href}`}
+                        className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Browse source
+                      </a>
+                    ) : null}
                   </div>
                   <div className="mt-4 text-sm text-muted-foreground">
                     Verification:{" "}
@@ -575,7 +723,31 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                 </>
               ) : (
                 <div className="mt-3 text-sm text-muted-foreground">
-                  No matching artifact for this platform/role. Use source build or choose a different platform from the grid.
+                  {missingArtifactMessage}
+                  {effectivePlatform === "ios" && (iosAppStoreUrl || iosTestFlightUrl) ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {iosAppStoreUrl ? (
+                        <a
+                          className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
+                          href={iosAppStoreUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          App Store
+                        </a>
+                      ) : null}
+                      {iosTestFlightUrl ? (
+                        <a
+                          className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                          href={iosTestFlightUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          TestFlight
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -587,7 +759,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   <CommandBlock
                     label={lang === "fa" ? "1) دانلود" : "1) Download"}
                     code={installSteps.download}
-                    language="bash"
+                    language={installSteps.language}
                     note={lang === "fa" ? "هم فایل اصلی و هم checksum را بگیرید" : "Fetch both the artifact and its checksum file"}
                     copyLabel={copy.buttons.copy}
                     copiedLabel={copy.buttons.copied}
@@ -595,7 +767,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   <CommandBlock
                     label={lang === "fa" ? "2) بررسی" : "2) Verify"}
                     code={installSteps.verify}
-                    language="bash"
+                    language={installSteps.language}
                     note={lang === "fa" ? "در صورت تغییر یا خرابی فایل شکست می‌خورد" : "Fails if the download was modified or corrupted"}
                     copyLabel={copy.buttons.copy}
                     copiedLabel={copy.buttons.copied}
@@ -603,8 +775,14 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   <CommandBlock
                     label={lang === "fa" ? "3) نصب / اجرا" : "3) Install / run"}
                     code={installSteps.install}
-                    language="bash"
-                    note={lang === "fa" ? "برای بسته‌های Linux سرویس نصب می‌شود" : "Installs a service on Linux bundles"}
+                    language={installSteps.language}
+                    note={
+                      lang === "fa"
+                        ? "برای بسته‌های Linux سرویس نصب می‌شود"
+                        : installSteps.language === "powershell"
+                          ? "Unzips the bundle on Windows"
+                          : "Installs a service on Linux bundles"
+                    }
                     copyLabel={copy.buttons.copy}
                     copiedLabel={copy.buttons.copied}
                   />
@@ -631,9 +809,14 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   : p.key === "android"
                     ? (
                         role === "inside"
-                          ? (selectedRelease?.artifacts.find(
-                              (artifact) => artifact.fileName === "app-release.apk" || artifact.fileName.endsWith("-app-release.apk"),
-                            ) ?? findArtifact(selectedRelease, "inside", "android-arm64"))
+                          ? (selectedRelease?.artifacts.find((artifact) => artifact.fileName.toLowerCase().endsWith(".apk")) ??
+                              selectedRelease?.artifacts.find(
+                                (artifact) => {
+                                  const name = artifact.fileName.toLowerCase();
+                                  return name === "app-release.apk" || name.endsWith("-app-release.apk");
+                                },
+                              ) ??
+                              findArtifact(selectedRelease, "inside", "android-arm64"))
                           : null
                       )
                     : p.key === "raspberrypi-arm64"
