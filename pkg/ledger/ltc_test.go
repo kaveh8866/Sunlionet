@@ -152,8 +152,14 @@ func TestLTC_AttestationRequiresKnownEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new attest: %v", err)
 	}
-	if _, err := l.Apply(a1, &pol, nil); err == nil {
-		t.Fatalf("expected attest for unknown event to fail")
+	if _, err := l.Apply(a1, &pol, nil); err != nil {
+		t.Fatalf("apply attest: %v", err)
+	}
+	if score, ok := l.Confirmed("missing-event", ctx, &pol); ok || score != 0 {
+		t.Fatalf("expected score=0 ok=false, got score=%d ok=%v", score, ok)
+	}
+	if got := l.MissingRefs(); got["missing-event"] <= 0 {
+		t.Fatalf("expected missing ref to be tracked")
 	}
 }
 

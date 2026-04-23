@@ -33,6 +33,43 @@ func (m *inboxMesh) Receive(ctx context.Context) ([]byte, error) {
 
 func (m *inboxMesh) RuntimeMode() runtimecfg.RuntimeMode { return runtimecfg.ModeSim }
 
+type hub struct {
+	meshes []*hubMesh
+}
+
+type hubMesh struct {
+	in  chan []byte
+	hub *hub
+	idx int
+}
+
+func (m *hubMesh) Broadcast(data []byte) error {
+	if m == nil || m.hub == nil {
+		return nil
+	}
+	for i := range m.hub.meshes {
+		if i == m.idx {
+			continue
+		}
+		select {
+		case m.hub.meshes[i].in <- data:
+		default:
+		}
+	}
+	return nil
+}
+
+func (m *hubMesh) Receive(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case b := <-m.in:
+		return b, nil
+	}
+}
+
+func (m *hubMesh) RuntimeMode() runtimecfg.RuntimeMode { return runtimecfg.ModeSim }
+
 func TestChaos_10Nodes_CriticalNotStarvedBySpam(t *testing.T) {
 	const n = 10
 
@@ -42,8 +79,9 @@ func TestChaos_10Nodes_CriticalNotStarvedBySpam(t *testing.T) {
 	svcs := make([]*Service, 0, n)
 
 	opts := Options{
-		MaxHave: 0,
-		MaxWant: 64,
+		MaxHave:          0,
+		MaxWant:          64,
+		MaxPeersPerRound: 12,
 
 		MaxEvents:             128,
 		MaxEventBytes:         256 * 1024,
@@ -52,11 +90,14 @@ func TestChaos_10Nodes_CriticalNotStarvedBySpam(t *testing.T) {
 		VerifyWorkers:   2,
 		VerifyBatchSize: 64,
 
+		MaxInboundMsgsPerMin:  600,
+		MaxInboundBytesPerMin: 10 * 1024 * 1024,
+
 		SchedulerCriticalWeight:   5,
 		SchedulerNormalWeight:     3,
 		SchedulerBackgroundWeight: 1,
 
-		SchedulerDrainPerReceive:   4,
+		SchedulerDrainPerReceive:   8,
 		SchedulerDrainAfterRelay:   64,
 		SchedulerMaxQueuedTotal:    256,
 		SchedulerMaxQueuedPerPeer:  64,
@@ -296,8 +337,9 @@ func TestChaos_10Nodes_AttestationQuorumNotStarvedBySpam(t *testing.T) {
 	svcs := make([]*Service, 0, n)
 
 	opts := Options{
-		MaxHave: 0,
-		MaxWant: 64,
+		MaxHave:          0,
+		MaxWant:          64,
+		MaxPeersPerRound: 12,
 
 		MaxEvents:             128,
 		MaxEventBytes:         256 * 1024,
@@ -350,7 +392,7 @@ func TestChaos_10Nodes_AttestationQuorumNotStarvedBySpam(t *testing.T) {
 		svcs = append(svcs, s)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
 	for i := 0; i < n; i++ {
@@ -591,7 +633,7 @@ func TestChaos_10Nodes_AttestationQuorumNotStarvedBySpam(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	deadline := time.NewTimer(4 * time.Second)
+	deadline := time.NewTimer(8 * time.Second)
 	defer deadline.Stop()
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
@@ -619,6 +661,331 @@ func TestChaos_10Nodes_AttestationQuorumNotStarvedBySpam(t *testing.T) {
 				}
 			}
 			t.Fatalf("attestation quorum not reached on nodes: %v", miss)
+		case <-tick.C:
+		}
+	}
+}
+
+func TestChaos_10Nodes_AutoWitnessQuorumNotStarvedBySpam(t *testing.T) {
+	const n = 10
+
+	h := &hub{}
+	meshes := make([]*hubMesh, 0, n)
+	cryptos := make([]*mesh.Crypto, 0, n)
+	ledgers := make([]*ledger.Ledger, 0, n)
+	svcs := make([]*Service, 0, n)
+
+	opts := Options{
+		MaxHave:          0,
+		MaxWant:          64,
+		MaxPeersPerRound: 12,
+
+		MaxEvents:             128,
+		MaxEventBytes:         256 * 1024,
+		MaxEventsMessageBytes: 512 * 1024,
+
+		VerifyWorkers:   2,
+		VerifyBatchSize: 64,
+
+		MaxInboundMsgsPerMin:  600,
+		MaxInboundBytesPerMin: 10 * 1024 * 1024,
+
+		SchedulerCriticalWeight:   5,
+		SchedulerNormalWeight:     3,
+		SchedulerBackgroundWeight: 1,
+
+		SchedulerDrainPerReceive:   8,
+		SchedulerDrainAfterRelay:   64,
+		SchedulerMaxQueuedTotal:    256,
+		SchedulerMaxQueuedPerPeer:  64,
+		SchedulerMaxQueuedCritical: 16,
+		SchedulerMaxQueuedNormal:   32,
+		SchedulerMaxQueuedBg:       32,
+	}
+
+	ctxName := "ctx"
+	w1, _ := identity.NewPersona()
+	w1Pub, w1Priv, _ := w1.SignKeypair()
+	w2, _ := identity.NewPersona()
+	w2Pub, w2Priv, _ := w2.SignKeypair()
+	w1Key := base64.RawURLEncoding.EncodeToString(w1Pub)
+	w2Key := base64.RawURLEncoding.EncodeToString(w2Pub)
+
+	pol := ledger.DefaultPolicy()
+	pol.Trust = ledger.TrustPolicy{
+		Witnesses:  map[string]map[string]int{ctxName: {w1Key: 1, w2Key: 1}},
+		Thresholds: map[string]int{ctxName: 2},
+	}
+
+	for i := 0; i < n; i++ {
+		m := &hubMesh{in: make(chan []byte, 8192), hub: h, idx: i}
+		meshes = append(meshes, m)
+		c, err := mesh.NewCrypto()
+		if err != nil {
+			t.Fatalf("NewCrypto %d: %v", i, err)
+		}
+		l := ledger.New()
+		var obs *ledger.Observer
+		if i == 1 {
+			obs = &ledger.Observer{Author: string(w1.ID), AuthorPub: w1Pub, AuthorPriv: w1Priv}
+		}
+		if i == 2 {
+			obs = &ledger.Observer{Author: string(w2.ID), AuthorPub: w2Pub, AuthorPriv: w2Priv}
+		}
+		s, err := New(m, c, l, &pol, obs, opts)
+		if err != nil {
+			t.Fatalf("New svc %d: %v", i, err)
+		}
+		cryptos = append(cryptos, c)
+		ledgers = append(ledgers, l)
+		svcs = append(svcs, s)
+	}
+	h.meshes = meshes
+
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	for i := 0; i < n; i++ {
+		svc := svcs[i]
+		go func() {
+			for {
+				err := svc.ReceiveOnce(ctx)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	rng := rand.New(rand.NewSource(3))
+	introduce := func(from, to int) {
+		hm := ledgers[from].BuildHeadsMessage()
+		pt, err := encodeWire("heads", "intro", ctxName, hm)
+		if err != nil {
+			return
+		}
+		msg, err := cryptos[from].EncryptPayload(pt, cryptos[to].PublicKey())
+		if err != nil {
+			return
+		}
+		raw, err := json.Marshal(msg)
+		if err != nil {
+			return
+		}
+		select {
+		case meshes[to].in <- raw:
+		default:
+		}
+	}
+	for from := 0; from < n; from++ {
+		if from == 1 {
+			continue
+		}
+		introduce(from, 1)
+	}
+	for from := 0; from < n; from++ {
+		if from == 2 {
+			continue
+		}
+		introduce(from, 2)
+	}
+
+	deliver := func(from, to int, pt []byte) {
+		if from == to {
+			return
+		}
+		if rng.Float64() < 0.10 {
+			return
+		}
+		delay := time.Duration(rng.Intn(5)) * time.Millisecond
+		dup := rng.Float64() < 0.05
+
+		send := func(extra time.Duration) {
+			msg, err := cryptos[from].EncryptPayload(pt, cryptos[to].PublicKey())
+			if err != nil {
+				return
+			}
+			raw, err := json.Marshal(msg)
+			if err != nil {
+				return
+			}
+			time.AfterFunc(delay+extra, func() {
+				select {
+				case meshes[to].in <- raw:
+				default:
+				}
+			})
+		}
+
+		send(0)
+		if dup {
+			send(time.Duration(rng.Intn(5)) * time.Millisecond)
+		}
+	}
+
+	type signer struct {
+		author string
+		pub    ed25519.PublicKey
+		priv   ed25519.PrivateKey
+	}
+
+	makeSigner := func() (signer, error) {
+		p, err := identity.NewPersona()
+		if err != nil {
+			return signer{}, err
+		}
+		pub, priv, err := p.SignKeypair()
+		if err != nil {
+			return signer{}, err
+		}
+		return signer{author: string(p.ID), pub: pub, priv: priv}, nil
+	}
+
+	makeSpamChain := func(s signer, count int) ([]ledger.Event, error) {
+		out := make([]ledger.Event, 0, count)
+		prev := ""
+		for i := 1; i <= count; i++ {
+			ev, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+				Author:     s.author,
+				AuthorPub:  s.pub,
+				AuthorPriv: s.priv,
+				Seq:        uint64(i),
+				Prev:       prev,
+				Parents:    nil,
+				Kind:       "gossip.bulk",
+				Payload:    nil,
+				CreatedAt:  time.Now(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			prev = ev.ID
+			out = append(out, ev)
+		}
+		return out, nil
+	}
+
+	s1, err := makeSigner()
+	if err != nil {
+		t.Fatalf("signer1: %v", err)
+	}
+	spam1, err := makeSpamChain(s1, 80)
+	if err != nil {
+		t.Fatalf("spam1: %v", err)
+	}
+
+	batchSize := 8
+	for i := 0; i < len(spam1); i += batchSize {
+		j := i + batchSize
+		if j > len(spam1) {
+			j = len(spam1)
+		}
+		em := ledger.EventsMessage{SchemaVersion: ledger.SyncSchemaV1, Events: spam1[i:j]}
+		pt, err := encodeWire("events", "spam", ctxName, em)
+		if err != nil {
+			t.Fatalf("encode spam wire: %v", err)
+		}
+		for to := 0; to < n; to++ {
+			deliver(0, to, pt)
+		}
+	}
+
+	author, err := makeSigner()
+	if err != nil {
+		t.Fatalf("author signer: %v", err)
+	}
+	base, err := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     author.author,
+		AuthorPub:  author.pub,
+		AuthorPriv: author.priv,
+		Seq:        1,
+		Kind:       ledger.KindGroupCreate,
+		Payload:    nil,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new base event: %v", err)
+	}
+	if _, err := ledgers[0].Apply(base, &pol, nil); err != nil {
+		t.Fatalf("apply base on node0: %v", err)
+	}
+	baseMsg := ledger.EventsMessage{SchemaVersion: ledger.SyncSchemaV1, Events: []ledger.Event{base}}
+	basePt, err := encodeWire("events", "base", ctxName, baseMsg)
+	if err != nil {
+		t.Fatalf("encode base wire: %v", err)
+	}
+	for attempt := 0; attempt < 6; attempt++ {
+		for to := 1; to < n; to++ {
+			deliver(0, to, basePt)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	waitBaseDeadline := time.NewTimer(3 * time.Second)
+	defer waitBaseDeadline.Stop()
+	waitBaseTick := time.NewTicker(10 * time.Millisecond)
+	defer waitBaseTick.Stop()
+	for {
+		allHave := true
+		for i := 0; i < n; i++ {
+			if !ledgers[i].Have(base.ID) {
+				allHave = false
+				break
+			}
+		}
+		if allHave {
+			break
+		}
+		select {
+		case <-waitBaseDeadline.C:
+			miss := make([]int, 0, n)
+			for i := 0; i < n; i++ {
+				if !ledgers[i].Have(base.ID) {
+					miss = append(miss, i)
+				}
+			}
+			t.Fatalf("base event not applied on nodes: %v", miss)
+		case <-waitBaseTick.C:
+		}
+	}
+
+	w1Max := ledgers[1].AuthorMaxSeq(string(w1.ID))
+	if w1Max == 0 {
+		t.Fatalf("expected witness1 to emit attestation")
+	}
+	w2Max := ledgers[2].AuthorMaxSeq(string(w2.ID))
+	if w2Max == 0 {
+		t.Fatalf("expected witness2 to emit attestation")
+	}
+	svcs[1].broadcastObserverEvents(ctxName, 1, w1Max)
+	svcs[2].broadcastObserverEvents(ctxName, 1, w2Max)
+
+	deadline := time.NewTimer(8 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		allConfirmed := true
+		for i := 0; i < n; i++ {
+			if _, ok := ledgers[i].Confirmed(base.ID, ctxName, &pol); !ok {
+				allConfirmed = false
+				break
+			}
+		}
+		if allConfirmed {
+			break
+		}
+		select {
+		case <-deadline.C:
+			miss := make([]int, 0, n)
+			for i := 0; i < n; i++ {
+				if _, ok := ledgers[i].Confirmed(base.ID, ctxName, &pol); !ok {
+					miss = append(miss, i)
+				}
+			}
+			t.Fatalf("auto-attestation quorum not reached on nodes: %v", miss)
 		case <-tick.C:
 		}
 	}

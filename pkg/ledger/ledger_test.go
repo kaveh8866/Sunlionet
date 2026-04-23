@@ -263,6 +263,60 @@ func TestLedger_EmitWitnessAttestAndCheckpoint(t *testing.T) {
 	}
 }
 
+func TestLedger_AutoWitnessAttestAndCheckpointOnApply(t *testing.T) {
+	w, err := identity.NewPersona()
+	if err != nil {
+		t.Fatalf("new persona: %v", err)
+	}
+	wPub, wPriv, err := w.SignKeypair()
+	if err != nil {
+		t.Fatalf("sign keypair: %v", err)
+	}
+	wKey := base64.RawURLEncoding.EncodeToString(wPub)
+
+	ctxName := "ctx"
+	pol := DefaultPolicy()
+	pol.Trust = TrustPolicy{
+		Witnesses:  map[string]map[string]int{ctxName: {wKey: 1}},
+		Thresholds: map[string]int{ctxName: 1},
+	}
+	obs := &Observer{Author: string(w.ID), AuthorPub: wPub, AuthorPriv: wPriv}
+
+	other, err := identity.NewPersona()
+	if err != nil {
+		t.Fatalf("new persona other: %v", err)
+	}
+	oPub, oPriv, err := other.SignKeypair()
+	if err != nil {
+		t.Fatalf("sign keypair other: %v", err)
+	}
+
+	l := New()
+	ev, err := NewSignedEvent(SignedEventInput{
+		Author:     string(other.ID),
+		AuthorPub:  oPub,
+		AuthorPriv: oPriv,
+		Seq:        1,
+		Kind:       KindGroupCreate,
+		Payload:    json.RawMessage(`{"g":"x"}`),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new group.create: %v", err)
+	}
+	if _, err := l.ApplyWithContext(ev, ctxName, &pol, obs); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	if _, ok := l.Confirmed(ev.ID, ctxName, &pol); !ok {
+		t.Fatalf("expected confirmed via auto-attest")
+	}
+	headsHash, _ := ComputeHeadsHash(l.Heads())
+	if _, ok := l.Checkpointed(ctxName, headsHash, &pol); !ok {
+		t.Fatalf("expected checkpointed via auto-checkpoint")
+	}
+}
+
 func TestEvent_TamperDetected(t *testing.T) {
 	p, err := identity.NewPersona()
 	if err != nil {

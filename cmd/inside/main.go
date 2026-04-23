@@ -1,5 +1,4 @@
 //go:build !daemon
-// +build !daemon
 
 package main
 
@@ -46,18 +45,11 @@ import (
 var version = "dev"
 var simpleConnectOutput = false
 
-func uiPrintf(format string, args ...interface{}) {
+func uiPrintf(format string, args ...any) {
 	if simpleConnectOutput {
 		return
 	}
 	fmt.Printf(format, args...)
-}
-
-func uiPrintln(msg string) {
-	if simpleConnectOutput {
-		return
-	}
-	fmt.Println(msg)
 }
 
 type userError struct {
@@ -354,14 +346,14 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 	_ = rt
 
 	rts := newRuntimeStore(string(rcfg.Mode))
-	rts.addEvent("AGENT_START", "Inside agent started", map[string]interface{}{"mode": string(rcfg.Mode)})
+	rts.addEvent("AGENT_START", "Inside agent started", map[string]any{"mode": string(rcfg.Mode)})
 	apiCtx, apiCancel := context.WithCancel(context.Background())
 	defer apiCancel()
 	if strings.TrimSpace(opts.RuntimeAPIAddr) != "" {
 		if _, err := startRuntimeAPIServer(apiCtx, opts.RuntimeAPIAddr, rts); err != nil {
 			return userError{Message: "Runtime API failed to start (must bind to localhost only)", Err: err}
 		}
-		rts.addEvent("API_LISTEN", "Runtime API listening on "+strings.TrimSpace(opts.RuntimeAPIAddr), map[string]interface{}{"addr": strings.TrimSpace(opts.RuntimeAPIAddr)})
+		rts.addEvent("API_LISTEN", "Runtime API listening on "+strings.TrimSpace(opts.RuntimeAPIAddr), map[string]any{"addr": strings.TrimSpace(opts.RuntimeAPIAddr)})
 		log.Printf("runtime_api_listen=%s", strings.TrimSpace(opts.RuntimeAPIAddr))
 	}
 
@@ -494,7 +486,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		}
 		return out
 	}()
-	rts.addEvent("POLICY_DECISION", "Policy ranked profiles", map[string]interface{}{
+	rts.addEvent("POLICY_DECISION", "Policy ranked profiles", map[string]any{
 		"candidates":  policyCandidates,
 		"selected":    selected.ID,
 		"confidence":  policyConfidence,
@@ -558,7 +550,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		finalReason = fmt.Sprintf("%s source=%s confidence=%.2f", res.Reason, res.Source, res.Confidence)
 		finalConfidence = res.Confidence
 		finalSource = res.Source
-		rts.addEvent("ORCHESTRATOR_DECISION", "Orchestrator selected profile", map[string]interface{}{
+		rts.addEvent("ORCHESTRATOR_DECISION", "Orchestrator selected profile", map[string]any{
 			"action":     "select_profile",
 			"candidates": policyCandidates,
 			"selected":   res.SelectedProfile.ID,
@@ -574,7 +566,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 	uiPrintf("[Profile] Selected: %s\n", finalSelected.ID)
 	rts.setStatus("connecting")
 	rts.setActiveProfile(finalSelected.ID)
-	rts.addEvent("PROFILE_SWITCH", "Selected profile "+finalSelected.ID, map[string]interface{}{
+	rts.addEvent("PROFILE_SWITCH", "Selected profile "+finalSelected.ID, map[string]any{
 		"selected":   finalSelected.ID,
 		"source":     finalSource,
 		"confidence": finalConfidence,
@@ -636,7 +628,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		rts.setActiveProfile(p.ID)
 		if i > 0 {
 			uiPrintf("[Profile] Fallback: %s\n", p.ID)
-			rts.addEvent("PROFILE_SWITCH", "Trying fallback profile "+p.ID, map[string]interface{}{
+			rts.addEvent("PROFILE_SWITCH", "Trying fallback profile "+p.ID, map[string]any{
 				"from":    prevProfileID,
 				"to":      p.ID,
 				"reason":  "fallback",
@@ -656,7 +648,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 			return userError{Message: "Failed to render sing-box config for selected profile", Err: err}
 		}
 		log.Printf("render ok: config=%s profile=%s family=%s", rendered.ConfigPath, p.ID, p.Family)
-		rts.addEvent("CONFIG_RENDER", "Rendered config for profile "+p.ID, map[string]interface{}{
+		rts.addEvent("CONFIG_RENDER", "Rendered config for profile "+p.ID, map[string]any{
 			"profile": p.ID,
 			"family":  p.Family,
 			"config":  rendered.ConfigPath,
@@ -703,13 +695,13 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 				return userError{Message: "sing-box rejected the rendered config", Err: err}
 			}
 			log.Printf("[config] accepted config=%s", rendered.ConfigPath)
-			rts.addEvent("CONFIG_ACCEPTED", "sing-box check ok", map[string]interface{}{"profile": p.ID, "config": rendered.ConfigPath})
+			rts.addEvent("CONFIG_ACCEPTED", "sing-box check ok", map[string]any{"profile": p.ID, "config": rendered.ConfigPath})
 			return writeState(statePath, st)
 		}
 
 		log.Printf("[sing-box] starting attempt=%d profile=%s", i+1, p.ID)
 		uiPrintf("[Connection] Starting...\n")
-		rts.addEvent("SINGBOX_START", "Starting sing-box", map[string]interface{}{"profile": p.ID, "attempt": i + 1})
+		rts.addEvent("SINGBOX_START", "Starting sing-box", map[string]any{"profile": p.ID, "attempt": i + 1})
 		if err := ctrl.ApplyAndReload(string(rendered.ConfigBytes)); err != nil {
 			if errors.Is(err, sbctl.ErrBinaryNotFound) {
 				st := agentState{
@@ -726,8 +718,8 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 					UpdatedAtUnix:      time.Now().Unix(),
 				}
 				_ = writeState(statePath, st)
-				rts.addEvent("SINGBOX_START_FAILED", "sing-box binary missing", map[string]interface{}{"profile": p.ID, "reason": "BINARY_MISSING"})
-				rts.addEvent("CONNECTION_FAIL", "sing-box binary missing", map[string]interface{}{"profile": p.ID, "reason": "BINARY_MISSING"})
+				rts.addEvent("SINGBOX_START_FAILED", "sing-box binary missing", map[string]any{"profile": p.ID, "reason": "BINARY_MISSING"})
+				rts.addEvent("CONNECTION_FAIL", "sing-box binary missing", map[string]any{"profile": p.ID, "reason": "BINARY_MISSING"})
 				adaptiveState.RecordAttempt(p.ID, signalForFailure(0, e2e.ReasonBinaryMissing), string(e2e.ReasonBinaryMissing), time.Now())
 				return userError{Message: "sing-box binary not found.\n→ Install sing-box or set --sing-box-bin to its path.", Err: err}
 			}
@@ -752,8 +744,8 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 			})
 			log.Printf("[sing-box] start failed attempt=%d profile=%s reason=%s err=%s", i+1, p.ID, reason, sanitizeLogText(err.Error()))
 			rts.addFailure(string(reason))
-			rts.addEvent("SINGBOX_START_FAILED", "sing-box start failed: "+string(reason), map[string]interface{}{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
-			rts.addEvent("CONNECTION_FAIL", "sing-box start failed", map[string]interface{}{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
+			rts.addEvent("SINGBOX_START_FAILED", "sing-box start failed: "+string(reason), map[string]any{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
+			rts.addEvent("CONNECTION_FAIL", "sing-box start failed", map[string]any{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
 			adaptiveState.RecordAttempt(p.ID, signalForFailure(0, reason), string(reason), time.Now())
 			_ = ctrl.Stop()
 			lastState = agentState{
@@ -776,7 +768,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		pid := ctrl.PID()
 		log.Printf("[config] accepted config=%s", rendered.ConfigPath)
 		log.Printf("[sing-box] started pid=%d attempt=%d profile=%s", pid, i+1, p.ID)
-		rts.addEvent("SINGBOX_STARTED", fmt.Sprintf("sing-box started pid=%d", pid), map[string]interface{}{"profile": p.ID, "pid": pid, "attempt": i + 1})
+		rts.addEvent("SINGBOX_STARTED", fmt.Sprintf("sing-box started pid=%d", pid), map[string]any{"profile": p.ID, "pid": pid, "attempt": i + 1})
 
 		probe := e2e.ProbeResult{Status: "skipped", Reason: e2e.ReasonUnknown, TargetURL: opts.ProbeURL, ProxyURL: probeProxyURL, ObservedAt: time.Now().Unix()}
 		if probeEnabled {
@@ -796,8 +788,8 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 				}
 				log.Printf("[probe] failed reason=%s err=%s", probe.Reason, sanitizeLogText(probe.Error))
 				rts.addFailure(string(probe.Reason))
-				rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
-				rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
+				rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]any{"profile": p.ID, "reason": string(probe.Reason)})
+				rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]any{"profile": p.ID, "reason": string(probe.Reason)})
 				adaptiveState.RecordAttempt(p.ID, signalForFailure(0, probe.Reason), string(probe.Reason), time.Now())
 			} else {
 				log.Printf("[probe] start target=%s via=%s", opts.ProbeURL, probeProxyURL)
@@ -809,8 +801,8 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 					probe.Reason = e2e.ClassifyError(errors.New(probe.Error), tail)
 					log.Printf("[probe] failed reason=%s err=%s", probe.Reason, probe.Error)
 					rts.addFailure(string(probe.Reason))
-					rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
-					rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": p.ID, "reason": string(probe.Reason)})
+					rts.addEvent("PROBE_FAILED", "HTTP probe failed: "+string(probe.Reason), map[string]any{"profile": p.ID, "reason": string(probe.Reason)})
+					rts.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]any{"profile": p.ID, "reason": string(probe.Reason)})
 					adaptiveState.RecordAttempt(p.ID, signalForFailure(probe.DurationMS, probe.Reason), string(probe.Reason), time.Now())
 				} else {
 					log.Printf("[probe] ok status=%d duration_ms=%d", probe.HTTPStatus, probe.DurationMS)
@@ -818,8 +810,8 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 					uiPrintf("[Connection] SUCCESS\n")
 					rts.setLatencyMs(probe.DurationMS)
 					rts.setStatus("connected")
-					rts.addEvent("PROBE_OK", fmt.Sprintf("HTTP probe ok status=%d latency_ms=%d", probe.HTTPStatus, probe.DurationMS), map[string]interface{}{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
-					rts.addEvent("CONNECTION_SUCCESS", "Connection validated by HTTP probe", map[string]interface{}{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
+					rts.addEvent("PROBE_OK", fmt.Sprintf("HTTP probe ok status=%d latency_ms=%d", probe.HTTPStatus, probe.DurationMS), map[string]any{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
+					rts.addEvent("CONNECTION_SUCCESS", "Connection validated by HTTP probe", map[string]any{"profile": p.ID, "http_status": probe.HTTPStatus, "latency_ms": probe.DurationMS})
 					adaptiveState.RecordAttempt(p.ID, policy.AttemptSignal{
 						LatencyMS:    int(probe.DurationMS),
 						ConnectOK:    true,
@@ -888,7 +880,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		if !opts.RuntimeAPIKeepAlive || strings.TrimSpace(opts.RuntimeAPIAddr) == "" {
 			return nil
 		}
-		rts.addEvent("AGENT_HOLD", "Keeping agent alive for runtime API", map[string]interface{}{"addr": strings.TrimSpace(opts.RuntimeAPIAddr)})
+		rts.addEvent("AGENT_HOLD", "Keeping agent alive for runtime API", map[string]any{"addr": strings.TrimSpace(opts.RuntimeAPIAddr)})
 		if simpleConnectOutput {
 			fmt.Printf("Dashboard: http://%s\n", strings.TrimSpace(opts.RuntimeAPIAddr))
 		} else {

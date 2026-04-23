@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -371,20 +372,10 @@ func (l *Ledger) ApplyWithContext(ev Event, context string, pol *Policy, observe
 		}
 	}
 
-	switch ev.Kind {
-	case KindWitnessAttest:
-		var pl AttestationPayload
-		if err := requireInlinePayload(ev, &pl); err != nil {
-			return "", err
-		}
-		if _, ok := l.events[pl.EventID]; !ok {
-			return "", errors.New("ledger: attest event not found")
-		}
-	}
-
 	if err := l.addLocked(ev, p.RequireKnownPrev); err != nil {
 		return "", err
 	}
+	l.autoWitnessAfterApplyLocked(ev, context, p, observer)
 	return StatusAccepted, nil
 }
 
@@ -528,21 +519,92 @@ func (l *Ledger) ApplyVerifiedWithContext(ev Event, context string, pol *Policy,
 		}
 	}
 
-	switch ev.Kind {
-	case KindWitnessAttest:
-		var pl AttestationPayload
-		if err := requireInlinePayload(ev, &pl); err != nil {
-			return "", err
-		}
-		if _, ok := l.events[pl.EventID]; !ok {
-			return "", errors.New("ledger: attest event not found")
-		}
-	}
-
 	if err := l.addLocked(ev, p.RequireKnownPrev); err != nil {
 		return "", err
 	}
+	l.autoWitnessAfterApplyLocked(ev, context, p, observer)
 	return StatusAccepted, nil
+}
+
+func (l *Ledger) autoWitnessAfterApplyLocked(ev Event, context string, p Policy, observer *Observer) {
+	if l == nil || observer == nil {
+		return
+	}
+	if observer.Valid() != nil {
+		return
+	}
+	ctx := strings.TrimSpace(context)
+	if ctx == "" {
+		return
+	}
+	observerKey := base64.RawURLEncoding.EncodeToString(observer.AuthorPub)
+	if p.Trust.Weight(ctx, observerKey) <= 0 {
+		return
+	}
+	if _, bad := l.compromised[observerKey]; bad {
+		return
+	}
+
+	switch ev.Kind {
+	case KindWitnessAttest, KindWitnessCheckpoint, KindSyncSummary:
+		return
+	default:
+	}
+
+	if isCriticalKind(ev.Kind) {
+		ctxMap := l.attestations[ev.ID]
+		if ctxMap == nil {
+			ctxMap = map[string]map[string]struct{}{}
+			l.attestations[ev.ID] = ctxMap
+		}
+		wm := ctxMap[ctx]
+		if wm == nil {
+			wm = map[string]struct{}{}
+			ctxMap[ctx] = wm
+		}
+		if _, ok := wm[observerKey]; !ok {
+			seq, prev, parents := l.nextSeqLocked(observer.Author)
+			aev, err := buildWitnessAttestation(ctx, ev.ID, *observer, seq, prev, parents)
+			if err == nil && validateWithPolicy(aev, p) == nil {
+				if err := l.addLocked(aev, false); err != nil {
+					log.Printf("ledger: failed to add auto witness: %v", err)
+				}
+			}
+		}
+	}
+
+	if !affectsHeads(ev.Kind) {
+		return
+	}
+	if !isCriticalKind(ev.Kind) {
+		return
+	}
+	heads := make([]string, 0, len(l.heads))
+	for h := range l.heads {
+		heads = append(heads, h)
+	}
+	if len(heads) == 0 {
+		return
+	}
+	headsHash, headCount := ComputeHeadsHash(heads)
+	ctxMap := l.checkpoints[ctx]
+	if ctxMap == nil {
+		ctxMap = map[string]map[string]struct{}{}
+		l.checkpoints[ctx] = ctxMap
+	}
+	wm := ctxMap[headsHash]
+	if wm == nil {
+		wm = map[string]struct{}{}
+		ctxMap[headsHash] = wm
+	}
+	if _, ok := wm[observerKey]; ok {
+		return
+	}
+	seq, prev, parents := l.nextSeqLocked(observer.Author)
+	cev, err := buildWitnessCheckpoint(ctx, headsHash, headCount, *observer, seq, prev, parents)
+	if err == nil && validateWithPolicy(cev, p) == nil {
+		_ = l.addLocked(cev, false)
+	}
 }
 
 func buildEquivocationMisbehavior(eq EquivocationEvidence, observer Observer, seq uint64, prev string, parents []string) (Event, error) {
@@ -1005,6 +1067,10 @@ func (l *Ledger) Confirmed(eventID string, context string, pol *Policy) (int, bo
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	if _, ok := l.events[eventID]; !ok {
+		return 0, false
+	}
+
 	ctxMap := l.attestations[eventID]
 	if ctxMap == nil {
 		return 0, false
@@ -1405,6 +1471,49 @@ func (l *Ledger) Heads() []string {
 	return out
 }
 
+func (l *Ledger) AuthorMaxSeq(author string) uint64 {
+	if l == nil {
+		return 0
+	}
+	author = strings.TrimSpace(author)
+	if author == "" {
+		return 0
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	seqs := l.authorSeq[author]
+	var max uint64
+	for s := range seqs {
+		if s > max {
+			max = s
+		}
+	}
+	return max
+}
+
+func (l *Ledger) AuthorEventIDsBetween(author string, fromSeq uint64, toSeq uint64) []string {
+	if l == nil {
+		return nil
+	}
+	author = strings.TrimSpace(author)
+	if author == "" || fromSeq == 0 || toSeq == 0 || fromSeq > toSeq {
+		return nil
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	seqs := l.authorSeq[author]
+	if len(seqs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, int(toSeq-fromSeq)+1)
+	for s := fromSeq; s <= toSeq; s++ {
+		if id, ok := seqs[s]; ok && id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 func (l *Ledger) Snapshot() Snapshot {
 	if l == nil {
 		return Snapshot{SchemaVersion: SchemaV1}
@@ -1505,6 +1614,9 @@ func (l *Ledger) nextSeqLocked(author string) (seq uint64, prev string, parents 
 		parents = append(parents, h)
 	}
 	sort.Strings(parents)
+	if len(parents) > MaxParents {
+		parents = parents[:MaxParents]
+	}
 	return seq, prev, parents
 }
 
@@ -1544,6 +1656,22 @@ func (l *Ledger) trackMissingRefsLocked(ev Event, requireKnownPrev bool) {
 		if _, ok := l.events[p]; !ok {
 			l.missingRefs[p]++
 			l.missingRefWeight[p] += w
+		}
+	}
+
+	switch ev.Kind {
+	case KindWitnessAttest:
+		var pl AttestationPayload
+		if err := requireInlinePayload(ev, &pl); err != nil {
+			return
+		}
+		id := strings.TrimSpace(pl.EventID)
+		if id == "" {
+			return
+		}
+		if _, ok := l.events[id]; !ok {
+			l.missingRefs[id]++
+			l.missingRefWeight[id] += w
 		}
 	}
 }

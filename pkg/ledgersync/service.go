@@ -585,6 +585,9 @@ type peerState struct {
 	inMsgs       int
 	inBytes      int
 
+	meshPub    [32]byte
+	meshPubSet bool
+
 	penaltyUntil time.Time
 	penalty      time.Duration
 
@@ -914,6 +917,22 @@ func (s *Service) TouchPeer(id string, now time.Time) *peerState {
 	return ps
 }
 
+func (s *Service) notePeerMeshPub(id string, pub [32]byte, now time.Time) {
+	if s == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	s.mu.Lock()
+	ps, ok := s.peers[id]
+	if !ok {
+		ps = &peerState{recentMsg: map[string]time.Time{}}
+		s.peers[id] = ps
+	}
+	ps.meshPub = pub
+	ps.meshPubSet = true
+	ps.lastContact = now
+	s.mu.Unlock()
+}
+
 func (s *Service) setPeerRole(id string, role PeerRole, now time.Time) {
 	if s == nil || strings.TrimSpace(id) == "" {
 		return
@@ -1076,6 +1095,7 @@ func (s *Service) SendHeads(ctx context.Context, peer Peer, syncContext string) 
 	if peer.ID == "" {
 		peer.ID = peerIDFromMeshPub(peer.MeshPub)
 	}
+	s.notePeerMeshPub(peer.ID, peer.MeshPub, time.Now())
 	s.setPeerRole(peer.ID, peer.Role, time.Now())
 	return sid, s.sendMesh(peer, pt)
 }
@@ -1099,6 +1119,7 @@ func (s *Service) ReceiveOnce(ctx context.Context) error {
 
 	peerID := peerIDFromMeshPub(mm.SenderPub)
 	now := time.Now()
+	s.notePeerMeshPub(peerID, mm.SenderPub, now)
 	role := s.peerRole(peerID)
 	if !s.allowInbound(peerID, len(pt), now) {
 		s.stats.rejected.Add(1)
@@ -1517,6 +1538,11 @@ func (s *Service) drainInbound(max int) ledger.ApplyReport {
 		if it.maxMessageBytes > 0 && it.maxMessageBytes < msgMax {
 			msgMax = it.maxMessageBytes
 		}
+		ctx := strings.TrimSpace(it.context)
+		beforeSeq := uint64(0)
+		if s.observer != nil && ctx != "" {
+			beforeSeq = s.ledger.AuthorMaxSeq(s.observer.Author)
+		}
 		now := time.Now()
 		rp, _ := s.ledger.ApplyEventsMessageBoundedOptimized(it.msg, it.context, s.policy, s.observer, s.opts.MaxEvents, s.opts.MaxEventBytes, msgMax, ledger.ApplyOptimizations{
 			VerifyWorkers:   s.opts.VerifyWorkers,
@@ -1524,6 +1550,12 @@ func (s *Service) drainInbound(max int) ledger.ApplyReport {
 			Cache:           s.verifyCache,
 			ApplyChunkSize:  s.opts.ApplyChunkSize,
 		})
+		if s.observer != nil && ctx != "" {
+			afterSeq := s.ledger.AuthorMaxSeq(s.observer.Author)
+			if afterSeq > beforeSeq {
+				s.broadcastObserverEvents(ctx, beforeSeq+1, afterSeq)
+			}
+		}
 		rep.Applied += rp.Applied
 		rep.Dupe += rp.Dupe
 		rep.Rejected += rp.Rejected
@@ -1541,6 +1573,53 @@ func (s *Service) drainInbound(max int) ledger.ApplyReport {
 		}
 	}
 	return rep
+}
+
+func (s *Service) broadcastObserverEvents(ctx string, fromSeq uint64, toSeq uint64) {
+	if s == nil || s.ledger == nil || s.observer == nil {
+		return
+	}
+	if !s.opts.AllowContext(ctx) {
+		return
+	}
+	author := strings.TrimSpace(s.observer.Author)
+	if author == "" {
+		return
+	}
+	ids := s.ledger.AuthorEventIDsBetween(author, fromSeq, toSeq)
+	ids = s.filterOutgoingIDs(ids, ctx)
+	if len(ids) == 0 {
+		return
+	}
+	msg := s.ledger.BuildEventsMessageBounded(ids, s.opts.MaxEvents, s.opts.MaxEventBytes, s.opts.MaxEventsMessageBytes)
+	if len(msg.Events) == 0 {
+		return
+	}
+	sid, err := newSessionID(s.rand)
+	if err != nil {
+		return
+	}
+	pt, err := encodeWire("events", sid, ctx, msg)
+	if err != nil {
+		return
+	}
+
+	s.mu.Lock()
+	peers := make([]Peer, 0, len(s.peers))
+	for id, ps := range s.peers {
+		if ps == nil || !ps.meshPubSet {
+			continue
+		}
+		peers = append(peers, Peer{ID: id, MeshPub: ps.meshPub, Role: ps.role})
+	}
+	s.mu.Unlock()
+	sort.Slice(peers, func(i, j int) bool { return peers[i].ID < peers[j].ID })
+	if s.opts.MaxPeersPerRound > 0 && len(peers) > s.opts.MaxPeersPerRound {
+		peers = peers[:s.opts.MaxPeersPerRound]
+	}
+	for i := range peers {
+		_ = s.sendMesh(peers[i], pt)
+	}
 }
 
 func (s *Service) SelectPeers(candidates []Peer, now time.Time) []Peer {
