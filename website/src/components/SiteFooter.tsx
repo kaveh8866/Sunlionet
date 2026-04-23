@@ -6,6 +6,9 @@ const licenseUrl = `${repoUrl}/blob/main/LICENSE`;
 const buildSha = process.env.NEXT_PUBLIC_GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA;
 const buildShaShort = buildSha ? buildSha.slice(0, 7) : null;
 const buildShaUrl = buildSha ? `${repoUrl}/commit/${buildSha}` : null;
+const buildAuthor = process.env.NEXT_PUBLIC_GIT_AUTHOR ?? process.env.VERCEL_GIT_COMMIT_AUTHOR_LOGIN ?? process.env.GITHUB_ACTOR;
+const buildTimestamp = process.env.NEXT_PUBLIC_GIT_COMMIT_TIMESTAMP ?? process.env.VERCEL_GIT_COMMIT_TIMESTAMP;
+const buildTimestampLabel = buildTimestamp ? new Date(buildTimestamp).toISOString() : null;
 
 export async function SiteFooter() {
   const releases = await getLocalReleases();
@@ -29,9 +32,20 @@ export async function SiteFooter() {
             ) : null}
             {buildShaUrl && buildShaShort ? (
               <div className="mt-2 text-xs font-mono text-muted-foreground">
-                <a href={buildShaUrl} className="hover:text-foreground transition-colors" target="_blank" rel="noreferrer">
-                  Source @ {buildShaShort}
+                <a
+                  href={buildShaUrl}
+                  className="hover:text-foreground transition-colors"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View on GitHub @ {buildShaShort}
                 </a>
+                {buildAuthor || buildTimestampLabel ? (
+                  <span>
+                    {buildAuthor ? ` · ${buildAuthor}` : null}
+                    {buildTimestampLabel ? ` · ${buildTimestampLabel}` : null}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -80,8 +94,8 @@ export async function SiteFooter() {
             >
               Support
             </LocalizedLink>
-            <a href={repoUrl} className="text-muted-foreground hover:text-foreground transition-colors">
-              GitHub
+            <a href={buildShaUrl ?? repoUrl} className="text-muted-foreground hover:text-foreground transition-colors">
+              View on GitHub
             </a>
             <a href={licenseUrl} className="text-muted-foreground hover:text-foreground transition-colors">
               License (AGPL-3.0)
