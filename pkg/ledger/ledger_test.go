@@ -210,6 +210,59 @@ func TestNewSignedEvent_TimestampObfuscation(t *testing.T) {
 	}
 }
 
+func TestLedger_EmitWitnessAttestAndCheckpoint(t *testing.T) {
+	w, err := identity.NewPersona()
+	if err != nil {
+		t.Fatalf("new persona: %v", err)
+	}
+	wPub, wPriv, err := w.SignKeypair()
+	if err != nil {
+		t.Fatalf("sign keypair: %v", err)
+	}
+	wKey := base64.RawURLEncoding.EncodeToString(wPub)
+
+	ctxName := "ctx"
+	pol := DefaultPolicy()
+	pol.Trust = TrustPolicy{
+		Witnesses:  map[string]map[string]int{ctxName: {wKey: 1}},
+		Thresholds: map[string]int{ctxName: 1},
+	}
+
+	obs := &Observer{Author: string(w.ID), AuthorPub: wPub, AuthorPriv: wPriv}
+
+	l := New()
+	base, err := NewSignedEvent(SignedEventInput{
+		Author:     string(w.ID),
+		AuthorPub:  wPub,
+		AuthorPriv: wPriv,
+		Seq:        1,
+		Kind:       KindChatMessage,
+		Payload:    json.RawMessage(`{"t":"base"}`),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new base: %v", err)
+	}
+	if err := l.Add(base); err != nil {
+		t.Fatalf("add base: %v", err)
+	}
+
+	if _, err := l.EmitWitnessAttest(ctxName, base.ID, &pol, obs); err != nil {
+		t.Fatalf("EmitWitnessAttest: %v", err)
+	}
+	if _, ok := l.Confirmed(base.ID, ctxName, &pol); !ok {
+		t.Fatalf("expected confirmed after attest")
+	}
+
+	expHash, _ := ComputeHeadsHash(l.Heads())
+	if _, err := l.EmitWitnessCheckpoint(ctxName, &pol, obs); err != nil {
+		t.Fatalf("EmitWitnessCheckpoint: %v", err)
+	}
+	if _, ok := l.Checkpointed(ctxName, expHash, &pol); !ok {
+		t.Fatalf("expected checkpointed after checkpoint")
+	}
+}
+
 func TestEvent_TamperDetected(t *testing.T) {
 	p, err := identity.NewPersona()
 	if err != nil {

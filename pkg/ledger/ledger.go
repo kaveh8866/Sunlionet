@@ -632,6 +632,306 @@ func buildSybilMisbehavior(context string, suspects []string, reason string, obs
 	})
 }
 
+func buildWitnessAttestation(context string, eventID string, observer Observer, seq uint64, prev string, parents []string) (Event, error) {
+	pl := AttestationPayload{
+		Context: strings.TrimSpace(context),
+		EventID: strings.TrimSpace(eventID),
+	}
+	raw, err := json.Marshal(pl)
+	if err != nil {
+		return Event{}, err
+	}
+	_, ref, err := InlinePayloadRef(raw)
+	if err != nil {
+		return Event{}, err
+	}
+	return NewSignedEvent(SignedEventInput{
+		Author:     observer.Author,
+		AuthorPub:  observer.AuthorPub,
+		AuthorPriv: observer.AuthorPriv,
+		Seq:        seq,
+		Prev:       prev,
+		Parents:    parents,
+		Kind:       KindWitnessAttest,
+		Payload:    raw,
+		PayloadRef: ref,
+		CreatedAt:  time.Now(),
+	})
+}
+
+func buildWitnessCheckpoint(context string, headsHash string, headsCount int, observer Observer, seq uint64, prev string, parents []string) (Event, error) {
+	pl := CheckpointPayload{
+		Context:    strings.TrimSpace(context),
+		HeadsHash:  strings.TrimSpace(headsHash),
+		HeadsCount: headsCount,
+	}
+	raw, err := json.Marshal(pl)
+	if err != nil {
+		return Event{}, err
+	}
+	_, ref, err := InlinePayloadRef(raw)
+	if err != nil {
+		return Event{}, err
+	}
+	return NewSignedEvent(SignedEventInput{
+		Author:     observer.Author,
+		AuthorPub:  observer.AuthorPub,
+		AuthorPriv: observer.AuthorPriv,
+		Seq:        seq,
+		Prev:       prev,
+		Parents:    parents,
+		Kind:       KindWitnessCheckpoint,
+		Payload:    raw,
+		PayloadRef: ref,
+		CreatedAt:  time.Now(),
+	})
+}
+
+func buildSyncSummary(context string, headsHash string, headCount int, observer Observer, seq uint64, prev string, parents []string) (Event, error) {
+	pl := SyncSummaryPayload{
+		Context:   strings.TrimSpace(context),
+		HeadsHash: strings.TrimSpace(headsHash),
+		HeadCount: headCount,
+	}
+	raw, err := json.Marshal(pl)
+	if err != nil {
+		return Event{}, err
+	}
+	_, ref, err := InlinePayloadRef(raw)
+	if err != nil {
+		return Event{}, err
+	}
+	return NewSignedEvent(SignedEventInput{
+		Author:     observer.Author,
+		AuthorPub:  observer.AuthorPub,
+		AuthorPriv: observer.AuthorPriv,
+		Seq:        seq,
+		Prev:       prev,
+		Parents:    parents,
+		Kind:       KindSyncSummary,
+		Payload:    raw,
+		PayloadRef: ref,
+		CreatedAt:  time.Now(),
+	})
+}
+
+func (l *Ledger) EmitWitnessAttest(context string, eventID string, pol *Policy, observer *Observer) (Event, error) {
+	if l == nil {
+		return Event{}, errors.New("ledger: ledger is nil")
+	}
+	if observer == nil {
+		return Event{}, errors.New("ledger: observer is nil")
+	}
+	if err := observer.Valid(); err != nil {
+		return Event{}, err
+	}
+	ctx := strings.TrimSpace(context)
+	if ctx == "" {
+		return Event{}, errors.New("ledger: context required")
+	}
+	id := strings.TrimSpace(eventID)
+	if id == "" {
+		return Event{}, errors.New("ledger: event_id required")
+	}
+	p := DefaultPolicy()
+	if pol != nil {
+		p = *pol
+	}
+	observerKey := base64.RawURLEncoding.EncodeToString(observer.AuthorPub)
+	if p.Trust.Weight(ctx, observerKey) <= 0 {
+		return Event{}, errors.New("ledger: observer is not a witness")
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.events == nil {
+		l.events = map[string]Event{}
+	}
+	if l.heads == nil {
+		l.heads = map[string]struct{}{}
+	}
+	if l.authorSeq == nil {
+		l.authorSeq = map[string]map[uint64]string{}
+	}
+	if l.missingRefs == nil {
+		l.missingRefs = map[string]int{}
+	}
+	if l.compromised == nil {
+		l.compromised = map[string]struct{}{}
+	}
+	if l.attestations == nil {
+		l.attestations = map[string]map[string]map[string]struct{}{}
+	}
+	if l.checkpoints == nil {
+		l.checkpoints = map[string]map[string]map[string]struct{}{}
+	}
+	if l.introductions == nil {
+		l.introductions = map[string]map[string]map[string]struct{}{}
+	}
+
+	if _, ok := l.events[id]; !ok {
+		return Event{}, errors.New("ledger: attest event not found")
+	}
+
+	seq, prev, parents := l.nextSeqLocked(observer.Author)
+	ev, err := buildWitnessAttestation(ctx, id, *observer, seq, prev, parents)
+	if err != nil {
+		return Event{}, err
+	}
+	if err := validateWithPolicy(ev, p); err != nil {
+		return Event{}, err
+	}
+	if err := l.addLocked(ev, false); err != nil {
+		return Event{}, err
+	}
+	return ev, nil
+}
+
+func (l *Ledger) EmitWitnessCheckpoint(context string, pol *Policy, observer *Observer) (Event, error) {
+	if l == nil {
+		return Event{}, errors.New("ledger: ledger is nil")
+	}
+	if observer == nil {
+		return Event{}, errors.New("ledger: observer is nil")
+	}
+	if err := observer.Valid(); err != nil {
+		return Event{}, err
+	}
+	ctx := strings.TrimSpace(context)
+	if ctx == "" {
+		return Event{}, errors.New("ledger: context required")
+	}
+	p := DefaultPolicy()
+	if pol != nil {
+		p = *pol
+	}
+	observerKey := base64.RawURLEncoding.EncodeToString(observer.AuthorPub)
+	if p.Trust.Weight(ctx, observerKey) <= 0 {
+		return Event{}, errors.New("ledger: observer is not a witness")
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.events == nil {
+		l.events = map[string]Event{}
+	}
+	if l.heads == nil {
+		l.heads = map[string]struct{}{}
+	}
+	if l.authorSeq == nil {
+		l.authorSeq = map[string]map[uint64]string{}
+	}
+	if l.missingRefs == nil {
+		l.missingRefs = map[string]int{}
+	}
+	if l.compromised == nil {
+		l.compromised = map[string]struct{}{}
+	}
+	if l.attestations == nil {
+		l.attestations = map[string]map[string]map[string]struct{}{}
+	}
+	if l.checkpoints == nil {
+		l.checkpoints = map[string]map[string]map[string]struct{}{}
+	}
+	if l.introductions == nil {
+		l.introductions = map[string]map[string]map[string]struct{}{}
+	}
+
+	heads := make([]string, 0, len(l.heads))
+	for h := range l.heads {
+		heads = append(heads, h)
+	}
+	if len(heads) == 0 {
+		return Event{}, errors.New("ledger: heads required")
+	}
+	headsHash, headCount := ComputeHeadsHash(heads)
+
+	seq, prev, parents := l.nextSeqLocked(observer.Author)
+	ev, err := buildWitnessCheckpoint(ctx, headsHash, headCount, *observer, seq, prev, parents)
+	if err != nil {
+		return Event{}, err
+	}
+	if err := validateWithPolicy(ev, p); err != nil {
+		return Event{}, err
+	}
+	if err := l.addLocked(ev, false); err != nil {
+		return Event{}, err
+	}
+	return ev, nil
+}
+
+func (l *Ledger) EmitSyncSummary(context string, pol *Policy, observer *Observer) (Event, error) {
+	if l == nil {
+		return Event{}, errors.New("ledger: ledger is nil")
+	}
+	if observer == nil {
+		return Event{}, errors.New("ledger: observer is nil")
+	}
+	if err := observer.Valid(); err != nil {
+		return Event{}, err
+	}
+	ctx := strings.TrimSpace(context)
+	if ctx == "" {
+		return Event{}, errors.New("ledger: context required")
+	}
+	p := DefaultPolicy()
+	if pol != nil {
+		p = *pol
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.events == nil {
+		l.events = map[string]Event{}
+	}
+	if l.heads == nil {
+		l.heads = map[string]struct{}{}
+	}
+	if l.authorSeq == nil {
+		l.authorSeq = map[string]map[uint64]string{}
+	}
+	if l.missingRefs == nil {
+		l.missingRefs = map[string]int{}
+	}
+	if l.compromised == nil {
+		l.compromised = map[string]struct{}{}
+	}
+	if l.attestations == nil {
+		l.attestations = map[string]map[string]map[string]struct{}{}
+	}
+	if l.checkpoints == nil {
+		l.checkpoints = map[string]map[string]map[string]struct{}{}
+	}
+	if l.introductions == nil {
+		l.introductions = map[string]map[string]map[string]struct{}{}
+	}
+
+	heads := make([]string, 0, len(l.heads))
+	for h := range l.heads {
+		heads = append(heads, h)
+	}
+	if len(heads) == 0 {
+		return Event{}, errors.New("ledger: heads required")
+	}
+	headsHash, headCount := ComputeHeadsHash(heads)
+
+	seq, prev, parents := l.nextSeqLocked(observer.Author)
+	ev, err := buildSyncSummary(ctx, headsHash, headCount, *observer, seq, prev, parents)
+	if err != nil {
+		return Event{}, err
+	}
+	if err := validateWithPolicy(ev, p); err != nil {
+		return Event{}, err
+	}
+	if err := l.addLocked(ev, false); err != nil {
+		return Event{}, err
+	}
+	return ev, nil
+}
+
 func (l *Ledger) EmitSybilMisbehavior(context string, suspects []string, reason string, pol *Policy, observer *Observer) (Event, error) {
 	if l == nil {
 		return Event{}, errors.New("ledger: ledger is nil")
