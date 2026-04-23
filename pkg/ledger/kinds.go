@@ -24,10 +24,12 @@ const (
 	KindGroupJoin            = "group.join"
 	KindWitnessAttest        = "witness.attest"
 	KindWitnessCheckpoint    = "witness.checkpoint"
+	KindIdentityIntroduce    = "identity.introduce"
 	KindIdentityRotate       = "identity.rotate"
 	KindIdentityRevoke       = "identity.revoke"
 	KindMisbehaviorEquivoc   = "misbehavior.equivocation"
 	KindMisbehaviorReplay    = "misbehavior.replay"
+	KindMisbehaviorSybil     = "misbehavior.sybil"
 	KindGroupMembership      = "group.membership"
 	KindAgentAction          = "agent.action"
 	KindSyncSummary          = "sync.summary"
@@ -54,6 +56,13 @@ type CheckpointPayload struct {
 	Heads       []string `json:"heads,omitempty"`
 	HeadsHash   string   `json:"heads_hash_b64url"`
 	HeadsCount  int      `json:"heads_count"`
+}
+
+type IdentityIntroducePayload struct {
+	Context       string `json:"ctx"`
+	SubjectKeyB64 string `json:"subject_key_b64url"`
+	SubjectAuthor string `json:"subject_author,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 type IdentityRotatePayload struct {
@@ -84,6 +93,12 @@ type MisbehaviorReplayPayload struct {
 	OffenderKeyB64 string `json:"offender_key_b64url"`
 	EventID        string `json:"event_id"`
 	Context        string `json:"ctx,omitempty"`
+}
+
+type MisbehaviorSybilPayload struct {
+	Context        string   `json:"ctx,omitempty"`
+	SuspectsKeyB64 []string `json:"suspects_key_b64url"`
+	Reason         string   `json:"reason,omitempty"`
 }
 
 type GroupMembershipPayload struct {
@@ -131,6 +146,36 @@ func validateWithPolicy(ev Event, p Policy) error {
 	return validateKindPayload(ev, p)
 }
 
+func validateWithPolicyNoCrypto(ev Event, p Policy) ([32]byte, error) {
+	if err := ev.ValidateNoCrypto(); err != nil {
+		return [32]byte{}, err
+	}
+	now := time.Now()
+	if p.MaxClockSkew > 0 {
+		if ev.CreatedAt > now.Add(p.MaxClockSkew).Unix() {
+			return [32]byte{}, ErrEventTimestampFuture
+		}
+	}
+	if p.MaxEventAge > 0 {
+		if ev.CreatedAt < now.Add(-p.MaxEventAge).Unix() {
+			return [32]byte{}, ErrEventTooOld
+		}
+	}
+	if !p.AllowUnknownKinds {
+		if !isKnownKind(ev.Kind) {
+			return [32]byte{}, ErrUnknownEventKind
+		}
+	}
+	if err := validateKindPayload(ev, p); err != nil {
+		return [32]byte{}, err
+	}
+	hash, err := ev.unsignedHash()
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return hash, nil
+}
+
 func isKnownKind(kind string) bool {
 	switch kind {
 	case KindLedgerEvent,
@@ -139,10 +184,12 @@ func isKnownKind(kind string) bool {
 		KindGroupJoin,
 		KindWitnessAttest,
 		KindWitnessCheckpoint,
+		KindIdentityIntroduce,
 		KindIdentityRotate,
 		KindIdentityRevoke,
 		KindMisbehaviorEquivoc,
 		KindMisbehaviorReplay,
+		KindMisbehaviorSybil,
 		KindGroupMembership,
 		KindAgentAction,
 		KindSyncSummary:
@@ -172,6 +219,15 @@ func validateKindPayload(ev Event, p Policy) error {
 			return errors.New("ledger: witness.checkpoint author not in witness set")
 		}
 		return validateCheckpoint(pl)
+	case KindIdentityIntroduce:
+		var pl IdentityIntroducePayload
+		if err := requireInlinePayload(ev, &pl); err != nil {
+			return err
+		}
+		if p.Trust.Weight(pl.Context, ev.AuthorKeyB64) <= 0 {
+			return errors.New("ledger: identity.introduce author not trusted")
+		}
+		return validateIdentityIntroduce(pl)
 	case KindIdentityRotate:
 		var pl IdentityRotatePayload
 		if err := requireInlinePayload(ev, &pl); err != nil {
@@ -196,6 +252,12 @@ func validateKindPayload(ev Event, p Policy) error {
 			return err
 		}
 		return validateMisbehaviorReplay(pl)
+	case KindMisbehaviorSybil:
+		var pl MisbehaviorSybilPayload
+		if err := requireInlinePayload(ev, &pl); err != nil {
+			return err
+		}
+		return validateMisbehaviorSybil(pl)
 	case KindGroupMembership:
 		var pl GroupMembershipPayload
 		if err := requireInlinePayload(ev, &pl); err != nil {
@@ -287,6 +349,26 @@ func validateCheckpoint(p CheckpointPayload) error {
 	return nil
 }
 
+func validateIdentityIntroduce(p IdentityIntroducePayload) error {
+	ctx := strings.TrimSpace(p.Context)
+	if ctx == "" {
+		return errors.New("ledger: identity.introduce ctx required")
+	}
+	if len(ctx) > MaxContextLen {
+		return errors.New("ledger: identity.introduce ctx too long")
+	}
+	if strings.TrimSpace(p.SubjectKeyB64) == "" {
+		return errors.New("ledger: identity.introduce subject_key_b64url required")
+	}
+	if len(p.Reason) > MaxReasonLen {
+		return errors.New("ledger: identity.introduce reason too long")
+	}
+	if len(p.SubjectAuthor) > MaxSubjectLen {
+		return errors.New("ledger: identity.introduce subject_author too long")
+	}
+	return nil
+}
+
 func validateIdentityRotate(p IdentityRotatePayload) error {
 	if strings.TrimSpace(p.PersonaID) == "" {
 		return errors.New("ledger: identity.rotate persona_id required")
@@ -353,6 +435,23 @@ func validateMisbehaviorReplay(p MisbehaviorReplayPayload) error {
 	}
 	if len(p.Context) > MaxContextLen {
 		return errors.New("ledger: misbehavior ctx too long")
+	}
+	return nil
+}
+
+func validateMisbehaviorSybil(p MisbehaviorSybilPayload) error {
+	if len(p.Context) > MaxContextLen {
+		return errors.New("ledger: misbehavior.sybil ctx too long")
+	}
+	sus := normalizeIDSet(p.SuspectsKeyB64)
+	if len(sus) == 0 {
+		return errors.New("ledger: misbehavior.sybil suspects required")
+	}
+	if len(sus) > 64 {
+		return errors.New("ledger: misbehavior.sybil too many suspects")
+	}
+	if len(p.Reason) > MaxReasonLen {
+		return errors.New("ledger: misbehavior.sybil reason too long")
 	}
 	return nil
 }

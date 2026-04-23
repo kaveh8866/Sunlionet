@@ -237,6 +237,130 @@ func TestRelaySync_PublishAndPullEvents(t *testing.T) {
 	}
 }
 
+func TestRelaySync_MultiHopForwarding(t *testing.T) {
+	r := relay.NewMemoryRelay()
+
+	persona, _ := identity.NewPersona()
+	pub, priv, _ := persona.SignKeypair()
+
+	missing, _ := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Kind:       "chat.msg",
+		Payload:    json.RawMessage(`{"t":"missing"}`),
+		CreatedAt:  time.Now(),
+	})
+	child, _ := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        2,
+		Prev:       missing.ID,
+		Parents:    []string{missing.ID},
+		Kind:       "chat.msg",
+		Payload:    json.RawMessage(`{"t":"child"}`),
+		CreatedAt:  time.Now(),
+	})
+
+	lA := ledger.New()
+	if _, err := lA.Apply(child, nil, nil); err != nil {
+		t.Fatalf("apply child on A: %v", err)
+	}
+	lB := ledger.New()
+	if _, err := lB.Apply(missing, nil, nil); err != nil {
+		t.Fatalf("apply missing on B: %v", err)
+	}
+
+	cA, _ := mesh.NewCrypto()
+	cB, _ := mesh.NewCrypto()
+	sA, err := New(&noopMesh{}, cA, lA, nil, nil, Options{MaxHave: 0, MaxWant: 64, MaxEvents: 64})
+	if err != nil {
+		t.Fatalf("New A: %v", err)
+	}
+	sB, err := New(&noopMesh{}, cB, lB, nil, nil, Options{MaxHave: 0, MaxWant: 64, MaxEvents: 64})
+	if err != nil {
+		t.Fatalf("New B: %v", err)
+	}
+	sB.rand = fixedRand
+
+	recipient, err := messaging.NewX25519Keypair()
+	if err != nil {
+		t.Fatalf("NewX25519Keypair recipient: %v", err)
+	}
+	hop1, err := messaging.NewX25519Keypair()
+	if err != nil {
+		t.Fatalf("NewX25519Keypair hop1: %v", err)
+	}
+	hop2, err := messaging.NewX25519Keypair()
+	if err != nil {
+		t.Fatalf("NewX25519Keypair hop2: %v", err)
+	}
+
+	recipientMailbox := relay.MailboxID("mbA")
+	hops := []RelayHop{
+		{Mailbox: relay.MailboxID("hop1"), PreKeyPub: hop1.Public},
+		{Mailbox: relay.MailboxID("hop2"), PreKeyPub: hop2.Public},
+	}
+
+	sent, err := sB.PublishEventsToRelayMultiHop(context.Background(), r, hops, recipientMailbox, recipient.Public, "", []string{missing.ID}, 60, 0)
+	if err != nil {
+		t.Fatalf("PublishEventsToRelayMultiHop: %v", err)
+	}
+	if sent != 1 {
+		t.Fatalf("expected 1 sent event, got %d", sent)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	fwd1, pulled1, err := ForwardRelayOnce(ctx, r, relay.MailboxID("hop1"), hop1.Private, 20, true, fixedRand, 0, 60, 0)
+	if err != nil {
+		t.Fatalf("ForwardRelayOnce hop1: %v", err)
+	}
+	if pulled1 == 0 || fwd1 == 0 {
+		t.Fatalf("expected hop1 forwarded>0 pulled>0, got forwarded=%d pulled=%d", fwd1, pulled1)
+	}
+
+	fwd2, pulled2, err := ForwardRelayOnce(ctx, r, relay.MailboxID("hop2"), hop2.Private, 20, true, fixedRand, 0, 60, 0)
+	if err != nil {
+		t.Fatalf("ForwardRelayOnce hop2: %v", err)
+	}
+	if pulled2 == 0 || fwd2 == 0 {
+		t.Fatalf("expected hop2 forwarded>0 pulled>0, got forwarded=%d pulled=%d", fwd2, pulled2)
+	}
+
+	rep, pulled, err := sA.PullAndApplyFromRelay(ctx, r, recipientMailbox, recipient.Private, 10, true)
+	if err != nil {
+		t.Fatalf("PullAndApplyFromRelay: %v", err)
+	}
+	if pulled == 0 {
+		t.Fatalf("expected to pull at least 1 message")
+	}
+	if rep.Applied != 1 {
+		t.Fatalf("expected 1 applied, got %#v", rep)
+	}
+	if !lA.Have(missing.ID) {
+		t.Fatalf("expected missing event applied")
+	}
+
+	afterHop1, err := r.Pull(ctx, relay.PullRequest{Mailbox: relay.MailboxID("hop1"), Limit: 10})
+	if err != nil {
+		t.Fatalf("pull hop1 after ack: %v", err)
+	}
+	if len(afterHop1) != 0 {
+		t.Fatalf("expected hop1 mailbox empty after ack")
+	}
+	afterHop2, err := r.Pull(ctx, relay.PullRequest{Mailbox: relay.MailboxID("hop2"), Limit: 10})
+	if err != nil {
+		t.Fatalf("pull hop2 after ack: %v", err)
+	}
+	if len(afterHop2) != 0 {
+		t.Fatalf("expected hop2 mailbox empty after ack")
+	}
+}
+
 func TestService_Stats_DuplicateAndDeferredAndRejected(t *testing.T) {
 	persona, _ := identity.NewPersona()
 	pub, priv, _ := persona.SignKeypair()
@@ -299,5 +423,64 @@ func TestService_Stats_DuplicateAndDeferredAndRejected(t *testing.T) {
 	st2 := s2.Stats()
 	if st2.Rejected == 0 || st2.Quarantined == 0 {
 		t.Fatalf("expected rejected>0 and quarantined>0, got %+v", st2)
+	}
+}
+
+func TestPrivacy_PadUnpad_Roundtrip(t *testing.T) {
+	in := []byte(`{"t":"x"}`)
+	padded, err := padPlaintext(in, 64, fixedRand)
+	if err != nil {
+		t.Fatalf("padPlaintext: %v", err)
+	}
+	if len(padded) != 64 {
+		t.Fatalf("expected padded size 64, got %d", len(padded))
+	}
+	out, ok := unpadPlaintext(padded)
+	if !ok {
+		t.Fatalf("expected ok=true for padded plaintext")
+	}
+	if string(out) != string(in) {
+		t.Fatalf("expected roundtrip, got %q", string(out))
+	}
+	raw, ok := unpadPlaintext(in)
+	if ok || string(raw) != string(in) {
+		t.Fatalf("expected non-padded passthrough")
+	}
+	if msgIDFromPlaintext(out) != msgIDFromPlaintext(in) {
+		t.Fatalf("expected stable msg id across pad/unpad")
+	}
+}
+
+func TestPrivacy_TryApplyWirePlaintext_AcceptsPaddedWire(t *testing.T) {
+	persona, _ := identity.NewPersona()
+	pub, priv, _ := persona.SignKeypair()
+	ev, _ := ledger.NewSignedEvent(ledger.SignedEventInput{
+		Author:     string(persona.ID),
+		AuthorPub:  pub,
+		AuthorPriv: priv,
+		Seq:        1,
+		Kind:       "chat.msg",
+		Payload:    json.RawMessage(`{"t":"x"}`),
+		CreatedAt:  time.Now(),
+	})
+	msg := ledger.EventsMessage{SchemaVersion: ledger.SyncSchemaV1, Events: []ledger.Event{ev}}
+	pt, err := encodeWire("events", "s", "", msg)
+	if err != nil {
+		t.Fatalf("encode wire: %v", err)
+	}
+	padded, err := padPlaintext(pt, 4096, fixedRand)
+	if err != nil {
+		t.Fatalf("padPlaintext: %v", err)
+	}
+
+	c, _ := mesh.NewCrypto()
+	l := ledger.New()
+	s, err := New(&noopMesh{}, c, l, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	handled, rep, err := s.TryApplyWirePlaintext("peer1", padded)
+	if err != nil || !handled || rep.Applied != 1 {
+		t.Fatalf("expected applied=1, handled=true, err=nil; got handled=%v rep=%+v err=%v", handled, rep, err)
 	}
 }

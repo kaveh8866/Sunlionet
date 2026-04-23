@@ -120,6 +120,133 @@ func TestLTC_AttestationQuorum(t *testing.T) {
 	}
 }
 
+func TestLTC_AttestationRequiresKnownEvent(t *testing.T) {
+	w1, _ := identity.NewPersona()
+	w1Pub, w1Priv, _ := w1.SignKeypair()
+	ctx := "group:alpha"
+
+	w1Key := base64.RawURLEncoding.EncodeToString(w1Pub)
+	pol := DefaultPolicy()
+	pol.Trust = TrustPolicy{
+		Witnesses:  map[string]map[string]int{ctx: {w1Key: 1}},
+		Thresholds: map[string]int{ctx: 1},
+	}
+
+	l := New()
+
+	pl := AttestationPayload{EventID: "missing-event", Context: ctx}
+	raw, _ := json.Marshal(pl)
+	_, ref, _ := InlinePayloadRef(raw)
+
+	a1, err := NewSignedEvent(SignedEventInput{
+		Author:     string(w1.ID),
+		AuthorPub:  w1Pub,
+		AuthorPriv: w1Priv,
+		Seq:        1,
+		Kind:       KindWitnessAttest,
+		Payload:    raw,
+		PayloadRef: ref,
+		Parents:    l.Heads(),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("new attest: %v", err)
+	}
+	if _, err := l.Apply(a1, &pol, nil); err == nil {
+		t.Fatalf("expected attest for unknown event to fail")
+	}
+}
+
+func TestLTC_IdentityIntroduceQuorum(t *testing.T) {
+	w1, _ := identity.NewPersona()
+	w1Pub, w1Priv, _ := w1.SignKeypair()
+	w2, _ := identity.NewPersona()
+	w2Pub, w2Priv, _ := w2.SignKeypair()
+	w3, _ := identity.NewPersona()
+	w3Pub, w3Priv, _ := w3.SignKeypair()
+
+	subject, _ := identity.NewPersona()
+	subjectPub, _, _ := subject.SignKeypair()
+	subjectKey := base64.RawURLEncoding.EncodeToString(subjectPub)
+
+	ctx := "group:alpha"
+	w1Key := base64.RawURLEncoding.EncodeToString(w1Pub)
+	w2Key := base64.RawURLEncoding.EncodeToString(w2Pub)
+	pol := DefaultPolicy()
+	pol.Trust = TrustPolicy{
+		Witnesses: map[string]map[string]int{
+			ctx: {w1Key: 1, w2Key: 1},
+		},
+		Thresholds: map[string]int{ctx: 2},
+	}
+
+	l := New()
+
+	pl := IdentityIntroducePayload{Context: ctx, SubjectKeyB64: subjectKey, SubjectAuthor: string(subject.ID)}
+	raw, _ := json.Marshal(pl)
+	_, ref, _ := InlinePayloadRef(raw)
+
+	e1, err := NewSignedEvent(SignedEventInput{
+		Author:     string(w1.ID),
+		AuthorPub:  w1Pub,
+		AuthorPriv: w1Priv,
+		Seq:        1,
+		Kind:       KindIdentityIntroduce,
+		Payload:    raw,
+		PayloadRef: ref,
+		Parents:    l.Heads(),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("intro1: %v", err)
+	}
+	if _, err := l.Apply(e1, &pol, nil); err != nil {
+		t.Fatalf("apply intro1: %v", err)
+	}
+	if score, ok := l.Introduced(subjectKey, ctx, &pol); ok || score != 1 {
+		t.Fatalf("expected score=1 ok=false, got score=%d ok=%v", score, ok)
+	}
+
+	e2, err := NewSignedEvent(SignedEventInput{
+		Author:     string(w2.ID),
+		AuthorPub:  w2Pub,
+		AuthorPriv: w2Priv,
+		Seq:        1,
+		Kind:       KindIdentityIntroduce,
+		Payload:    raw,
+		PayloadRef: ref,
+		Parents:    l.Heads(),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("intro2: %v", err)
+	}
+	if _, err := l.Apply(e2, &pol, nil); err != nil {
+		t.Fatalf("apply intro2: %v", err)
+	}
+	if score, ok := l.Introduced(subjectKey, ctx, &pol); !ok || score != 2 {
+		t.Fatalf("expected score=2 ok=true, got score=%d ok=%v", score, ok)
+	}
+
+	e3, err := NewSignedEvent(SignedEventInput{
+		Author:     string(w3.ID),
+		AuthorPub:  w3Pub,
+		AuthorPriv: w3Priv,
+		Seq:        1,
+		Kind:       KindIdentityIntroduce,
+		Payload:    raw,
+		PayloadRef: ref,
+		Parents:    l.Heads(),
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("intro3: %v", err)
+	}
+	if _, err := l.Apply(e3, &pol, nil); err == nil {
+		t.Fatalf("expected non-trusted introduction to fail")
+	}
+}
+
 func TestLTC_CheckpointQuorum(t *testing.T) {
 	author, _ := identity.NewPersona()
 	authorPub, authorPriv, _ := author.SignKeypair()
@@ -382,6 +509,49 @@ func TestLedger_EmitsMisbehaviorReplayOnTooOld(t *testing.T) {
 	}
 	if pl.EventID != ev.ID || pl.OffenderAuthor != string(offender.ID) {
 		t.Fatalf("unexpected payload: %#v", pl)
+	}
+}
+
+func TestLedger_EmitMisbehaviorSybil(t *testing.T) {
+	observerP, _ := identity.NewPersona()
+	obsPub, obsPriv, _ := observerP.SignKeypair()
+
+	l := New()
+	ev, err := l.EmitSybilMisbehavior("group:alpha", []string{"p2", "p1"}, "inventory_cluster", nil, &Observer{
+		Author:     string(observerP.ID),
+		AuthorPub:  obsPub,
+		AuthorPriv: obsPriv,
+	})
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	if ev.Kind != KindMisbehaviorSybil {
+		t.Fatalf("unexpected kind: %q", ev.Kind)
+	}
+
+	var found Event
+	for _, e := range l.Snapshot().Events {
+		if e.ID == ev.ID {
+			found = e
+			break
+		}
+	}
+	if found.ID == "" {
+		t.Fatalf("expected emitted event present in snapshot")
+	}
+	raw, ok, err := DecodeInlinePayloadRef(found.PayloadRef, MaxInlinePayloadBytes)
+	if err != nil || !ok {
+		t.Fatalf("decode payload: ok=%v err=%v", ok, err)
+	}
+	var pl MisbehaviorSybilPayload
+	if err := json.Unmarshal(raw, &pl); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if pl.Reason != "inventory_cluster" || pl.Context != "group:alpha" {
+		t.Fatalf("unexpected payload: %#v", pl)
+	}
+	if len(pl.SuspectsKeyB64) != 2 {
+		t.Fatalf("unexpected suspects: %#v", pl.SuspectsKeyB64)
 	}
 }
 

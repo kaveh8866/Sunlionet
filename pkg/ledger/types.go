@@ -2,8 +2,10 @@ package ledger
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,6 +53,46 @@ type SignedEventInput struct {
 	PayloadRef string
 
 	CreatedAt time.Time
+
+	CreatedAtJitterMax time.Duration
+	CreatedAtBucket    time.Duration
+	Rand               ioRand
+}
+
+type ioRand func([]byte) error
+
+func cryptoRand(b []byte) error {
+	_, err := rand.Read(b)
+	return err
+}
+
+func randUint64(r ioRand) (uint64, error) {
+	var b [8]byte
+	if err := r(b[:]); err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint64(b[:]), nil
+}
+
+func obfuscateTime(t time.Time, jitterMax time.Duration, bucket time.Duration, r ioRand) time.Time {
+	if r == nil {
+		r = cryptoRand
+	}
+	if jitterMax > 0 {
+		maxNs := jitterMax.Nanoseconds()
+		if maxNs > 0 {
+			rn, err := randUint64(r)
+			if err == nil {
+				width := uint64(maxNs)*2 + 1
+				off := int64(rn%width) - maxNs
+				t = t.Add(time.Duration(off))
+			}
+		}
+	}
+	if bucket > 0 {
+		t = t.Truncate(bucket)
+	}
+	return t
 }
 
 func NewSignedEvent(in SignedEventInput) (Event, error) {
@@ -81,6 +123,9 @@ func NewSignedEvent(in SignedEventInput) (Event, error) {
 	createdAt := in.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now()
+	}
+	if in.CreatedAtJitterMax > 0 || in.CreatedAtBucket > 0 {
+		createdAt = obfuscateTime(createdAt, in.CreatedAtJitterMax, in.CreatedAtBucket, in.Rand)
 	}
 
 	var payloadHashB64 string
@@ -164,6 +209,58 @@ func (e *Event) Validate() error {
 		return fmt.Errorf("ledger: decode sig_b64url: %w", err)
 	}
 	return e.Verify()
+}
+
+func (e *Event) ValidateNoCrypto() error {
+	if e == nil {
+		return errors.New("ledger: event is nil")
+	}
+	if e.SchemaVersion != SchemaV1 {
+		return fmt.Errorf("ledger: unsupported schema version: %d", e.SchemaVersion)
+	}
+	if strings.TrimSpace(e.ID) == "" {
+		return errors.New("ledger: id required")
+	}
+	if e.CreatedAt <= 0 {
+		return errors.New("ledger: created_at required")
+	}
+	if strings.TrimSpace(e.Author) == "" {
+		return errors.New("ledger: author required")
+	}
+	if strings.TrimSpace(e.AuthorKeyB64) == "" {
+		return errors.New("ledger: author_key_b64url required")
+	}
+	if e.Seq == 0 {
+		return errors.New("ledger: seq must be >= 1")
+	}
+	if e.Seq == 1 && strings.TrimSpace(e.Prev) != "" {
+		return errors.New("ledger: prev must be empty for seq=1")
+	}
+	if e.Seq > 1 && strings.TrimSpace(e.Prev) == "" {
+		return errors.New("ledger: prev required for seq>1")
+	}
+	if len(e.Parents) > MaxParents {
+		return fmt.Errorf("ledger: too many parents: %d", len(e.Parents))
+	}
+	if strings.TrimSpace(e.Kind) == "" {
+		return errors.New("ledger: kind required")
+	}
+	if len(e.Kind) > MaxKindLen {
+		return fmt.Errorf("ledger: kind too long: %d", len(e.Kind))
+	}
+	if len(e.PayloadRef) > MaxRefLen {
+		return fmt.Errorf("ledger: payload_ref too long: %d", len(e.PayloadRef))
+	}
+	if strings.TrimSpace(e.SigB64) == "" {
+		return errors.New("ledger: sig_b64url required")
+	}
+	if _, err := e.AuthorPublicKey(); err != nil {
+		return err
+	}
+	if _, err := base64.RawURLEncoding.DecodeString(e.SigB64); err != nil {
+		return fmt.Errorf("ledger: decode sig_b64url: %w", err)
+	}
+	return nil
 }
 
 func (e *Event) AuthorPublicKey() (ed25519.PublicKey, error) {

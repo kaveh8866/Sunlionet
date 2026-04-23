@@ -61,6 +61,9 @@ type Config struct {
 	MaxViewEvents        int
 	MaxEnvelopeBytes     int
 	MaxGroupParticipants int
+
+	EventTimeBucket    time.Duration
+	EventTimeJitterMax time.Duration
 }
 
 type AgentPolicy struct {
@@ -91,6 +94,8 @@ type App struct {
 	maxViewEvents        int
 	maxEnvelopeBytes     int
 	maxGroupParticipants int
+	eventTimeBucket      time.Duration
+	eventTimeJitterMax   time.Duration
 	stats                appStats
 
 	mu sync.Mutex
@@ -155,6 +160,20 @@ func New(cfg Config) (*App, error) {
 	if maxGroupParticipants <= 0 {
 		maxGroupParticipants = DefaultMaxGroupParticipants
 	}
+	eventTimeBucket := cfg.EventTimeBucket
+	if eventTimeBucket == 0 {
+		eventTimeBucket = 5 * time.Minute
+	}
+	if eventTimeBucket < 0 {
+		eventTimeBucket = 0
+	}
+	eventTimeJitterMax := cfg.EventTimeJitterMax
+	if eventTimeJitterMax == 0 {
+		eventTimeJitterMax = 30 * time.Second
+	}
+	if eventTimeJitterMax < 0 {
+		eventTimeJitterMax = 0
+	}
 	return &App{
 		persona:              cfg.Persona,
 		ledger:               cfg.Ledger,
@@ -167,6 +186,8 @@ func New(cfg Config) (*App, error) {
 		maxViewEvents:        maxViewEvents,
 		maxEnvelopeBytes:     maxEnvelopeBytes,
 		maxGroupParticipants: maxGroupParticipants,
+		eventTimeBucket:      eventTimeBucket,
+		eventTimeJitterMax:   eventTimeJitterMax,
 	}, nil
 }
 
@@ -746,9 +767,9 @@ func (a *App) PublishAllEventsToRelay(ctx context.Context, r relay.Relay, mailbo
 
 func relayEventPriority(kind string) int {
 	switch strings.TrimSpace(kind) {
-	case ledger.KindIdentityRevoke, ledger.KindIdentityRotate:
+	case ledger.KindIdentityRevoke, ledger.KindIdentityRotate, ledger.KindIdentityIntroduce:
 		return 0
-	case ledger.KindMisbehaviorEquivoc, ledger.KindMisbehaviorReplay:
+	case ledger.KindMisbehaviorEquivoc, ledger.KindMisbehaviorReplay, ledger.KindMisbehaviorSybil:
 		return 1
 	case ledger.KindGroupMembership, ledger.KindGroupCreate, ledger.KindGroupJoin:
 		return 2
@@ -771,12 +792,17 @@ type RetentionPolicy struct {
 	MaxPayloadBytes     int64
 
 	MaxScanEvents int
+
+	LedgerMaxEvents    int
+	LedgerMaxAge       time.Duration
+	LedgerCriticalOnly bool
 }
 
 type RetentionReport struct {
 	ReferencedPayloadKeys int
 	ScannedEvents         int
 	Payloads              PruneReport
+	LedgerPruned          int
 }
 
 func (a *App) Prune(now time.Time, pol RetentionPolicy) (RetentionReport, error) {
@@ -792,6 +818,19 @@ func (a *App) Prune(now time.Time, pol RetentionPolicy) (RetentionReport, error)
 	maxScan := pol.MaxScanEvents
 	if maxScan <= 0 {
 		maxScan = 50000
+	}
+
+	ledgerPruned := 0
+	if a.ledger != nil && (pol.LedgerMaxEvents > 0 || pol.LedgerMaxAge > 0) {
+		n, err := a.ledger.ApplyRetention(now, ledger.RetentionPolicy{
+			MaxEvents:    pol.LedgerMaxEvents,
+			MaxAge:       pol.LedgerMaxAge,
+			CriticalOnly: pol.LedgerCriticalOnly,
+		})
+		if err != nil {
+			return RetentionReport{}, err
+		}
+		ledgerPruned = n
 	}
 
 	snap := a.ledger.Snapshot()
@@ -834,10 +873,16 @@ func (a *App) Prune(now time.Time, pol RetentionPolicy) (RetentionReport, error)
 		a.stats.payloadsPruned.Add(uint64(rep.Deleted))
 		a.stats.payloadBytesPruned.Add(uint64(rep.BytesDeleted))
 	}
+	if ledgerPruned > 0 && a.ledgerStore != nil {
+		if err := a.ledgerStore.Save(a.ledger.Snapshot()); err != nil {
+			return RetentionReport{}, err
+		}
+	}
 	return RetentionReport{
 		ReferencedPayloadKeys: len(keys),
 		ScannedEvents:         len(evs),
 		Payloads:              rep,
+		LedgerPruned:          ledgerPruned,
 	}, nil
 }
 
@@ -853,7 +898,9 @@ func (a *App) PullAndApplyFromRelay(ctx context.Context, r relay.Relay, mailbox 
 		return rep, n, err
 	}
 	if a.ledgerStore != nil {
-		_ = a.ledgerStore.Save(a.ledger.Snapshot())
+		if err := a.ledgerStore.Save(a.ledger.Snapshot()); err != nil {
+			return rep, n, err
+		}
 	}
 	return rep, n, nil
 }
@@ -976,6 +1023,13 @@ func (a *App) newSignedEventLocked(kind string, payload json.RawMessage, payload
 		Payload:    payload,
 		PayloadRef: payloadRef,
 		CreatedAt:  now,
+		Rand: func(b []byte) error {
+			_, err := rand.Read(b)
+			return err
+		},
+
+		CreatedAtJitterMax: a.eventTimeJitterMax,
+		CreatedAtBucket:    a.eventTimeBucket,
 	})
 }
 

@@ -510,6 +510,58 @@ func (s *SecurityLayer) WitnessWeight(peerID string, base int, now time.Time) in
 	return 0
 }
 
+func (s *SecurityLayer) PeerClusterKey(peerID string, now time.Time) string {
+	if s == nil || strings.TrimSpace(peerID) == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.ensurePeerLocked(peerID, "", now)
+	if !ps.quarantineUntil.IsZero() && now.Before(ps.quarantineUntil) {
+		return ""
+	}
+	if ps.score <= s.policy.MinScore {
+		return ""
+	}
+	return ps.lastInvDigest
+}
+
+func (s *SecurityLayer) InventoryClusterPeers(inv ledger.InventoryMessage, now time.Time) []string {
+	if s == nil {
+		return nil
+	}
+	digest := inventoryDigest(inv)
+	if digest == "" {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cutoff := now.Add(-s.policy.InventoryWindow)
+	for d, peers := range s.invSeen {
+		for id, ts := range peers {
+			if ts.Before(cutoff) {
+				delete(peers, id)
+			}
+		}
+		if len(peers) == 0 {
+			delete(s.invSeen, d)
+		}
+	}
+
+	peers := s.invSeen[digest]
+	if len(peers) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(peers))
+	for id := range peers {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func inventoryDigest(inv ledger.InventoryMessage) string {
 	heads := append([]string(nil), inv.Heads...)
 	have := append([]string(nil), inv.Have...)

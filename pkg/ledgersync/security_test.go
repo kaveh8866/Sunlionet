@@ -47,6 +47,27 @@ func TestSecurityLayer_InventoryClusterDefer(t *testing.T) {
 	}
 }
 
+func TestSecurityLayer_InventoryClusterPeers(t *testing.T) {
+	pol := DefaultSecurityPolicy()
+	pol.InventoryClusterThreshold = 3
+	sec := NewSecurityLayer(pol)
+	now := time.Now()
+
+	inv := ledger.InventoryMessage{
+		SchemaVersion: ledger.SyncSchemaV1,
+		Heads:         []string{"h1", "h2"},
+		Have:          []string{"e1", "e2"},
+	}
+	sec.ObserveInventory("p1", PeerRoleNormal, inv, now)
+	sec.ObserveInventory("p2", PeerRoleNormal, inv, now.Add(time.Second))
+	sec.ObserveInventory("p3", PeerRoleNormal, inv, now.Add(2*time.Second))
+
+	got := sec.InventoryClusterPeers(inv, now.Add(2*time.Second))
+	if len(got) != 3 || got[0] != "p1" || got[1] != "p2" || got[2] != "p3" {
+		t.Fatalf("unexpected peers: %#v", got)
+	}
+}
+
 func TestSecurityLayer_WarmupAndTrustUpgrade(t *testing.T) {
 	sec := NewSecurityLayer(DefaultSecurityPolicy())
 	now := time.Now()
