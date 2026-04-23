@@ -846,14 +846,14 @@ func kindPriority(kind string) int {
 		return 0
 	case KindMisbehaviorEquivoc, KindMisbehaviorReplay, KindMisbehaviorSybil:
 		return 1
-	case KindGroupMembership, KindGroupCreate, KindGroupJoin:
-		return 2
-	case KindAgentAction:
-		return 3
-	case KindChatMessage:
-		return 4
 	case KindWitnessCheckpoint, KindWitnessAttest:
-		return 6
+		return 2
+	case KindGroupMembership, KindGroupCreate, KindGroupJoin:
+		return 3
+	case KindAgentAction:
+		return 4
+	case KindChatMessage:
+		return 5
 	case KindSyncSummary, KindLedgerEvent:
 		return 7
 	default:
