@@ -98,6 +98,13 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Set website build metadata
+        shell: bash
+        run: |
+          echo "NEXT_PUBLIC_REPO_URL=https://github.com/${GITHUB_REPOSITORY}" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_GIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_GIT_AUTHOR=$(git log -1 --pretty=format:%an)" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_GIT_COMMIT_TIMESTAMP=$(git log -1 --pretty=format:%cI)" >> "$GITHUB_ENV"
       - name: Build static export
         run: npm run build
 
