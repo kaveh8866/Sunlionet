@@ -53,6 +53,15 @@ function splitInline(text: string, baseSlug: string[], basePrefix?: string, rout
       const lm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
       if (lm) {
         const href = resolveHref(lm[2], baseSlug, basePrefix, routeBase);
+        if (href.toLowerCase().startsWith("file:")) {
+          parts.push(
+            <span key={`${m.index}-link`} className="text-muted-foreground">
+              {lm[1]}
+            </span>,
+          );
+          last = m.index + token.length;
+          continue;
+        }
         parts.push(
           <a key={`${m.index}-link`} href={href} className="hover:text-foreground transition-colors">
             {lm[1]}
@@ -75,6 +84,7 @@ function splitInline(text: string, baseSlug: string[], basePrefix?: string, rout
 function resolveHref(href: string, baseSlug: string[], basePrefix?: string, routeBase?: string) {
   const trimmed = href.trim();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  if (trimmed.toLowerCase().startsWith("file:")) return trimmed;
   if (trimmed.startsWith("#")) return trimmed;
   if (trimmed.startsWith("/")) return trimmed;
 

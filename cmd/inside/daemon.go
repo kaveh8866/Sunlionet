@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -61,8 +62,9 @@ func main() {
 
 	log.Println("=== Starting SunLionet Autonomous Agent ===")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Use a signal-derived context to avoid a leaked goroutine and to ensure all child loops observe shutdown.
+	ctx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
 
 	if storePath == "/var/lib/sunlionet/store.enc" {
 		if _, err := os.Stat(storePath); err != nil {
@@ -81,19 +83,15 @@ func main() {
 
 	if masterKeyArg == "" {
 		masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
-		if masterKeyArg == "" {
-			masterKeyArg = os.Getenv("SUNLIONET_MASTER_KEY")
-		}
 	}
 	if relayURL == "" {
 		relayURL = os.Getenv("SUNLIONET_RELAY_URL")
-		if relayURL == "" {
-			relayURL = os.Getenv("SUNLIONET_RELAY_URL")
-		}
 	}
+	relayURL = strings.TrimSpace(relayURL)
+
 	masterKey, err := profile.ParseMasterKey(masterKeyArg)
 	if err != nil {
-		log.Fatalf("Missing or invalid master key: %v (set --master-key, SUNLIONET_MASTER_KEY, or SUNLIONET_MASTER_KEY)", err)
+		log.Fatalf("Missing or invalid master key: %v (set --master-key or SUNLIONET_MASTER_KEY)", err)
 	}
 
 	// 1. Initialize Encrypted Store
@@ -114,15 +112,6 @@ func main() {
 
 	// 5. Initialize Anomaly Channel
 	anomalyChan := make(chan detector.Event, 100)
-
-	// Start OS Signal listener for graceful shutdown
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		log.Println("Received termination signal. Shutting down gracefully...")
-		cancel()
-	}()
 
 	// Start Rotation Manager in background
 	go rotationMgr.Start(ctx, anomalyChan)
@@ -187,18 +176,24 @@ func main() {
 				rclient := relay.NewHTTPClient(relayURL)
 				var idMu sync.Mutex
 				for i := range idState.Personas {
-					personaID := idState.Personas[i].ID
 					persona := idState.Personas[i]
+					personaID := persona.ID
 					b, created, err := idState.EnsureMailboxBinding(personaID)
 					if err != nil {
 						log.Printf("Mailbox binding init failed for persona %s: %v", personaID, err)
 						continue
 					}
 					if created {
-						_ = idStore.Save(idState)
+						if err := idStore.Save(idState); err != nil {
+							log.Printf("Mailbox binding save failed for persona %s: %v", personaID, err)
+						}
 					}
 					binding := *b
-					go runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, chatSvc, ledgerStore, ledgerSvc, &persona, personaID, binding, mailboxRotationSec, decoyMailboxCount)
+					// Build a per-persona starter closure to avoid capturing the loop variable by reference.
+					start := makePersonaStarter(persona, personaID, binding, func(persona *identity.Persona, personaID identity.PersonaID, binding identity.MailboxBinding) {
+						runPersonaPollerRotationLoop(ctx, rclient, idStore, idState, &idMu, chatSvc, ledgerStore, ledgerSvc, persona, personaID, binding, mailboxRotationSec, decoyMailboxCount)
+					})
+					go start()
 				}
 			}
 		}
@@ -228,6 +223,12 @@ func main() {
 		case <-ticker.C:
 			runDetectionSuite(anomalyChan)
 		}
+	}
+}
+
+func makePersonaStarter(persona identity.Persona, personaID identity.PersonaID, binding identity.MailboxBinding, start func(persona *identity.Persona, personaID identity.PersonaID, binding identity.MailboxBinding)) func() {
+	return func() {
+		start(&persona, personaID, binding)
 	}
 }
 
@@ -347,14 +348,20 @@ func runPersonaPollerRotationLoop(
 		select {
 		case <-ctx.Done():
 			cancel()
-			<-errCh
+			select {
+			case <-errCh:
+			case <-time.After(10 * time.Second):
+			}
 			if shaped != nil {
 				_ = shaped.Close()
 			}
 			return
 		case <-time.After(sleepDur):
 			cancel()
-			<-errCh
+			select {
+			case <-errCh:
+			case <-time.After(10 * time.Second):
+			}
 			if shaped != nil {
 				_ = shaped.Close()
 			}
@@ -371,41 +378,56 @@ func handleRelayMessages(ctx context.Context, r relay.Relay, store *identity.Sto
 	if store == nil || state == nil || len(msgs) == 0 {
 		return
 	}
+	// Snapshot prekeys under the shared lock, then decrypt without holding the lock to reduce contention.
+	mu.Lock()
+	preKeys := append([]identity.PreKey(nil), state.PreKeys...)
+	mu.Unlock()
+
+	decoded := make([][32]byte, 0, len(preKeys))
+	for i := range preKeys {
+		priv, err := preKeys[i].DecodePrivate()
+		if err != nil {
+			continue
+		}
+		decoded = append(decoded, priv)
+	}
+
 	for mi := range msgs {
 		envStr := string(msgs[mi].Envelope)
+		if len(envStr) > 64*1024 {
+			continue
+		}
 		env, err := messaging.DecodeEnvelope(envStr)
 		if err != nil {
 			continue
 		}
 		var plaintext []byte
-		mu.Lock()
-		for i := range state.PreKeys {
-			priv, err := state.PreKeys[i].DecodePrivate()
-			if err != nil {
-				continue
-			}
-			pt, _, err := messaging.DecryptWithPreKey(env, priv)
+		for i := range decoded {
+			pt, _, err := messaging.DecryptWithPreKey(env, decoded[i])
 			if err != nil {
 				continue
 			}
 			plaintext = pt
 			break
 		}
-		mu.Unlock()
 		handledByLedger := false
 		if ledgerSvc != nil && ledgerStore != nil && len(plaintext) > 0 {
-			peerID := "relay:" + string(msgs[mi].Mailbox)
-			ok, rep, _ := ledgerSvc.TryApplyWirePlaintext(peerID, plaintext)
+			peerID := "relay:" + string(personaID) + ":" + string(msgs[mi].Mailbox)
+			ok, rep, err := ledgerSvc.TryApplyWirePlaintext(peerID, plaintext)
+			if err != nil {
+				log.Printf("Ledger apply failed for peer %s: %v", peerID, err)
+			}
 			handledByLedger = ok
 			if rep.Applied > 0 && ledgerSvc.Ledger() != nil {
-				_ = ledgerStore.Save(ledgerSvc.Ledger().Snapshot())
+				if err := ledgerStore.Save(ledgerSvc.Ledger().Snapshot()); err != nil {
+					log.Printf("Ledger store save failed: %v", err)
+				}
 			}
 		}
 		if !handledByLedger && chatSvc != nil && persona != nil && len(plaintext) > 0 {
 			_ = chatSvc.ApplyIncomingWithRelay(ctx, r, persona, msgs[mi], envStr, plaintext)
 		}
 	}
-	_ = personaID
 }
 
 type nullMesh struct{}
@@ -422,21 +444,21 @@ func runDetectionSuite(anomalies chan<- detector.Event) {
 	// Passive check (virtually instant, 0 network overhead)
 	retransRatio, err := detector.PassiveTCPStats()
 	if err == nil && retransRatio > 0.20 {
-		anomalies <- detector.Event{
+		sendAnomaly(anomalies, detector.Event{
 			Type:      "HIGH_RETRANSMISSION",
 			Severity:  "medium",
 			Timestamp: time.Now(),
-		}
+		})
 	}
 
 	// Active check 1: Baseline Ping
 	ok, err := detector.CheckConnectivityBaseline()
 	if !ok {
-		anomalies <- detector.Event{
+		sendAnomaly(anomalies, detector.Event{
 			Type:      "TOTAL_BLACKOUT_SUSPECTED",
 			Severity:  "critical",
 			Timestamp: time.Now(),
-		}
+		})
 		return // Skip further checks if gateway is unreachable
 	}
 
@@ -444,20 +466,27 @@ func runDetectionSuite(anomalies chan<- detector.Event) {
 	// In a real system, we check rm.currentConfig.Protocol
 	sniBlocked, _ := detector.CheckSNIReset("www.apple.com", "1.1.1.1")
 	if sniBlocked {
-		anomalies <- detector.Event{
+		sendAnomaly(anomalies, detector.Event{
 			Type:      "SNI_BLOCK_SUSPECTED",
 			Severity:  "high",
 			Timestamp: time.Now(),
-		}
+		})
 	}
 
 	// Active check 3: UDP Dropping (only if current outbound is UDP/Hysteria)
 	udpBlocked, _ := detector.CheckUDPBlocked("1.1.1.1:53")
 	if udpBlocked {
-		anomalies <- detector.Event{
+		sendAnomaly(anomalies, detector.Event{
 			Type:      "UDP_BLOCK_SUSPECTED",
 			Severity:  "high",
 			Timestamp: time.Now(),
-		}
+		})
+	}
+}
+
+func sendAnomaly(anomalies chan<- detector.Event, ev detector.Event) {
+	select {
+	case anomalies <- ev:
+	default:
 	}
 }

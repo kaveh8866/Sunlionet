@@ -37,7 +37,7 @@ Removed `InsecureSkipVerify` so the client uses normal certificate verification.
 
 **Code**
 
-- [dpi.go](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/pkg/detector/dpi.go)
+- [dpi.go](pkg/detector/dpi.go)
 
 ### 2) Uncontrolled data used in filesystem paths (High)
 
@@ -52,8 +52,8 @@ The file-backed relay used user-controlled identifiers in path construction. Eve
 
 **Code**
 
-- [file_relay.go](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/pkg/relay/file_relay.go)
-- [types.go](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/pkg/relay/types.go)
+- [file_relay.go](pkg/relay/file_relay.go)
+- [types.go](pkg/relay/types.go)
 
 ### 3) Potential logging of sensitive information (High)
 
@@ -67,7 +67,7 @@ Sanitized logging to avoid printing raw errors in sensitive paths.
 
 **Code**
 
-- [rotation.go](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/pkg/policy/rotation.go)
+- [rotation.go](pkg/policy/rotation.go)
 
 ### 4) Missing security headers / access control hardening (Medium)
 
@@ -82,14 +82,14 @@ Public-facing HTTP endpoints should provide baseline security headers and option
 
 **Code**
 
-- [http_server.go](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/pkg/relay/http_server.go)
-- [next.config.ts](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/next.config.ts)
+- [http_server.go](pkg/relay/http_server.go)
+- [next.config.ts](website/next.config.ts)
 
 ## Web Security Review (Next.js)
 
 - No SQL usage detected in the website code.
 - No uses of `dangerouslySetInnerHTML` with user-controlled input; the single instance is a static theme initialization script:
-  - [ThemeInitScript.tsx](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/src/components/ThemeInitScript.tsx)
+  - [ThemeInitScript.tsx](website/src/components/ThemeInitScript.tsx)
 - Added baseline headers at the framework level (frame-ancestors, object-src, nosniff, deny framing).
 
 ## Dependency Security

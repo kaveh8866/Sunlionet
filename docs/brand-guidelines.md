@@ -2,15 +2,15 @@
 
 ## Sources (do not edit)
 
-- [Brandkit/sunlionet.png](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/Brandkit/sunlionet.png)
-- [Brandkit/Sunlionet.ico](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/Brandkit/Sunlionet.ico)
+- [Brandkit/sunlionet.png](Brandkit/sunlionet.png)
+- [Brandkit/Sunlionet.ico](Brandkit/Sunlionet.ico)
 
 ## Generated outputs
 
 Canonical outputs are generated from `Brandkit/sunlionet.png` into:
 
-- [assets/brand](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/assets/brand)
-- [website/public/brand](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/public/brand)
+- https://github.com/kaveh8866/Sunlionet/tree/main/assets/brand
+- https://github.com/kaveh8866/Sunlionet/tree/main/website/public/brand
 
 Variants:
 
@@ -24,15 +24,14 @@ Sizes:
 
 Web entrypoints:
 
-- [website/src/app/favicon.ico](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/src/app/favicon.ico)
-- [website/src/app/icon.png](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/src/app/icon.png)
-- [website/public/favicon.ico](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/website/public/favicon.ico)
+- [website/src/app/icon.png](website/src/app/icon.png)
+- [website/public/favicon.ico](website/public/favicon.ico)
 
 Android entrypoints:
 
-- [AndroidManifest.xml](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/android/app/src/main/AndroidManifest.xml) uses:
-  - [ic_launcher.png](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/android/app/src/main/res/mipmap-mdpi/ic_launcher.png)
-  - [ic_launcher_round.png](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png)
+- [AndroidManifest.xml](android/app/src/main/AndroidManifest.xml) uses:
+  - [ic_launcher.png](android/app/src/main/res/mipmap-mdpi/ic_launcher.png)
+  - [ic_launcher_round.png](android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png)
 
 ## Regeneration
 
@@ -44,7 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\generate_brand_ass
 
 Script:
 
-- [generate_brand_assets.ps1](file:///c:/Users/Kaveh/Desktop/Iran-Agent-Vpn/scripts/generate_brand_assets.ps1)
+- [generate_brand_assets.ps1](scripts/generate_brand_assets.ps1)
 
 ## Checksums (SHA-256)
 

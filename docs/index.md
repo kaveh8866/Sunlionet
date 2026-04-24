@@ -9,7 +9,7 @@ SunLionet is an offline-first, bundle-based privacy and resilient communication 
 Migration note: this repository is still named `SUNLIONET-agent` during the transition, so some internal identifiers may still use legacy `SUNLIONET-*` naming.
 
 - English docs: this site
-- فارسی: [صفحه فارسی](fa/index.md)
+- فارسی: [صفحه فارسی](/fa/docs)
 
 ## Inside vs Outside
 

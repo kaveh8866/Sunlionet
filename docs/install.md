@@ -33,7 +33,7 @@ For the full Linux-first MVP flow (bundle import, profile selection, config rend
 
 - Go 1.25+
 
-This repository pins its Go toolchain in [go.mod](file:///C:/Users/Kaveh/Desktop/Iran-Agent-Vpn/go.mod) via `toolchain`. If your local Go supports toolchains, `go` will auto-download the pinned version.
+This repository pins its Go toolchain in [go.mod](go.mod) via `toolchain`. If your local Go supports toolchains, `go` will auto-download the pinned version.
 
 Optional tools:
 
