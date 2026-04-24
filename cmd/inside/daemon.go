@@ -1,5 +1,4 @@
-//go:build inside && daemon
-// +build inside,daemon
+//go:build daemon
 
 package main
 
@@ -341,10 +340,7 @@ func runPersonaPollerRotationLoop(
 		}
 		go func() { errCh <- p.Run(childCtx) }()
 
-		sleepDur := time.Until(nextRotateAt)
-		if sleepDur < 1*time.Second {
-			sleepDur = 1 * time.Second
-		}
+		sleepDur := max(time.Until(nextRotateAt), 1*time.Second)
 		select {
 		case <-ctx.Done():
 			cancel()

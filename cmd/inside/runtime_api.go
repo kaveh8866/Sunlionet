@@ -1,3 +1,5 @@
+//go:build !daemon
+
 package main
 
 import (
@@ -226,20 +228,7 @@ func (s *runtimeStore) eventsJSON() ([]byte, error) {
 	return json.Marshal(s.events.recent(0))
 }
 
-func startRuntimeAPIServer(ctx context.Context, addr string, store *runtimeStore) (*http.Server, error) {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return nil, fmt.Errorf("missing runtime api addr")
-	}
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid runtime api addr %q (expected host:port): %w", addr, err)
-	}
-	host = strings.TrimSpace(host)
-	if host != "127.0.0.1" && host != "localhost" {
-		return nil, fmt.Errorf("runtime api must bind to localhost only, got host=%q", host)
-	}
-
+func runtimeAPIMux(store *runtimeStore) http.Handler {
 	mux := http.NewServeMux()
 
 	writeJSON := func(w http.ResponseWriter, body []byte) {
@@ -335,9 +324,26 @@ func startRuntimeAPIServer(ctx context.Context, addr string, store *runtimeStore
 		}
 	})
 
+	return mux
+}
+
+func startRuntimeAPIServer(ctx context.Context, addr string, store *runtimeStore) (*http.Server, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return nil, fmt.Errorf("missing runtime api addr")
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid runtime api addr %q (expected host:port): %w", addr, err)
+	}
+	host = strings.TrimSpace(host)
+	if host != "127.0.0.1" && host != "localhost" {
+		return nil, fmt.Errorf("runtime api must bind to localhost only, got host=%q", host)
+	}
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           runtimeAPIMux(store),
 		ReadHeaderTimeout: 2 * time.Second,
 	}
 

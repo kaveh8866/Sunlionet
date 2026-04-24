@@ -1,30 +1,23 @@
+//go:build !daemon
+
 package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestRuntimeEventsStreamSSE(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	store := newRuntimeStore("real")
-	srv, err := startRuntimeAPIServer(ctx, "127.0.0.1:0", store)
-	if err != nil {
-		t.Fatalf("startRuntimeAPIServer: %v", err)
-	}
-	defer func() {
-		cancel()
-		_ = srv.Close()
-	}()
+	ts := httptest.NewServer(runtimeAPIMux(store))
+	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, "http://"+srv.Addr+"/api/events/stream", nil)
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/events/stream", nil)
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}

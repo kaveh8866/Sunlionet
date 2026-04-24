@@ -1,5 +1,4 @@
-//go:build inside && daemon
-// +build inside,daemon
+//go:build daemon
 
 package main
 
@@ -80,4 +79,3 @@ func TestSendAnomaly_DoesNotBlockWhenFull(t *testing.T) {
 		t.Fatalf("expected channel size to remain 1, got %d", got)
 	}
 }
-
