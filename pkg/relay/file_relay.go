@@ -192,13 +192,25 @@ func (r *FileRelay) Ack(ctx context.Context, req AckRequest) error {
 	_ = r.pruneLocked(now)
 
 	dir := r.mailboxDir(req.Mailbox)
+	dirAbs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
 	for i := range req.IDs {
 		id := req.IDs[i]
 		if err := validateMessageID(id); err != nil {
 			continue
 		}
-		p := filepath.Join(dir, messageFileName(id))
-		_ = os.Remove(p)
+		p := filepath.Join(dirAbs, messageFileName(id))
+		pAbs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(dirAbs, pAbs)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+			continue
+		}
+		_ = os.Remove(pAbs)
 	}
 	return nil
 }
