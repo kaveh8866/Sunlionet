@@ -13,6 +13,11 @@ import (
 	"sync"
 )
 
+var (
+	ErrCorruptAdaptiveStore     = errors.New("policy: corrupt adaptive store")
+	ErrDecryptionFailedAdaptive = errors.New("policy: adaptive store decryption failed")
+)
+
 type AdaptiveStore struct {
 	path string
 	key  []byte
@@ -81,12 +86,12 @@ func (s *AdaptiveStore) Load() (*AdaptiveState, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("malformed adaptive store ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptAdaptiveStore)
 	}
 	nonce, enc := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, enc, nil)
 	if err != nil {
-		return nil, fmt.Errorf("adaptive store decrypt failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailedAdaptive, err)
 	}
 
 	var snapshot AdaptiveStateDisk
@@ -101,6 +106,21 @@ func (s *AdaptiveStore) Load() (*AdaptiveState, error) {
 func (s *AdaptiveStore) Reset() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (s *AdaptiveStore) WipeOnSuspicion() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.key {
+		s.key[i] = 0
+	}
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

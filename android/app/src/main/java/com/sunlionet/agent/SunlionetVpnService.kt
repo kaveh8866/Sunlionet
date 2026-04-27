@@ -10,7 +10,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
 
-class SUNLIONETVpnService : VpnService() {
+class SunlionetVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private lateinit var repo: StateRepository
     private lateinit var secure: SecureStore

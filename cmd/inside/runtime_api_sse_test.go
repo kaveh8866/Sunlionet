@@ -4,40 +4,66 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
+type streamingRecorder struct {
+	mu     sync.Mutex
+	header http.Header
+	code   int
+	body   bytes.Buffer
+}
+
+func newStreamingRecorder() *streamingRecorder {
+	return &streamingRecorder{header: make(http.Header), code: http.StatusOK}
+}
+
+func (r *streamingRecorder) Header() http.Header { return r.header }
+
+func (r *streamingRecorder) WriteHeader(code int) { r.code = code }
+
+func (r *streamingRecorder) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.body.Write(p)
+}
+
+func (r *streamingRecorder) Flush() {}
+
+func (r *streamingRecorder) BodyString() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.body.String()
+}
+
 func TestRuntimeEventsStreamSSE(t *testing.T) {
 	store := newRuntimeStore("real")
-	ts := httptest.NewServer(runtimeAPIMux(store))
-	defer ts.Close()
+	h := runtimeAPIMux(store)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/events/stream", nil)
-	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
-	}
-	resp, err := (&http.Client{}).Do(req)
-	if err != nil {
-		t.Fatalf("GET stream: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status=%d", resp.StatusCode)
-	}
+	req := httptest.NewRequest(http.MethodGet, "http://example/api/events/stream", nil).WithContext(ctx)
+	rec := newStreamingRecorder()
+	done := make(chan struct{})
+
+	go func() {
+		h.ServeHTTP(rec, req)
+		close(done)
+	}()
 
 	go func() {
 		time.Sleep(25 * time.Millisecond)
 		store.addEvent("PROFILE_SWITCH", "Selected profile reality-1", map[string]interface{}{"selected": "reality-1"})
 		store.addEvent("CONNECTION_FAIL", "HTTP probe failed", map[string]interface{}{"profile": "reality-1", "reason": "DNS_FAILURE"})
 	}()
-
-	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 1024), 1024*1024)
 
 	want := []string{"PROFILE_SWITCH", "CONNECTION_FAIL"}
 	got := make([]string, 0, len(want))
@@ -51,23 +77,31 @@ func TestRuntimeEventsStreamSSE(t *testing.T) {
 			t.Fatalf("timeout waiting for events, got=%v", got)
 		default:
 		}
-		if !sc.Scan() {
-			if err := sc.Err(); err != nil {
-				t.Fatalf("scan: %v", err)
+
+		body := rec.BodyString()
+		sc := bufio.NewScanner(strings.NewReader(body))
+		sc.Buffer(make([]byte, 0, 1024), 1024*1024)
+		got = got[:0]
+		for sc.Scan() {
+			line := sc.Text()
+			if !strings.HasPrefix(line, "data: ") {
+				continue
 			}
-			t.Fatalf("stream closed early, got=%v", got)
+			raw := strings.TrimPrefix(line, "data: ")
+			var ev RuntimeEvent
+			if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+				t.Fatalf("unmarshal event: %v raw=%q", err, raw)
+			}
+			got = append(got, ev.Type)
+			if len(got) >= len(want) {
+				break
+			}
 		}
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		raw := strings.TrimPrefix(line, "data: ")
-		var ev RuntimeEvent
-		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-			t.Fatalf("unmarshal event: %v raw=%q", err, raw)
-		}
-		got = append(got, ev.Type)
+		time.Sleep(10 * time.Millisecond)
 	}
+
+	cancel()
+	<-done
 
 	for i := range want {
 		if got[i] != want[i] {

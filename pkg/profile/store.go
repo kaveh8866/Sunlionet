@@ -16,6 +16,11 @@ import (
 	"sync"
 )
 
+var (
+	ErrCorruptStore     = errors.New("profile: corrupt store")
+	ErrDecryptionFailed = errors.New("profile: decryption failed")
+)
+
 // Store represents an encrypted local store for seed configs and recent events.
 // Real implementations would use SQLCipher (SQLite) or `age`.
 // This mock uses AES-GCM for encrypted JSON storage on disk.
@@ -162,13 +167,13 @@ func (s *Store) Load() ([]Profile, error) {
 	}
 
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 
 	nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decryption failed (wrong key or corrupted data): %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 
 	var profiles []Profile

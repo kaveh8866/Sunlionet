@@ -100,9 +100,9 @@ class MainActivity : AppCompatActivity() {
                 out.outputStream().use { output -> input.copyTo(output) }
             }
             requestImportBundle(out)
-            Logs.add("[ui] import requested: ${out.absolutePath}")
+            Logs.add("[ui] import requested")
         }.onFailure {
-            Logs.add("[ui] import failed: ${it.message}")
+            Logs.add("[ui] import failed")
         }
     }
 
@@ -113,6 +113,9 @@ class MainActivity : AppCompatActivity() {
         RuntimeSignals.init(this)
         repo = StateRepository(this)
         secure = SecureStore(this)
+        if (!secure.isAvailable()) {
+            showSecureStoreErrorDialog()
+        }
         secure.ensureDefaultTrustAnchors()
         diagnostics = DiagnosticsStore(this)
         statusDot = findViewById(R.id.statusDot)
@@ -227,6 +230,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showSecureStoreErrorDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.secure_storage_error_title))
+            .setMessage(getString(R.string.secure_storage_error_message))
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.reset)) { _, _ ->
+                secure.reset(this)
+                finish()
+                startActivity(intent)
+            }
+            .setNegativeButton(getString(R.string.exit)) { _, _ ->
+                finish()
+            }
+            .show()
+    }
+
     private fun requestVpnAndConnect() {
         val intent = VpnService.prepare(this)
         if (intent != null) {
@@ -332,8 +351,8 @@ class MainActivity : AppCompatActivity() {
                 lastErrorDetails = "",
             ),
         )
-        val vpnIntent = Intent(this, SUNLIONETVpnService::class.java).apply {
-            action = SUNLIONETVpnService.ACTION_START
+        val vpnIntent = Intent(this, SunlionetVpnService::class.java).apply {
+            action = SunlionetVpnService.ACTION_START
         }
         startForegroundService(vpnIntent)
 
@@ -347,7 +366,7 @@ class MainActivity : AppCompatActivity() {
     private fun disconnect() {
         secure.setDesiredConnected(false)
         startService(Intent(this, AgentService::class.java).apply { action = AgentService.ACTION_STOP })
-        startService(Intent(this, SUNLIONETVpnService::class.java).apply { action = SUNLIONETVpnService.ACTION_STOP })
+        startService(Intent(this, SunlionetVpnService::class.java).apply { action = SunlionetVpnService.ACTION_STOP })
         repo.save(UiState(status = "Disconnected", currentProfile = "-", lastAction = "manual stop"))
         Logs.add("[ui] disconnect requested")
     }
@@ -399,7 +418,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasBundle(): Boolean {
         val f = File(filesDir, "state/profiles.enc")
-        return f.exists() && f.length() > 0
+        // An encrypted bundle has at least 32 bytes of overhead (salt, nonce, tag, etc.)
+        // Plus actual profile data. 64 bytes is a safe minimum for a "non-empty" config.
+        return f.exists() && f.length() >= 64
     }
 
     private fun importFromText(text: String, source: String) {
@@ -550,8 +571,8 @@ class MainActivity : AppCompatActivity() {
         panelAdvanced.visibility = if (advanced) View.VISIBLE else View.GONE
         buttonAdvanced.text = if (advanced) getString(R.string.hide_advanced) else getString(R.string.show_advanced)
 
-        textProfile.text = "Profile: ${st.currentProfile}"
-        textAction.text = "Last action: ${st.lastAction}"
+        textProfile.text = getString(R.string.profile_none).replace("-", st.currentProfile)
+        textAction.text = getString(R.string.action_none).replace("-", st.lastAction)
 
         buttonToggle.text = when {
             desired -> getString(R.string.disconnect)

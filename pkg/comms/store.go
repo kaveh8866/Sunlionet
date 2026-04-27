@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+var (
+	ErrCorruptStore     = errors.New("comms: corrupt store")
+	ErrDecryptionFailed = errors.New("comms: decryption failed")
+)
+
 // Store keeps communication metadata encrypted on disk (AES-256-GCM).
 type Store struct {
 	dbPath string
@@ -87,13 +92,13 @@ func (s *Store) Load(defaultRole DeviceRole) (*State, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("comms: malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 
 	nonce, body := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("comms: decryption failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 
 	var state State

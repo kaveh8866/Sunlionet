@@ -33,8 +33,11 @@ Migration note: this repository is still named `SUNLIONET-agent` during the tran
 - Signal protocol: [signal.md](signal.md)
 - Threat model: [threat-model.md](threat-model.md)
 - Security boundaries: [security/boundaries.md](security/boundaries.md)
+- Security audit checklist (engineering): [security/checklist.md](security/checklist.md)
 - Release blockers: [release/checklist.md](release/checklist.md)
+- Pi orchestrator integration (local, optional): [orchestrator/pi-integration.md](orchestrator/pi-integration.md)
 - LLM setup notes: [LLM_SETUP.md](LLM_SETUP.md)
+- Local skills and experiments (non-release): [web/phase6-blockchain-skills-installation.md](web/phase6-blockchain-skills-installation.md)
 
 ## Reports
 

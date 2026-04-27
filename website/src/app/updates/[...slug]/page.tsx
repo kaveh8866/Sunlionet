@@ -12,22 +12,15 @@ export async function generateStaticParams() {
   return en.map((e) => ({ slug: e.slug }));
 }
 
-export default async function UpdatePage({
-  params,
-  basePrefix,
-}: {
-  params: Promise<{ slug: string[] }>;
-  basePrefix?: string;
-}) {
+export default async function Page({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const resolvedBase = basePrefix?.trim() ? basePrefix : "";
-  const isFa = resolvedBase === "/fa";
-  const lang = isFa ? "fa" : "en";
+  const resolvedBase = "";
+  const isFa = false;
+  const lang = "en";
 
   const direct = await readContentMarkdownBySlug("updates", lang, slug);
-  const fallback = direct ? null : isFa ? await readContentMarkdownBySlug("updates", "en", slug) : null;
-  const usedEnglishFallback = Boolean(fallback && !direct);
-  const resolved = direct ?? fallback;
+  const usedEnglishFallback = false;
+  const resolved = direct;
 
   if (!resolved) notFound();
 
@@ -51,7 +44,7 @@ export default async function UpdatePage({
 
       <PageHeader title={resolved.entry.title} />
 
-      <article className="docs-prose min-w-0" lang={lang === "fa" ? "fa" : undefined} dir={lang === "fa" ? "rtl" : undefined}>
+      <article className="docs-prose min-w-0">
         {rendered.nodes}
       </article>
     </div>

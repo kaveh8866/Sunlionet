@@ -11,6 +11,7 @@ import android.net.Network
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.sunlionet.agent.proximity.ProximityController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,6 +26,7 @@ class AgentService : Service() {
     private lateinit var controller: SingBoxController
     private lateinit var repo: StateRepository
     private lateinit var secure: SecureStore
+    private var proximity: ProximityController? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     private var restartAttempts = 0
     private var probeFailureCount = 0
@@ -39,6 +41,7 @@ class AgentService : Service() {
         controller = SingBoxController(this)
         repo = StateRepository(this)
         secure = SecureStore(this)
+        proximity = ProximityController(this)
         secure.ensureDefaultTrustAnchors()
         registerNetworkSwitchMonitor()
     }
@@ -89,6 +92,7 @@ class AgentService : Service() {
             return
         }
         Logs.i("agent", "started")
+        proximity?.start()
         monitorJob?.cancel()
         monitorJob = scope.launch {
             while (isActive) {
@@ -143,16 +147,20 @@ class AgentService : Service() {
 
                 if (controller.isRunning()) {
                     val now = System.currentTimeMillis()
-                    if (now - lastProbeAtMs >= 30_000) {
+                    val probeInterval = if (probeFailureCount > 5) 120_000L else 30_000L
+                    if (now - lastProbeAtMs >= probeInterval) {
                         lastProbeAtMs = now
-                        repo.save(merged.copy(lastAction = "Testing connection…"))
+                        val currentUi = repo.load()
+                        if (currentUi.status != "Error") {
+                            repo.save(currentUi.copy(lastAction = "Testing connection…"))
+                        }
                         Logs.i("connection", "testing url=https://example.com")
                         val pr = ConnectionProbe.probeHttpViaVpn(this@AgentService, "https://example.com", timeoutMs = 10_000)
                         if (pr.status == "ok") {
                             probeFailureCount = 0
                             bridgeFailureCount = 0
                             repo.save(
-                                merged.copy(
+                                currentUi.copy(
                                     status = "Connected",
                                     lastAction = "Connected",
                                     lastError = "",
@@ -168,16 +176,20 @@ class AgentService : Service() {
                                 success = false,
                             )
                             val mapped = mapProbeFailureToUi(pr.reason, pr.error.orEmpty())
-                            val recovering = probeFailureCount < 3
+                            val recovering = probeFailureCount < 4
                             repo.save(
-                                merged.copy(
-                                    status = "Connecting",
-                                    lastAction = if (recovering) "Connection failed. Retrying…" else "Connection failed",
+                                currentUi.copy(
+                                    status = if (recovering) "Connecting" else "Failed",
+                                    lastAction = when {
+                                        probeFailureCount > 10 -> "Connection failed. Manual restart recommended."
+                                        recovering -> "Connection failed. Retrying…"
+                                        else -> "Connection failed. Retrying in background…"
+                                    },
                                     lastError = if (recovering) "" else mapped.first,
                                     lastErrorDetails = if (recovering) "" else mapped.second,
                                 ),
                             )
-                            Logs.w("connection", "failed reason=${pr.reason} err=${pr.error ?: ""}")
+                            Logs.w("connection", "failed reason=${pr.reason} err=${pr.error ?: ""} count=$probeFailureCount")
                             attemptRecovery(configPath, probeFailureCount)
                         }
                     }
@@ -191,6 +203,7 @@ class AgentService : Service() {
     private fun stopAgent(clearUi: Boolean = true) {
         monitorJob?.cancel()
         monitorJob = null
+        proximity?.stop()
         Bridge.stopAgent()
         controller.stop()
         if (clearUi) {
@@ -203,7 +216,7 @@ class AgentService : Service() {
 
     private fun stopVpnService() {
         runCatching {
-            startService(Intent(this, SUNLIONETVpnService::class.java).apply { action = SUNLIONETVpnService.ACTION_STOP })
+            startService(Intent(this, SunlionetVpnService::class.java).apply { action = SunlionetVpnService.ACTION_STOP })
         }
     }
 
@@ -278,10 +291,20 @@ class AgentService : Service() {
         if (lower.contains("classnotfoundexception") || lower.contains("com.sunlionet.mobile.mobile")) {
             return "Native runtime unavailable" to msg
         }
+        if (lower.contains("corrupted encrypted state") || lower.contains("decryption failed")) {
+            return getString(R.string.error_storage_corrupt) to "The app's secure storage is corrupted. Please clear app data or reset state."
+        }
         if (lower.contains("no profiles available")) {
             return getString(R.string.error_config_missing) to "No profiles available"
         }
         if (lower.contains("bundle invalid") ||
+            lower.contains("import failed:") ||
+            lower.contains("untrusted_signer") ||
+            lower.contains("cipher_not_allowed") ||
+            lower.contains("invalid_signature") ||
+            lower.contains("replay_detected") ||
+            lower.contains("malformed_bundle") ||
+            lower.contains("invalid_payload") ||
             lower.contains("signature") ||
             lower.contains("decrypt") ||
             lower.contains("expired") ||
@@ -306,24 +329,37 @@ class AgentService : Service() {
 
     private fun attemptRecovery(configPath: String, failureCount: Int) {
         val now = System.currentTimeMillis()
-        if (now - lastRecoveryAtMs < 8_000) {
+        if (now - lastRecoveryAtMs < 10_000) {
             return
         }
         lastRecoveryAtMs = now
-        if (failureCount == 1) {
-            runCatching {
-                controller.stop()
-                if (File(configPath).exists()) {
-                    controller.start(configPath)
+        when (failureCount) {
+            1 -> {
+                Logs.i("agent", "recovery level 1: restarting runtime")
+                runCatching {
+                    controller.stop()
+                    if (File(configPath).exists()) {
+                        controller.start(configPath)
+                    }
                 }
             }
-            return
-        }
-        if (failureCount == 2) {
-            runCatching {
-                Bridge.stopAgent()
-                Bridge.startAgent(this, usePi = false)
-                restartAttempts = 0
+            3 -> {
+                Logs.i("agent", "recovery level 2: restarting bridge")
+                runCatching {
+                    Bridge.stopAgent()
+                    Bridge.startAgent(this, usePi = false)
+                    restartAttempts = 0
+                }
+            }
+            5 -> {
+                Logs.i("agent", "recovery level 3: full restart")
+                runCatching {
+                    stopVpnService()
+                    Thread.sleep(500)
+                    if (secure.isDesiredConnected()) {
+                        startAgent()
+                    }
+                }
             }
         }
     }

@@ -1,93 +1,60 @@
-# Release Checklist (Release Blockers + Publication)
+# Release Candidate 1 (RC1) Checklist
 
-This checklist is for preparing and publishing a public SunLionet release (example: `v0.1.0`).
+This checklist is for hardening and validating SunLionet for its first Release Candidate (RC1).
 
-## Release Blockers (Cannot Ship Unless True)
+## RC1 Specific Hardening (Prompt 7)
+
+### 1. Robustness & Recovery
+- [x] **Secure Storage Resilience**: `SecureStore` handles KeyStore corruption or missing master keys by offering a "Reset" flow in the UI instead of crashing.
+- [x] **Connection Backoff**: `AgentService` implements exponential backoff and connection probe intervals to prevent thrashing on restricted networks.
+- [x] **Recovery Escalation**: `AgentService` implements 3 levels of recovery (runtime restart, bridge restart, full service restart) before giving up.
+- [x] **State Repository Isolation**: UI state is decoupled from secure secrets to ensure the UI remains responsive even if secure storage is initializing or failing.
+
+### 2. User Experience & Trust
+- [x] **Bilingual Support (EN/FA)**: Critical UI strings and notifications are localized in both English and Farsi.
+- [x] **Wording Clarity**: Labels and status messages are consistent across Android and CLI.
+- [x] **Transparency**: Error messages provide clear context (e.g., "Network may be restricted") rather than just technical codes.
+
+### 3. Packaging & Distribution
+- [x] **Release Manifest**: `RELEASES.json` is generated alongside artifacts for website integration.
+- [x] **Checksum Integrity**: Every artifact has a corresponding `.sha256` file.
+- [x] **Version Consistency**: Version strings are injected into Go binaries and reflected in `VERSION.txt`.
+
+## Standard Release Blockers (Must be True)
 
 ### Secrets and Sensitive Data
-- No plaintext secrets at rest where prohibited:
-  - Go state stores remain encrypted-at-rest (AES-GCM) and never write plaintext profiles/templates/identity to disk.
-  - Android uses keystore-backed encrypted storage for app secrets and state.
-- No secrets/tokens/seed material in logs:
-  - Go runtime API events remain sanitized and bounded.
-  - Android logs are bounded/sanitized and release builds do not ship verbose logging enabled.
-- Repo passes secret scanning:
-  - `gitleaks` passes in CI for the release tag.
+- [ ] No plaintext secrets at rest where prohibited.
+- [ ] No secrets/tokens/seed material in logs.
+- [ ] Repo passes secret scanning (`gitleaks`).
 
 ### Bundle Import and Trust
-- Import validation is explicit and testable:
-  - Signature verification is fail-closed against an explicit trusted signer allowlist.
-  - Payload canonicalization and strict validation is enforced.
-  - Replay and conflict behavior is deterministic (duplicate IDs/endpoints rejected).
-- Signer trust model is documented:
-  - Trust anchors, signing meaning, and transport assumptions are described in docs.
-
-### State Corruption and Recovery
-- Corrupted state has deterministic recovery behavior:
-  - Encrypted stores and runtime state handle missing/corrupt files without undefined behavior.
-- Failed config/profile rotation has rollback behavior:
-  - A failed profile attempt does not silently “accept” a broken config.
-  - Max-attempt limits prevent thrashing and loops.
-
-### Hostile-Network Behavior
-- Hostile-network behavior has test hooks:
-  - Simulation and integration tests exist to exercise degraded/blocked network behavior.
-  - Real-mode smoke tests exist for basic connect/import flows (where supported).
+- [ ] Import validation is explicit and testable (Signature verification).
+- [ ] Signer trust model is documented.
 
 ### Android Security Boundaries
-- Android permission/consent/security-sensitive flows are bounded:
-  - VPN consent is explicit user action.
-  - Import UI does not accept unverified/untrusted bundles as “active”.
-  - Stored secrets remain in encrypted storage (no plaintext fallbacks).
+- [ ] VPN consent is explicit user action.
+- [ ] Stored secrets remain in encrypted storage.
+- [ ] APK depends on checked-in gomobile artifacts under `android/app/libs/`.
 
-### CI / Release Boundary
-- CI security review tooling only runs in approved/trusted modes:
-  - LLM-based security review workflow is restricted to internal branches/PRs (fork PRs are skipped).
-- Release artifacts and docs are consistent:
-  - Artifact names, install instructions, and verification steps match what CI produces.
+## Artifacts and Verification
 
-## Artifacts
-
-- SunLionet Inside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
-- SunLionet Outside artifacts built for linux/amd64, linux/arm64, darwin/arm64, windows/amd64
-- Android APK built and signed (`app-release.apk`)
-- Checksums generated for every artifact (`*.sha256` or `checksums.txt`)
-- Checksum signatures generated and verified (`checksums.sig` + `checksums.pub`, if used)
-
-## Verification
-
-- Linux install path tested:
-  - tarball extract + `install-linux.sh` works
-  - systemd service installs and starts (if used)
-- Bundle import tested (Inside):
-  - valid bundle imports successfully
-  - invalid signature fails closed with a clear error
-- Connection test executed (Inside):
-  - probe success path works
-  - probe failure path produces a readable reason
-- Dashboard tested:
-  - runtime API starts on localhost only
-  - `/dashboard/runtime` shows status + active profile + failures
-- Android tested:
-  - install + VPN permission flow works
-  - import bundle flow works
-  - connect/disconnect toggles state
-  - last error is visible when failures occur
+- [ ] Linux artifacts built (Inside/Outside).
+- [ ] Android APK built and signed.
+- [ ] `RELEASES.json` and `VERSION.txt` present.
+- [ ] Linux install path tested (`install-linux.sh`).
+- [ ] Android install + VPN flow tested.
+- [ ] Bundle import + connection test works.
 
 ## Documentation
 
-- README.md points to docs/getting-started.md as the single entry point
-- Installation docs accurate for Linux and Android
-- Bundle usage docs accurate (generate/verify/import)
-- Troubleshooting covers common failure modes (missing keys, invalid signer key, sing-box missing)
-- Security model describes trust boundaries without exaggerated claims
+- [ ] README.md points to `docs/getting-started.md`.
+- [ ] Security model describes trust boundaries.
+- [ ] Troubleshooting covers common failure modes.
 
-## Release process
+## Go/No-Go Criteria
 
-- Version string set in build (`-X main.version=vX.Y.Z`)
-- Tag created: `git tag vX.Y.Z`
-- CI release workflow runs successfully for the tag
-- GitHub release created with:
-  - binaries + APK
-  - checksums and signature metadata
-  - short install instructions and verification steps
+1. **Security**: No unencrypted secrets on disk. All bundles must be signed and verified. (Must Pass)
+2. **Core Journey**: User can import a bundle, connect, and see a "Connected" status on a real device. (Must Pass)
+3. **Stability**: No app crashes during 1 hour of background connection with intermittent network. (Must Pass)
+4. **Packaging**: All artifacts listed in `RELEASES.json` are downloadable and checksums match. (Must Pass)
+

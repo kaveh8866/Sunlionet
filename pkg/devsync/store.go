@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+var (
+	ErrCorruptStore     = errors.New("devsync: corrupt store")
+	ErrDecryptionFailed = errors.New("devsync: decryption failed")
+)
+
 type Store struct {
 	dbPath string
 	key    []byte
@@ -56,12 +61,12 @@ func (s *Store) Load() (*State, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("devsync: malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 	nonce, body := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("devsync: decryption failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 	var st State
 	if err := json.Unmarshal(plaintext, &st); err != nil {
@@ -106,4 +111,25 @@ func (s *Store) Save(st *State) error {
 	}
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 	return os.WriteFile(s.dbPath, ciphertext, 0o600)
+}
+
+func (s *Store) WipeOnSuspicion() error {
+	if s == nil {
+		return errors.New("devsync: store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if info, err := os.Stat(s.dbPath); err == nil {
+		buf := make([]byte, info.Size())
+		_, _ = rand.Read(buf)
+		_ = os.WriteFile(s.dbPath, buf, 0o600)
+	}
+	for i := range s.key {
+		s.key[i] = 0
+	}
+	if err := os.Remove(s.dbPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

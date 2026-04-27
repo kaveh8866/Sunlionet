@@ -84,6 +84,18 @@ go run ./cmd/inside \
 
 ---
 
+## Project Stewardship
+
+SunLionet is designed for long-term resilience and community-driven maintenance.
+
+- **[Governance Model](docs/governance/model.md)**: How decisions are made and who manages the project.
+- **[Contribution Guide](docs/governance/contribution-guide.md)**: How to get involved safely and effectively.
+- **[Security Policy](SECURITY.md)**: How we handle vulnerabilities and security updates.
+- **[Sustainability Plan](docs/governance/sustainability.md)**: Our model for long-term maintenance.
+- **[Version 1.0 Readiness](docs/governance/readiness-1.0.md)**: Our current assessment of the project's maturity.
+
+---
+
 ## Build
 
 This repository produces two binaries using Go build tags.
@@ -139,12 +151,15 @@ For the detailed threat model and dual-agent design, see `/docs`.
 - [Website & Docs Specification](docs/website-spec.md)
 - [Architecture Details](docs/architecture.md)
 - [Security Boundaries](docs/security/boundaries.md)
+- [Security Audit Checklist](docs/security/checklist.md)
+- [Release Blockers](docs/release/checklist.md)
 - [Bundle Format](docs/bundle-format.md)
 - [Signal Integration](docs/signal.md)
 - [Installation Guide](docs/install.md) (English)
 - [Linux MVP Install + Run](docs/install/linux-mvp.md)
 - [Linux Smoke Test](docs/dev/linux-smoke-test.md)
 - [راهنمای نصب (Persian)](docs/fa/install.md)
+- [Pi Orchestrator Integration (Local)](docs/orchestrator/pi-integration.md)
 
 ## SunLionet Outside (MVP usage)
 

@@ -9,7 +9,7 @@ import { renderMarkdown } from "../../lib/docs/markdown";
 export default async function DocsIndexPage({
   params,
 }: {
-  params?: Promise<{ lang?: string }> | { lang?: string };
+  params?: Promise<{ lang?: string }>;
 }) {
   const resolved = (await params) ?? {};
   const entries = await getDocsIndex();
@@ -65,33 +65,46 @@ export default async function DocsIndexPage({
 
       <section className="grid gap-6">
         <SectionHeader
-          title={isFa ? "از اینجا شروع کنید" : "Start here"}
+          title={isFa ? "راهنمای استفاده" : "User Guides"}
           subtitle={
             isFa
-              ? "سریع‌ترین مسیر برای نصب امن و درک همکاری Inside/Outside."
-              : "The quickest path to installing safely and understanding how Inside/Outside work together."
+              ? "آموزش‌های گام‌به‌گام برای کاربران نهایی."
+              : "Step-by-step guides for end-users."
           }
         />
         <div className="grid md:grid-cols-2 gap-4">
           <InfoCard
             href={hrefFor("/docs/install")}
-            title={titleFor("install", isFa ? "نصب" : "Installation")}
-            description={isFa ? "نسخه‌ها، تأیید (verification)، و تنظیمات اولیه." : "Release artifacts, verification, and basic setup."}
+            title={isFa ? "نصب و راه‌اندازی" : "Installation"}
+            description={isFa ? "چگونه سان‌لاین‌نت را روی دستگاه خود نصب کنید." : "How to install SunLionet on your device."}
           />
           <InfoCard
             href={hrefFor("/docs/user/safety")}
-            title={titleFor("user/safety", isFa ? "ایمنی" : "Safety")}
-            description={isFa ? "اصول ایمنی عملیاتی برای محیط‌های پرریسک." : "Operational safety principles for high-risk environments."}
+            title={isFa ? "نکات ایمنی" : "Safety & Privacy"}
+            description={isFa ? "اصول ایمنی برای استفاده در محیط‌های حساس." : "Security principles for sensitive environments."}
           />
+        </div>
+      </section>
+
+      <section className="grid gap-6">
+        <SectionHeader
+          title={isFa ? "مستندات فنی" : "Technical Reference"}
+          subtitle={
+            isFa
+              ? "جزئیات معماری و امنیت برای توسعه‌دهندگان."
+              : "Architecture and security details for developers."
+          }
+        />
+        <div className="grid md:grid-cols-2 gap-4">
           <InfoCard
             href={hrefFor("/docs/architecture")}
-            title={titleFor("architecture", isFa ? "معماری" : "Architecture")}
-            description={isFa ? "Inside در برابر Outside، صفحه داده در برابر صفحه کنترل." : "Inside vs Outside, data plane vs control plane."}
+            title={isFa ? "معماری سیستم" : "Architecture"}
+            description={isFa ? "بررسی اجزای Inside و Outside و نحوه تعامل آن‌ها." : "Deep dive into Inside/Outside components."}
           />
           <InfoCard
             href={hrefFor("/docs/outside/verification")}
-            title={titleFor("outside/verification", isFa ? "تأیید" : "Verification")}
-            description={isFa ? "قبل از استفاده، فایل‌ها و bundleها را تأیید کنید." : "Verify artifacts and bundles before use."}
+            title={isFa ? "تأیید اصالت" : "Verification"}
+            description={isFa ? "جزئیات فنی بررسی امضا و سلامت فایل‌ها." : "Technical details of signature and integrity checks."}
           />
         </div>
       </section>

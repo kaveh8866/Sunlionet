@@ -20,6 +20,26 @@ This document maps the repo’s real trust boundaries to concrete enforcement po
 - The localhost runtime API is a local-only diagnostic surface and must refuse non-local binds.
 - LLM-based review tooling is treated as untrusted and is never run on untrusted fork PRs.
 
+Important concrete constraint (today): the Go importer currently requires decryption on import (`RequireDecrypt: true` in `pkg/importctl/import.go`). Plaintext bundles may exist at the schema level, but they are not accepted by the current Inside/Android import path.
+
+## Release-Critical Assets and Invariants (Concrete)
+
+This section is the “what must never be mishandled” inventory for Prompt 2 enforcement work. It describes where assets enter, where they live, and what must never happen.
+
+| Asset | Where it enters | Where it is stored | Validation / enforcement | Must never happen | Tests to enforce |
+|---|---|---|---|---|---|
+| Trust bundles / seed bundles (`snb://v2:` wrapper bytes) | `pkg/importctl.Importer.ParseURI/ParseBytes`, `cmd/outside verify`, Android `Bridge.importBundle` | Not stored as raw bundle; only validated payload is written | Signature + schema + canonicalization: `pkg/bundle/verify.go`; import normalization/conflict checks: `pkg/importctl/import.go` | Accepting unsigned/unknown-signer bundles; accepting non-canonical payloads; accepting conflicting duplicates | `pkg/bundle/*_test.go`, `pkg/importctl/import_test.go` |
+| Trusted signer allowlist (public keys) | CLI flags / Android SecureStore setting | In-memory allowlist; Android stores user-provided trusted signer keys | Key ID derivation + allowlist check: `pkg/bundle.Ed25519KeyID`, `pkg/importctl/import.go` | Treat transport as the trust anchor; silently accepting unknown signers | Add tests for empty allowlist failure and unknown signer failure paths in import entrypoints |
+| Decryption identity (age X25519) | CLI flags / Android SecureStore | In-memory after parsing; Android stores in keystore-backed encrypted storage | Decrypt required on import: `pkg/importctl/import.go` (`RequireDecrypt: true`) | Accepting encrypted payload without an identity; falling back to plaintext silently | Tests for “cipher none” refusal (if supported by schema) + wrong identity behavior |
+| Master key (local encryption key) | CLI flags / Android SecureStore | In-memory; never persisted | Key parsing/length checks: `pkg/profile.ParseMasterKey` and store constructors | Writing master key to disk/logs; using weak/short keys | `pkg/profile/store_test.go` + add log-scan tests on error paths (Prompt 2) |
+| Encrypted profile/template state (Go) | Output of verified import | `profiles.enc`, `templates.enc` under the configured state dir | AES-GCM encryption + restrictive perms: `pkg/profile/store.go`, `pkg/profile/template_store.go` | Plaintext profile/template data at rest; world-readable perms | `pkg/profile/store_privacy_test.go`, `pkg/profile/store_wipe_test.go` |
+| Android stored secrets/state | App bootstrap + user actions | Keystore-backed encrypted storage | `android/app/src/main/java/com/sunlionet/agent/SecureStore.kt` | Plaintext fallback for secrets; leaking secrets to logcat | Extend `androidTest` to assert release logging/off-by-default and no plaintext prefs (Prompt 2) |
+| Local runtime events/state (localhost API) | Inside runtime event pipeline | In-memory buffer + API response JSON | Localhost bind + sanitization: `cmd/inside/runtime_api.go` | Exposing API on non-local interfaces; leaking secrets/full configs in events | `cmd/inside/runtime_api_sse_test.go` + add negative tests for file/link/secrets redaction (Prompt 2) |
+| Logs/diagnostics (Go + Android) | Runtime | Filesystem logs (sing-box stdout/stderr), Android Logs | Sanitization helpers and bounded output; avoid raw error dumping | Emitting bundle contents, keys, identities, tokens, or full endpoint lists | Expand log-redaction tests (`pkg/assistant/redact.go`, runtime API sanitizers) (Prompt 2) |
+| Release signing materials (cosign keys) | GitHub Actions secrets | GitHub Actions only | `reusable-verify-release.yml` signs `checksums.txt` to `checksums.sig` | Using signing keys on untrusted PRs/forks; leaking keys into logs/artifacts | CI policy: never run signing jobs on fork PRs; add explicit guards (Prompt 2) |
+| Release verification metadata (`checksums.*`, `release.json`) | Release verify workflow | GitHub release assets; mirrored into website downloads in some workflows | Cosign verify step in `reusable-verify-release.yml` | Publishing assets without offline-verifiable checksums/signature | Add a CI job that downloads the just-built release artifact set and verifies it offline (Prompt 2) |
+| Website local download mirror (`website/public/downloads/...`) | Release mirroring / local scripts | Git repo (static files) | Content parity checker: `website/scripts/content-check.mjs` | Serving mismatched artifacts vs hashes; serving stale/unverified mirrors as “official” | `npm run content:check` in website CI |
+
 ## Trust Boundaries (Concrete)
 
 ### 1) Bundle Import Boundary (Untrusted → Verified)
@@ -46,7 +66,7 @@ This document maps the repo’s real trust boundaries to concrete enforcement po
   - Outside trust model documentation: `docs/outside/trust-model.md`.
 - Security invariants:
   - A bundle “from the transport” is not trusted until it verifies under an allowlisted signer.
-  - Encryption is optional by schema (`cipher="none"` exists) but must be an explicit decision; CI can enforce `--require-decrypt` for verification when confidentiality is required.
+  - The current importer requires encrypted payloads on import; any future plaintext-support must be an explicit, reviewed decision with a separate threat analysis.
 
 ### 3) Encrypted Storage Boundary (Secrets at Rest)
 

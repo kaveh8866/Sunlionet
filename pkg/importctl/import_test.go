@@ -3,6 +3,7 @@ package importctl
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -145,8 +146,137 @@ func TestParseURI_InvalidSignature(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for invalid signature, got nil")
 	}
+	var ie *ImportError
+	if !errors.As(err, &ie) || ie.Code != CodeInvalidSignature {
+		t.Fatalf("expected CodeInvalidSignature, got %T %v", err, err)
+	}
 }
 
 func TestParseURI_ExpiredBundle(t *testing.T) {
 	// Not implementing time mock, we trust the `VerifyAndDecrypt` unit test which could mock time or use a custom generator
+}
+
+func TestParseURI_UntrustedSignerRejectedDeterministically(t *testing.T) {
+	trustedPubKey, _, _ := ed25519.GenerateKey(nil)
+	untrustedPubKey, untrustedPrivKey, _ := ed25519.GenerateKey(nil)
+	ageIdentity, _ := age.GenerateX25519Identity()
+
+	store, _ := profile.NewStore("dummy.enc", []byte("0123456789abcdef0123456789abcdef"))
+	importer := NewImporter(store, []ed25519.PublicKey{trustedPubKey}, ageIdentity)
+
+	now := time.Now().Unix()
+	payload := bundle.BundlePayload{
+		SchemaVersion:   1,
+		MinAgentVersion: "1.0.0",
+		Profiles:        nil,
+		Templates:       map[string]bundle.Template{},
+		Notes: map[string]string{
+			"issuer_key_id": bundle.Ed25519KeyID(untrustedPubKey),
+		},
+	}
+	bundleBytes, err := bundle.GenerateBundleWithOptions(&payload, untrustedPrivKey, bundle.GenerateOptions{
+		RecipientPublicKey: ageIdentity.Recipient().String(),
+		AllowPlaintext:     false,
+		SignerKeyID:        bundle.Ed25519KeyID(untrustedPubKey),
+		BundleID:           "bndl_untrusted_signer",
+		Seq:                1,
+		CreatedAt:          now,
+		ExpiresAt:          now + 3600,
+	})
+	if err != nil {
+		t.Fatalf("generate bundle: %v", err)
+	}
+
+	uri := "snb://v2:" + base64.RawURLEncoding.EncodeToString(bundleBytes)
+	_, err = importer.ParseURI(uri)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *ImportError
+	if !errors.As(err, &ie) || ie.Code != CodeUntrustedSigner {
+		t.Fatalf("expected CodeUntrustedSigner, got %T %v", err, err)
+	}
+}
+
+func TestParseURI_PlaintextCipherRejected(t *testing.T) {
+	trustedPubKey, trustedPrivKey, _ := ed25519.GenerateKey(nil)
+	ageIdentity, _ := age.GenerateX25519Identity()
+
+	store, _ := profile.NewStore("dummy.enc", []byte("0123456789abcdef0123456789abcdef"))
+	importer := NewImporter(store, []ed25519.PublicKey{trustedPubKey}, ageIdentity)
+
+	now := time.Now().Unix()
+	payload := bundle.BundlePayload{
+		SchemaVersion:   1,
+		MinAgentVersion: "1.0.0",
+		Profiles:        nil,
+		Templates:       map[string]bundle.Template{},
+		Notes: map[string]string{
+			"issuer_key_id": bundle.Ed25519KeyID(trustedPubKey),
+		},
+	}
+	bundleBytes, err := bundle.GenerateBundleWithOptions(&payload, trustedPrivKey, bundle.GenerateOptions{
+		RecipientPublicKey: "",
+		AllowPlaintext:     true,
+		SignerKeyID:        bundle.Ed25519KeyID(trustedPubKey),
+		BundleID:           "bndl_plaintext",
+		Seq:                1,
+		CreatedAt:          now,
+		ExpiresAt:          now + 3600,
+	})
+	if err != nil {
+		t.Fatalf("generate bundle: %v", err)
+	}
+	uri := "snb://v2:" + base64.RawURLEncoding.EncodeToString(bundleBytes)
+	_, err = importer.ParseURI(uri)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *ImportError
+	if !errors.As(err, &ie) || ie.Code != CodeCipherNotAllowed {
+		t.Fatalf("expected CodeCipherNotAllowed, got %T %v", err, err)
+	}
+}
+
+func TestParseURI_ReplayDetected(t *testing.T) {
+	pubKey, privKey, _ := ed25519.GenerateKey(nil)
+	ageIdentity, _ := age.GenerateX25519Identity()
+
+	store, _ := profile.NewStore("dummy.enc", []byte("0123456789abcdef0123456789abcdef"))
+	importer := NewImporter(store, []ed25519.PublicKey{pubKey}, ageIdentity)
+
+	now := time.Now().Unix()
+	payload := bundle.BundlePayload{
+		SchemaVersion:   1,
+		MinAgentVersion: "1.0.0",
+		Profiles:        nil,
+		Templates:       map[string]bundle.Template{},
+		Notes: map[string]string{
+			"issuer_key_id": bundle.Ed25519KeyID(pubKey),
+		},
+	}
+	bundleBytes, err := bundle.GenerateBundleWithOptions(&payload, privKey, bundle.GenerateOptions{
+		RecipientPublicKey: ageIdentity.Recipient().String(),
+		AllowPlaintext:     false,
+		SignerKeyID:        bundle.Ed25519KeyID(pubKey),
+		BundleID:           "bndl_replay",
+		Seq:                1,
+		CreatedAt:          now,
+		ExpiresAt:          now + 3600,
+	})
+	if err != nil {
+		t.Fatalf("generate bundle: %v", err)
+	}
+	uri := "snb://v2:" + base64.RawURLEncoding.EncodeToString(bundleBytes)
+	if _, err := importer.ParseURI(uri); err != nil {
+		t.Fatalf("first parse: %v", err)
+	}
+	_, err = importer.ParseURI(uri)
+	if err == nil {
+		t.Fatalf("expected replay error")
+	}
+	var ie *ImportError
+	if !errors.As(err, &ie) || ie.Code != CodeReplayDetected {
+		t.Fatalf("expected CodeReplayDetected, got %T %v", err, err)
+	}
 }

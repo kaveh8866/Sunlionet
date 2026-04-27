@@ -22,8 +22,8 @@ Migration note: this repository is still named `SUNLIONET-agent` during the tran
 Minimal flow (example for Linux amd64):
 
 ```bash
-VERSION="v0.1.0"
-BASE_URL="https://github.com/kaveh8866/SUNLIONET-agent/releases/download/${VERSION}"
+VERSION="v0.3.0-rc1"
+BASE_URL="https://github.com/SunLionet/Iran-Agent-Vpn/releases/download/${VERSION}"
 
 curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz"
 curl -fL -O "${BASE_URL}/sunlionet-inside-${VERSION}-linux-amd64.tar.gz.sha256"

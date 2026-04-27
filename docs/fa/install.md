@@ -5,6 +5,10 @@
 - **SunLionet Inside**: لینوکس (x86_64 یا arm64) و اندروید (Termux برای توسعه)
 - **SunLionet Outside**: هر سیستم‌عامل با اینترنت پایدار (Linux/macOS/Windows)
 
+برای مسیرهای رسمی دانلود و توضیح مدل اعتماد، این سند را ببینید:
+
+- [سیاست توزیع رسمی](../distribution-policy.md)
+
 ## برچسب‌های build
 
 - Inside: `-tags inside`

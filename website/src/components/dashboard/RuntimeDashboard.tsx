@@ -9,6 +9,8 @@ import { EventTimeline } from "./EventTimeline";
 
 type UIStatus = "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "ERROR";
 
+const RUNTIME_REQUEST_TIMEOUT_MS = 3000;
+
 function mapStatus(s: string): UIStatus {
   const v = s.trim().toLowerCase();
   if (v === "connected") return "CONNECTED";
@@ -23,11 +25,15 @@ export function RuntimeDashboard() {
   const copy = uiCopy[lang];
   const [state, setState] = useState<RuntimeSnapshot | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const snapshotTimerRef = useRef<number | null>(null);
 
-  const uiStatus = useMemo(() => mapStatus(state?.status ?? "disconnected"), [state?.status]);
+  const uiStatus = useMemo(() => {
+    if (snapshotError) return "ERROR";
+    return mapStatus(state?.status ?? "disconnected");
+  }, [snapshotError, state?.status]);
   const uiStatusText = useMemo(() => {
     if (uiStatus === "CONNECTED") return copy.status.connected;
     if (uiStatus === "CONNECTING") return copy.status.connecting;
@@ -48,14 +54,14 @@ export function RuntimeDashboard() {
 
   const refreshSnapshot = useCallback(async () => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 1500);
+    const timeout = window.setTimeout(() => controller.abort(), RUNTIME_REQUEST_TIMEOUT_MS);
     try {
       const nextState = await getRuntimeState(controller.signal);
       setState(nextState);
-      setError(null);
+      setSnapshotError(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "runtime fetch failed";
-      setError(msg);
+      setSnapshotError(msg);
       setState(null);
     } finally {
       window.clearTimeout(timeout);
@@ -64,18 +70,26 @@ export function RuntimeDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 1500);
-    void Promise.all([getRuntimeState(controller.signal), getRuntimeEvents(controller.signal)])
-      .then(([nextState, nextEvents]) => {
-        setState(nextState);
-        setEvents((prev) => mergeEvents(prev, nextEvents));
-        setError(null);
-      })
-      .catch((e) => {
-        const msg = e instanceof Error ? e.message : "runtime fetch failed";
-        setError(msg);
-        setState(null);
-        setEvents([]);
+    const timeout = window.setTimeout(() => controller.abort(), RUNTIME_REQUEST_TIMEOUT_MS);
+    void Promise.allSettled([getRuntimeState(controller.signal), getRuntimeEvents(controller.signal)])
+      .then(([snapshotResult, eventsResult]) => {
+        if (snapshotResult.status === "fulfilled") {
+          setState(snapshotResult.value);
+          setSnapshotError(null);
+        } else {
+          const msg = snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "runtime fetch failed";
+          setSnapshotError(msg);
+          setState(null);
+        }
+
+        if (eventsResult.status === "fulfilled") {
+          setEvents((prev) => mergeEvents(prev, eventsResult.value));
+          setStreamError(null);
+        } else {
+          const msg = eventsResult.reason instanceof Error ? eventsResult.reason.message : "runtime events fetch failed";
+          setStreamError(msg);
+          setEvents([]);
+        }
       })
       .finally(() => {
         window.clearTimeout(timeout);
@@ -87,13 +101,13 @@ export function RuntimeDashboard() {
       try {
         const parsed = JSON.parse(event.data) as RuntimeEvent;
         setEvents((prev) => mergeEvents(prev, [parsed]));
-        setError(null);
+        setStreamError(null);
       } catch {
-        setError("event stream parse failed");
+        setStreamError("event stream parse failed");
       }
     };
     es.onerror = () => {
-      setError("event stream disconnected");
+      setStreamError("event stream disconnected");
     };
 
     if (snapshotTimerRef.current) {
@@ -143,9 +157,14 @@ export function RuntimeDashboard() {
           <div className="mt-2 text-sm text-muted-foreground max-w-3xl">
             Live view of the local runtime on this machine (no internet required). Streaming events in real time.
           </div>
-          {error ? (
+          {snapshotError ? (
             <div className="mt-2 text-xs font-mono text-red-400 border border-border rounded px-3 py-2 bg-card/60">
-              runtime unavailable: {error}
+              runtime unavailable: {snapshotError}
+            </div>
+          ) : null}
+          {!snapshotError && streamError ? (
+            <div className="mt-2 text-xs font-mono text-amber-300 border border-border rounded px-3 py-2 bg-card/60">
+              events degraded: {streamError}
             </div>
           ) : null}
         </div>
@@ -165,7 +184,9 @@ export function RuntimeDashboard() {
         <div className="grid md:grid-cols-3 gap-6">
           <div className="rounded-xl border border-border bg-card/60 p-4">
             <div className="text-xs text-muted-foreground uppercase tracking-wider">Active Profile</div>
-            <div className="mt-2 font-mono text-sm text-foreground">{state.activeProfile || "—"}</div>
+            <div data-testid="runtime-active-profile" className="mt-2 font-mono text-sm text-foreground">
+              {state.activeProfile || "—"}
+            </div>
           </div>
           <div className="rounded-xl border border-border bg-card/60 p-4">
             <div className="text-xs text-muted-foreground uppercase tracking-wider">Latency</div>

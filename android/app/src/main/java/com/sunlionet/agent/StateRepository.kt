@@ -1,7 +1,6 @@
 package com.sunlionet.agent
 
 import android.content.Context
-import org.json.JSONObject
 
 data class UiState(
     val status: String = "Disconnected",
@@ -35,18 +34,44 @@ class StateRepository(context: Context) {
     }
 
     fun fromBridgeStatus(raw: String): UiState {
-        return try {
-            val obj = JSONObject(raw)
-            val running = obj.optBoolean("running", false)
-            UiState(
+        return parseBridgeStatus(raw)
+    }
+
+    companion object {
+        fun parseBridgeStatus(raw: String): UiState {
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return UiState(status = "Error", lastError = "Invalid bridge status")
+            if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return UiState(status = "Error", lastError = "Invalid bridge status")
+
+            val runningValue = Regex(""""running"\s*:\s*(true|false|1|0)""", RegexOption.IGNORE_CASE)
+                .find(trimmed)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.lowercase()
+            val running = runningValue == "true" || runningValue == "1"
+
+            fun readJsonString(key: String): String? {
+                val m = Regex(""""${Regex.escape(key)}"\s*:\s*"((?:\\.|[^"])*)"""").find(trimmed) ?: return null
+                return m.groupValues.getOrNull(1)?.let { v ->
+                    v.replace("\\\\", "\\")
+                        .replace("\\\"", "\"")
+                        .replace("\\n", "\n")
+                        .replace("\\r", "\r")
+                        .replace("\\t", "\t")
+                }
+            }
+
+            val profile = readJsonString("current_profile") ?: "-"
+            val action = readJsonString("last_action") ?: "-"
+            val error = readJsonString("last_error") ?: ""
+
+            return UiState(
                 status = if (running) "Connected" else "Disconnected",
-                currentProfile = obj.optString("current_profile", "-"),
-                lastAction = obj.optString("last_action", "-"),
-                lastError = obj.optString("last_error", ""),
+                currentProfile = profile,
+                lastAction = action,
+                lastError = error,
                 lastErrorDetails = "",
             )
-        } catch (_: Exception) {
-            UiState(status = "Error", lastError = "Invalid bridge status")
         }
     }
 }

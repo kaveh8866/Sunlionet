@@ -45,7 +45,7 @@ type distManifest struct {
 	Selection          outsidectl.SelectionManifest `json:"selection"`
 }
 
-var version = "dev"
+var version = "v0.3.0-rc1"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--verify" {

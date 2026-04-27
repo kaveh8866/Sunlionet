@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
 
@@ -19,11 +20,30 @@ class SecureStore(context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
-    }.getOrElse { err ->
-        throw IllegalStateException("secure storage initialization failed", err)
+    }.getOrNull()
+
+    fun isAvailable(): Boolean = prefs != null
+
+    fun reset(context: Context) {
+        runCatching {
+            val prefsName = "SUNLIONET_secure"
+            context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit().clear().commit()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                context.deleteSharedPreferences(prefsName)
+            }
+            val stateDir = File(context.filesDir, "state")
+            if (stateDir.exists()) {
+                stateDir.deleteRecursively()
+            }
+        }
+    }
+
+    private fun getPrefs(): android.content.SharedPreferences {
+        return prefs ?: throw IllegalStateException("secure storage unavailable")
     }
 
     fun ensureDefaultTrustAnchors() {
+        if (!isAvailable()) return
         if (getTrustedSignerKeysCSV().isBlank()) {
             setTrustedSignerKeysCSV(DEFAULT_TRUSTED_SIGNER_PUB_B64URL)
         }
@@ -32,68 +52,74 @@ class SecureStore(context: Context) {
     }
 
     fun getOrCreateMasterKeyB64Url(): String {
-        val existing = prefs.getString("master_key_b64url", null)
+        val p = getPrefs()
+        val existing = p.getString("master_key_b64url", null)
         if (!existing.isNullOrBlank()) {
             return existing
         }
         val key = ByteArray(32)
         SecureRandom().nextBytes(key)
         val b64 = b64UrlNoPad(key)
-        prefs.edit().putString("master_key_b64url", b64).apply()
+        p.edit().putString("master_key_b64url", b64).apply()
         return b64
     }
 
     fun getOrCreateAgeIdentity(): String {
-        val existing = prefs.getString("age_identity", null)
+        val p = getPrefs()
+        val existing = p.getString("age_identity", null)
         if (!existing.isNullOrBlank()) {
             return existing
         }
         val id = generateAgeIdentity()
-        prefs.edit().putString("age_identity", id).apply()
+        p.edit().putString("age_identity", id).apply()
         return id
     }
 
     fun getOrCreateAgeRecipient(): String {
-        getOrCreateAgeIdentity()
-        val rec = prefs.getString("age_recipient", null)
+        val p = getPrefs()
+        val existingIdentity = p.getString("age_identity", null)
+        val rec = p.getString("age_recipient", null)
         if (!rec.isNullOrBlank()) {
             return rec
         }
+        if (!existingIdentity.isNullOrBlank()) {
+            throw IllegalStateException("age_recipient missing while age_identity exists")
+        }
         val id = generateAgeIdentity()
-        prefs.edit().putString("age_identity", id).apply()
-        return prefs.getString("age_recipient", "") ?: ""
+        p.edit().putString("age_identity", id).apply()
+        return p.getString("age_recipient", "") ?: ""
     }
 
     fun getTrustedSignerKeysCSV(): String {
-        return prefs.getString("trusted_signers_b64url_csv", "") ?: ""
+        return prefs?.getString("trusted_signers_b64url_csv", "") ?: ""
     }
 
     fun setTrustedSignerKeysCSV(value: String) {
-        prefs.edit().putString("trusted_signers_b64url_csv", value).apply()
+        getPrefs().edit().putString("trusted_signers_b64url_csv", value).apply()
     }
 
     fun setDesiredConnected(desired: Boolean) {
-        prefs.edit().putBoolean("desired_connected", desired).apply()
+        getPrefs().edit().putBoolean("desired_connected", desired).apply()
     }
 
     fun isDesiredConnected(): Boolean {
-        return prefs.getBoolean("desired_connected", false)
+        return prefs?.getBoolean("desired_connected", false) ?: false
     }
 
     fun isAdvancedModeEnabled(): Boolean {
-        return prefs.getBoolean("advanced_mode", false)
+        return prefs?.getBoolean("advanced_mode", false) ?: false
     }
 
     fun setAdvancedModeEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("advanced_mode", enabled).apply()
+        getPrefs().edit().putBoolean("advanced_mode", enabled).apply()
     }
 
     fun setLastError(msg: String) {
-        prefs.edit().putString("last_error", msg).apply()
+        getPrefs().edit().putString("last_error", msg).apply()
     }
 
     fun getLastError(): String {
-        return prefs.getString("last_error", "") ?: ""
+        return prefs?.getString("last_error", "") ?: ""
     }
 
     private fun b64UrlNoPad(b: ByteArray): String {
@@ -112,7 +138,7 @@ class SecureStore(context: Context) {
         val pub = pubEncoded.takeLast(32).toByteArray()
         val secret = Bech32.encode("age-secret-key", Bech32.convertBits(priv, 8, 5, true))
         val recipient = Bech32.encode("age", Bech32.convertBits(pub, 8, 5, true))
-        prefs.edit().putString("age_recipient", recipient).apply()
+        prefs?.edit()?.putString("age_recipient", recipient)?.apply()
         return secret.uppercase()
     }
 

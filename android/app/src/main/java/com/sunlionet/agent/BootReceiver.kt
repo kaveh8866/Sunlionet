@@ -12,8 +12,8 @@ class BootReceiver : BroadcastReceiver() {
         if (!secure.isDesiredConnected()) {
             return
         }
-        val vpnIntent = Intent(context, SUNLIONETVpnService::class.java).apply {
-            action = SUNLIONETVpnService.ACTION_START
+        val vpnIntent = Intent(context, SunlionetVpnService::class.java).apply {
+            action = SunlionetVpnService.ACTION_START
         }
         val agentIntent = Intent(context, AgentService::class.java).apply {
             action = AgentService.ACTION_START

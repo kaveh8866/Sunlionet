@@ -56,7 +56,7 @@ func TestControllerRedactsRemote(t *testing.T) {
 		Backend:     BackendRemote,
 		Redaction:   RedactionStrict,
 		UserGesture: true,
-		Items:       []Item{{Role: RoleUser, Text: "email me at a@b.com https://x.test 12345"}},
+		Items:       []Item{{Role: RoleUser, Text: "email me at a@b.com https://x.test 12345 AGE-SECRET-KEY-1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},
 	})
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -71,6 +71,15 @@ func TestControllerRedactsRemote(t *testing.T) {
 		t.Fatalf("expected %q in prompt", want)
 	}
 	if want := "[redacted_digits]"; !contains(remote.lastPrompt, want) {
+		t.Fatalf("expected %q in prompt", want)
+	}
+	if want := "[redacted_age_secret]"; !contains(remote.lastPrompt, want) {
+		t.Fatalf("expected %q in prompt", want)
+	}
+	if want := "[redacted_b64]"; !contains(remote.lastPrompt, want) {
+		t.Fatalf("expected %q in prompt", want)
+	}
+	if want := "[redacted_hex]"; !contains(remote.lastPrompt, want) {
 		t.Fatalf("expected %q in prompt", want)
 	}
 }

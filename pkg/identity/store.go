@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+var (
+	ErrCorruptStore     = errors.New("identity: corrupt store")
+	ErrDecryptionFailed = errors.New("identity: decryption failed")
+)
+
 type Store struct {
 	dbPath string
 	key    []byte
@@ -54,12 +59,12 @@ func (s *Store) Load() (*State, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("identity: malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 	nonce, body := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("identity: decryption failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 
 	var state State

@@ -24,7 +24,7 @@
 
 1. Tap **Connect**.
 2. Grant VPN permission.
-3. `SUNLIONETVpnService` establishes TUN (legacy class name during transition).
+3. `SunlionetVpnService` establishes TUN (legacy class name during transition).
 4. `AgentService` starts Go agent loop and renders config.
 5. `SingBoxController` starts `sing-box run -c <config>`.
 

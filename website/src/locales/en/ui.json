@@ -46,20 +46,64 @@
     "reportUser": "Report user"
   },
   "downloadPage": {
-    "title": "Download",
-    "subtitle": "Production-style release artifacts with verification-first install steps. Always verify checksums before running.",
-    "verificationGuide": "Verification guide",
+    "title": "Download & Install",
+    "subtitle": "Choose an official path. One tap takes you to the official download/install flow, then follow the on-screen steps.",
+    "verificationGuide": "Verification Guide",
     "install": "Install",
-    "installationGuide": "Installation (web guide)",
-    "installationGuideDesc": "A step-by-step website page for the common paths (Linux, Termux).",
-    "repoDocs": "Repository docs",
-    "repoDocsDesc": "The authoritative install, verification, and security docs from the repo."
+    "installationGuide": "Installation Guide",
+    "installationGuideDesc": "Step-by-step instructions for all platforms.",
+    "repoDocs": "Distribution Policy",
+    "repoDocsDesc": "Official sources, trust model, and how to verify downloads.",
+    "officialSources": "Official Sources",
+    "recommended": "Recommended",
+    "alternative": "Alternative",
+    "advanced": "Advanced",
+    "sources": {
+      "github": {
+        "title": "GitHub Releases",
+        "desc": "Direct access to signed binaries and source code. Best for transparency and version history."
+      },
+      "fdroid": {
+        "title": "F-Droid",
+        "desc": "The open-source app store for Android. Best for automated, verified updates."
+      },
+      "directApk": {
+        "title": "Direct APK",
+        "desc": "Direct download for Android. Best if stores are unavailable."
+      },
+      "termux": {
+        "title": "Termux / CLI",
+        "desc": "For technical users, recovery, and automated environments."
+      }
+    },
+    "trustNote": "SunLionet is open-source. This page aims for a one-tap handoff: one clear action to an official source, plus guided next steps and verification. On Android, installs still require the standard system confirmation — the site cannot silently install apps.",
+    "warningMirror": "Warning: Avoid unofficial mirrors or modified builds. If a file/tag/signature does not match the official release, stop and re-check."
   },
   "installationPage": {
-    "title": "Installation",
-    "subtitle": "Common install paths for SunLionet Inside and SunLionet Outside. Always verify checksums before running.",
-    "wizardCta": "Install wizard",
-    "repoInstallDoc": "Repo install doc"
+    "title": "Installation Guide",
+    "subtitle": "Direct, verified install steps for all users. When a platform requires confirmation prompts, we guide you through them.",
+    "wizardCta": "Start Guided Install",
+    "repoInstallDoc": "Technical Manual",
+    "steps": {
+      "download": {
+        "title": "Download & Verify",
+        "desc": "Download the official artifact and its checksum file. Verification ensures your file hasn't been tampered with."
+      },
+      "android": {
+        "title": "Android Install",
+        "desc": "Download the official APK, then tap it to start Android’s installer. Android will ask you to confirm and may require temporarily allowing installs from your browser or file manager."
+      },
+      "linux": {
+        "title": "Linux / Desktop",
+        "desc": "Extract and run the install script. Supports systemd for automated recovery."
+      },
+      "seeds": {
+        "title": "Trusted Seeds",
+        "desc": "Import a configuration bundle from a trusted supporter to start your first connection."
+      }
+    },
+    "whyNoStore": "Why no Play Store?",
+    "whyNoStoreDesc": "We avoid centralized stores to prevent platform censorship and tracking. SunLionet is distributed directly to keep you in control of your software."
   },
   "supportPage": {
     "home": "Home",

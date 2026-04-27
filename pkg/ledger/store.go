@@ -13,6 +13,11 @@ import (
 	"sync"
 )
 
+var (
+	ErrCorruptStore     = errors.New("ledger: corrupt store")
+	ErrDecryptionFailed = errors.New("ledger: decryption failed")
+)
+
 type Store struct {
 	dbPath string
 	key    []byte
@@ -58,13 +63,13 @@ func (s *Store) Load() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if len(raw) < gcm.NonceSize() {
-		return Snapshot{}, errors.New("ledger: corrupted store (nonce)")
+		return Snapshot{}, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 	nonce := raw[:gcm.NonceSize()]
 	ct := raw[gcm.NonceSize():]
 	pt, err := gcm.Open(nil, nonce, ct, nil)
 	if err != nil {
-		return Snapshot{}, fmt.Errorf("ledger: decrypt store: %w", err)
+		return Snapshot{}, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 	var snap Snapshot
 	if err := json.Unmarshal(pt, &snap); err != nil {
@@ -110,4 +115,25 @@ func (s *Store) Save(snap Snapshot) error {
 	}
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 	return os.WriteFile(s.dbPath, ciphertext, 0o600)
+}
+
+func (s *Store) WipeOnSuspicion() error {
+	if s == nil {
+		return errors.New("ledger: store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if info, err := os.Stat(s.dbPath); err == nil {
+		buf := make([]byte, info.Size())
+		_, _ = rand.Read(buf)
+		_ = os.WriteFile(s.dbPath, buf, 0o600)
+	}
+	for i := range s.key {
+		s.key[i] = 0
+	}
+	if err := os.Remove(s.dbPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

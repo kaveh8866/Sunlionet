@@ -1,6 +1,8 @@
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import { existsSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { cache } from "react";
 
 export type DocEntry = {
@@ -17,7 +19,12 @@ function titleFromFilename(name: string) {
 }
 
 async function readTitle(filePath: string) {
-  const raw = await readFile(filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf8");
+  } catch {
+    return titleFromFilename(path.basename(filePath));
+  }
   const lines = raw.split(/\r?\n/);
   for (const line of lines) {
     const m = /^#\s+(.+)\s*$/.exec(line);
@@ -27,7 +34,12 @@ async function readTitle(filePath: string) {
 }
 
 async function walk(dir: string, root: string): Promise<DocEntry[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
+  let entries: Dirent[];
+  try {
+    entries = (await readdir(dir, { withFileTypes: true })) as Dirent[];
+  } catch {
+    return [];
+  }
   const out: DocEntry[] = [];
 
   for (const e of entries) {
@@ -65,26 +77,15 @@ function isDocsRoot(candidate: string) {
 }
 
 function findDocsRoot() {
-  const cwd = process.cwd();
-  const directCandidates = [
-    path.join(cwd, "docs"),
-    path.join(cwd, "..", "docs"),
-    path.join(cwd, "..", "..", "docs"),
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, "../../../docs"),
+    path.join(here, "../../../../docs"),
   ];
-  for (const c of directCandidates) {
+  for (const c of candidates) {
     if (isDocsRoot(c)) return c;
   }
-
-  let dir = cwd;
-  for (let i = 0; i < 8; i++) {
-    const c = path.join(dir, "docs");
-    if (isDocsRoot(c)) return c;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-
-  return path.join(cwd, "docs");
+  return candidates[0];
 }
 
 export const getDocsIndex = cache(async () => {
@@ -103,6 +104,11 @@ export const getDocBySlug = cache(async (slug: string[]) => {
 export async function readDocMarkdownBySlug(slug: string[]) {
   const doc = await getDocBySlug(slug);
   if (!doc) return null;
-  const raw = await readFile(doc.filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(doc.filePath, "utf8");
+  } catch {
+    return null;
+  }
   return { doc, raw };
 }

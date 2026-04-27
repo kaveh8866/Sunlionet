@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/kaveh/sunlionet-agent/pkg/assistant"
 	"github.com/kaveh/sunlionet-agent/pkg/importctl"
 	"github.com/kaveh/sunlionet-agent/pkg/orchestrator"
 	"github.com/kaveh/sunlionet-agent/pkg/policy"
@@ -146,11 +148,16 @@ func ImportBundle(path string) error {
 	}
 	storePath := filepath.Join(cfg.StateDir, "profiles.enc")
 	templatesPath := filepath.Join(cfg.StateDir, "templates.enc")
+	replayPath := filepath.Join(cfg.StateDir, "replay.enc")
 	store, err := profile.NewStore(storePath, masterKey)
 	if err != nil {
 		return err
 	}
 	templateStore, err := profile.NewTemplateStore(templatesPath, masterKey)
+	if err != nil {
+		return err
+	}
+	replayStore, err := importctl.NewReplayStore(replayPath, masterKey)
 	if err != nil {
 		return err
 	}
@@ -163,7 +170,7 @@ func ImportBundle(path string) error {
 		return fmt.Errorf("invalid age identity: %w", err)
 	}
 
-	importer := importctl.NewImporterWithTemplates(store, templateStore, trustedKeys, ageIdentity)
+	importer := importctl.NewImporterWithAll(store, templateStore, replayStore, trustedKeys, ageIdentity)
 	payload, err := importer.ImportFile(path)
 	if err != nil {
 		return err
@@ -223,39 +230,47 @@ func runLoop(cfg AgentConfig, stopCh <-chan struct{}, doneCh chan<- struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	runOnce(cfg)
+	if err := runOnce(cfg); err != nil && isFatalRuntimeError(err) {
+		return
+	}
 	for {
 		select {
 		case <-stopCh:
 			return
 		case <-ticker.C:
-			runOnce(cfg)
+			if err := runOnce(cfg); err != nil && isFatalRuntimeError(err) {
+				return
+			}
 		}
 	}
 }
 
-func runOnce(cfg AgentConfig) {
+func runOnce(cfg AgentConfig) error {
 	masterKey, err := profile.ParseMasterKey(cfg.MasterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("invalid master_key: %v", err))
-		return
+		return err
 	}
 	storePath := filepath.Join(cfg.StateDir, "profiles.enc")
 	templatesPath := filepath.Join(cfg.StateDir, "templates.enc")
 	store, err := profile.NewStore(storePath, masterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("store error: %v", err))
-		return
+		return err
 	}
 	templateStore, err := profile.NewTemplateStore(templatesPath, masterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("template store error: %v", err))
-		return
+		return err
 	}
 	profiles, err := store.Load()
 	if err != nil {
+		if errors.Is(err, profile.ErrDecryptionFailed) || errors.Is(err, profile.ErrCorruptStore) {
+			setError("corrupted encrypted state (profiles). reset state_dir to recover")
+			return err
+		}
 		updateError(fmt.Sprintf("load profiles: %v", err))
-		return
+		return err
 	}
 
 	var candidates []profile.Profile
@@ -266,26 +281,33 @@ func runOnce(cfg AgentConfig) {
 	}
 	if len(candidates) == 0 {
 		updateError("no profiles available")
-		return
+		return errors.New("no profiles available")
 	}
 
 	engine := policy.Engine{MaxBurstFailures: 3}
-	adaptiveStore, err := policy.NewAdaptiveStore(filepath.Join(cfg.StateDir, "adaptive.enc"), masterKey)
+	adaptivePath := filepath.Join(cfg.StateDir, "adaptive.enc")
+	adaptiveStore, err := policy.NewAdaptiveStore(adaptivePath, masterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("adaptive store: %v", err))
-		return
+		return err
 	}
 	adaptiveState, err := adaptiveStore.Load()
 	if err != nil {
-		updateError(fmt.Sprintf("adaptive state: %v", err))
-		return
+		if errors.Is(err, policy.ErrDecryptionFailedAdaptive) || errors.Is(err, policy.ErrCorruptAdaptiveStore) {
+			// If adaptive state is corrupt, we can just reset it instead of failing everything
+			adaptiveState = policy.NewAdaptiveState(80)
+			_ = adaptiveStore.Save(adaptiveState)
+		} else {
+			updateError(fmt.Sprintf("adaptive state: %v", err))
+			return err
+		}
 	}
 	adaptiveState.SetEnabled(cfg.AdaptiveMode)
 	engine.AdaptiveState = adaptiveState
 	selected, decision, ranked := engine.SelectProfile(candidates)
 	if len(ranked) == 0 {
 		updateError("no viable profiles after cooldown filters")
-		return
+		return errors.New("no viable profiles after cooldown filters")
 	}
 	reason := decision.Reason
 	if strings.TrimSpace(reason) == "" {
@@ -335,7 +357,7 @@ func runOnce(cfg AgentConfig) {
 		updateError(fmt.Sprintf("action rejected: %v", err))
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "UNKNOWN", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
-		return
+		return err
 	}
 
 	templateText, err := resolveTemplateText(selected, templateStore, cfg.TemplatesDir)
@@ -343,7 +365,7 @@ func runOnce(cfg AgentConfig) {
 		updateError(err.Error())
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
-		return
+		return err
 	}
 
 	configPath := cfg.ConfigPath
@@ -354,7 +376,7 @@ func runOnce(cfg AgentConfig) {
 		updateError(fmt.Sprintf("render config: %v", err))
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
-		return
+		return err
 	}
 	adaptiveState.RecordSelection(selected.ID)
 	adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{
@@ -379,6 +401,7 @@ func runOnce(cfg AgentConfig) {
 		UpdatedAtUnix:  time.Now().Unix(),
 	}
 	state.mu.Unlock()
+	return nil
 }
 
 func validateAction(action string, profileID string, known map[string]struct{}, switchCount int, maxPerMinute int) error {
@@ -472,6 +495,7 @@ func validateConfig(cfg *AgentConfig) error {
 }
 
 func setError(msg string) {
+	msg = sanitizeStatusText(msg)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	state.status = AgentStatus{
@@ -483,10 +507,26 @@ func setError(msg string) {
 }
 
 func updateError(msg string) {
+	msg = sanitizeStatusText(msg)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	state.status.Running = true
 	state.status.LastAction = "error"
 	state.status.LastError = msg
 	state.status.UpdatedAtUnix = time.Now().Unix()
+}
+
+func sanitizeStatusText(s string) string {
+	out := assistant.RedactText(s, assistant.RedactionStrict)
+	if len(out) > 240 {
+		out = out[:240]
+	}
+	return strings.TrimSpace(out)
+}
+
+func isFatalRuntimeError(err error) bool {
+	return errors.Is(err, profile.ErrDecryptionFailed) ||
+		errors.Is(err, profile.ErrCorruptStore) ||
+		errors.Is(err, policy.ErrDecryptionFailedAdaptive) ||
+		errors.Is(err, policy.ErrCorruptAdaptiveStore)
 }

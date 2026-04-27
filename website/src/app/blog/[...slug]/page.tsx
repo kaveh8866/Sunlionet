@@ -12,22 +12,15 @@ export async function generateStaticParams() {
   return en.map((e) => ({ slug: e.slug }));
 }
 
-export default async function BlogPostPage({
-  params,
-  basePrefix,
-}: {
-  params: Promise<{ slug: string[] }> | { slug: string[] };
-  basePrefix?: string;
-}) {
+export default async function Page({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const resolvedBase = basePrefix?.trim() ? basePrefix : "";
-  const isFa = resolvedBase === "/fa";
-  const lang = isFa ? "fa" : "en";
+  const resolvedBase = "";
+  const isFa = false;
+  const lang = "en";
 
   const direct = await readContentMarkdownBySlug("blog", lang, slug);
-  const fallback = direct ? null : isFa ? await readContentMarkdownBySlug("blog", "en", slug) : null;
-  const usedEnglishFallback = Boolean(fallback && !direct);
-  const resolved = direct ?? fallback;
+  const usedEnglishFallback = false;
+  const resolved = direct;
 
   if (!resolved) notFound();
 

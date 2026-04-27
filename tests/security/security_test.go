@@ -3,8 +3,8 @@ package security
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,8 +20,13 @@ func TestInvalidBundleRejected(t *testing.T) {
 	id, _ := age.GenerateX25519Identity()
 	store, _ := profile.NewStore(filepath.Join(t.TempDir(), "profiles.enc"), []byte("0123456789abcdef0123456789abcdef"))
 	imp := importctl.NewImporter(store, []ed25519.PublicKey{pub}, id)
-	if _, err := imp.ParseBytes([]byte("{invalid-json")); err == nil || !strings.Contains(err.Error(), "bundle invalid") {
-		t.Fatalf("expected strict invalid bundle error, got %v", err)
+	_, err := imp.ParseBytes([]byte("{invalid-json"))
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *importctl.ImportError
+	if !errors.As(err, &ie) || ie.Code != importctl.CodeMalformedBundle {
+		t.Fatalf("expected CodeMalformedBundle, got %T %v", err, err)
 	}
 }
 
@@ -50,8 +55,13 @@ func TestTamperedSignatureRejected(t *testing.T) {
 	header := wrapper["header"].(map[string]any)
 	header["sig"] = header["sig"].(string) + "A"
 	tampered, _ := json.Marshal(wrapper)
-	if _, err := imp.ParseBytes(tampered); err == nil || !strings.Contains(err.Error(), "signature") {
-		t.Fatalf("expected signature mismatch, got %v", err)
+	_, err := imp.ParseBytes(tampered)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *importctl.ImportError
+	if !errors.As(err, &ie) || ie.Code != importctl.CodeInvalidSignature {
+		t.Fatalf("expected CodeInvalidSignature, got %T %v", err, err)
 	}
 }
 
@@ -100,8 +110,13 @@ func TestInvalidProfileBundleRejected(t *testing.T) {
 		},
 		Notes: map[string]string{"issuer_key_id": signerID},
 	}, priv, id.Recipient().String(), signerID, "bundle-invalid-profile", now)
-	if _, err := imp.ParseBytes(raw); err == nil || !strings.Contains(err.Error(), "bundle invalid") {
-		t.Fatalf("expected invalid profile rejection, got %v", err)
+	_, err := imp.ParseBytes(raw)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *importctl.ImportError
+	if !errors.As(err, &ie) || ie.Code != importctl.CodeInvalidPayload {
+		t.Fatalf("expected CodeInvalidPayload, got %T %v", err, err)
 	}
 }
 
@@ -125,8 +140,13 @@ func TestReplayBundleRejected(t *testing.T) {
 	if _, err := imp.ParseBytes(raw); err != nil {
 		t.Fatalf("first parse should succeed: %v", err)
 	}
-	if _, err := imp.ParseBytes(raw); err == nil || !strings.Contains(err.Error(), "replay detected") {
-		t.Fatalf("expected replay rejection, got %v", err)
+	_, err := imp.ParseBytes(raw)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	var ie *importctl.ImportError
+	if !errors.As(err, &ie) || ie.Code != importctl.CodeReplayDetected {
+		t.Fatalf("expected CodeReplayDetected, got %T %v", err, err)
 	}
 }
 

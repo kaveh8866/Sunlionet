@@ -1,9 +1,10 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -13,20 +14,29 @@ import (
 	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
 )
 
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func jsonResp(status int, body interface{}) *http.Response {
+	b, _ := json.Marshal(body)
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(bytes.NewReader(b)),
+		Header:     make(http.Header),
+	}
+}
+
 func TestProposeAction_Success(t *testing.T) {
-	// Create a mock llama.cpp server
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request path
+	client := NewLocalLlamaCPPClient("http://example.invalid", true)
+	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path != "/completion" {
 			t.Fatalf("Expected /completion, got %s", r.URL.Path)
 		}
-
-		// Verify request method
 		if r.Method != http.MethodPost {
 			t.Fatalf("Expected POST, got %s", r.Method)
 		}
 
-		// Mock a successful JSON response matching the LLMDecision schema
 		mockDecision := sbctl.LLMDecision{
 			Protocol: "reality",
 			Parameters: struct {
@@ -42,22 +52,10 @@ func TestProposeAction_Success(t *testing.T) {
 			EnableBTMesh:        false,
 			Explanation:         "Mock explanation",
 		}
-
 		decisionBytes, _ := json.Marshal(mockDecision)
-
-		// The grammar stops generation at `}`, so we simulate llama.cpp leaving it out or returning it
-		// The client appends `}` manually because it stopped there.
-		mockResp := LlamaResponse{
-			Content: string(decisionBytes[:len(decisionBytes)-1]), // Remove the last `}`
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(mockResp)
-	}))
-	defer mockServer.Close()
-
-	// Initialize the client pointing to our mock server
-	client := NewLocalLlamaCPPClient(mockServer.URL, true)
+		mockResp := LlamaResponse{Content: string(decisionBytes[:len(decisionBytes)-1])}
+		return jsonResp(http.StatusOK, mockResp), nil
+	})
 
 	// Create mock inputs
 	fingerprint := "test-fingerprint"
@@ -81,13 +79,10 @@ func TestProposeAction_Success(t *testing.T) {
 }
 
 func TestProposeAction_ServerFailure(t *testing.T) {
-	// Create a mock llama.cpp server that returns 500 Internal Server Error
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer mockServer.Close()
-
-	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+	client := NewLocalLlamaCPPClient("http://example.invalid", false)
+	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return jsonResp(http.StatusInternalServerError, map[string]string{"error": "boom"}), nil
+	})
 
 	_, err := client.ProposeAction(
 		"test",
@@ -101,15 +96,17 @@ func TestProposeAction_ServerFailure(t *testing.T) {
 }
 
 func TestProposeAction_Timeout(t *testing.T) {
-	// Create a mock llama.cpp server that sleeps to simulate timeout
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(20 * time.Millisecond) // Simulate slow response
-	}))
-	defer mockServer.Close()
-
-	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+	client := NewLocalLlamaCPPClient("http://example.invalid", false)
 	// Force a very short timeout for testing
 	client.httpClient.Timeout = 5 * time.Millisecond
+	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		select {
+		case <-time.After(20 * time.Millisecond):
+			return jsonResp(http.StatusOK, LlamaResponse{Content: `{`}), nil
+		case <-r.Context().Done():
+			return nil, r.Context().Err()
+		}
+	})
 
 	_, err := client.ProposeAction(
 		"test",
@@ -123,14 +120,11 @@ func TestProposeAction_Timeout(t *testing.T) {
 }
 
 func TestProposeAction_InvalidJSON(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(LlamaResponse{Content: "not-json"})
-	}))
-	defer mockServer.Close()
-
-	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+	client := NewLocalLlamaCPPClient("http://example.invalid", false)
 	client.httpClient.Timeout = 500 * time.Millisecond
+	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return jsonResp(http.StatusOK, LlamaResponse{Content: "not-json"}), nil
+	})
 
 	_, err := client.ProposeAction(
 		"fp",
@@ -146,7 +140,8 @@ func TestProposeAction_InvalidJSON(t *testing.T) {
 func TestProposeAction_DoesNotLeakSecretsInPrompt(t *testing.T) {
 	const secret = "TEST_SECRET=redacted-test-value"
 
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := NewLocalLlamaCPPClient("http://example.invalid", false)
+	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		var req LlamaRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
@@ -154,16 +149,11 @@ func TestProposeAction_DoesNotLeakSecretsInPrompt(t *testing.T) {
 		if strings.Contains(req.Prompt, secret) {
 			t.Fatalf("llm prompt leaked secret material")
 		}
-
 		mockResp := LlamaResponse{
 			Content: `{"protocol":"reality","parameters":{"sni":"www.apple.com","utls":"chrome","port":443},"rotation_interval_sec":1800,"enable_bt_mesh":false,"explanation":"ok"`,
 		}
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(mockResp)
-	}))
-	defer mockServer.Close()
-
-	client := NewLocalLlamaCPPClient(mockServer.URL, false)
+		return jsonResp(http.StatusOK, mockResp), nil
+	})
 
 	_, err := client.ProposeAction(
 		secret,

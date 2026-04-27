@@ -39,64 +39,32 @@
 ## Decision-Making
 
 ### Scope Categories
-
 - Small changes: bug fixes, refactors, documentation corrections, non-sensitive improvements.
 - Major changes: protocol support, distribution workflow changes, state/storage format changes, UX defaults that affect safety.
 - Security-critical changes: cryptography, signature verification, bundle verification, update logic, key handling, logging policies, network transport selection logic.
+- Emergency changes: hotfixes for P0/P1 incidents, urgent mirror updates during blocking events.
 
 ### Process
-
 - Small changes: maintainer approval after at least one independent review.
 - Major changes: public proposal + discussion window + maintainer decision recorded in a decision note (in-repo).
 - Security-critical changes: SRG review required + maintainer approval, with explicit risk analysis in the PR description.
+- Emergency changes: Single maintainer "Emergency Authority" (documented below).
 
-### Blocking Rules
+### Emergency Response Authority
+In the event of a P0/P1 incident (as defined in `docs/release/incident-response.md`):
+1. Any active maintainer can trigger an "Emergency State."
+2. During an Emergency State, the 2-of-N signature requirement for hotfixes is waived for a 24-hour window to allow rapid mitigation.
+3. The acting maintainer must publish a "Post-Mortem" within 72 hours, justifying the emergency actions.
+4. Emergency authority is limited to the scope of the incident (e.g., fixing the specific bug, not adding features).
 
-- Any maintainer or SRG member can request additional review for safety-sensitive code.
-- Any change that increases data exposure risk must be rejected unless the benefit is compelling and mitigations are clear.
+### Release Decision Ownership
+- **Stable Releases**: Unanimous agreement among active maintainers.
+- **Beta Releases**: Majority agreement among active maintainers.
+- **Hotfixes**: Decision by any maintainer in the Security Response Team (SRT).
 
-## Transparency Rules
-
-- No private roadmaps for security, distribution, or trust roots.
-- Prefer public discussions and issues; use private channels only for responsible disclosure.
-- All releases have public verification steps and signed artifacts.
-- Governance changes are treated as major changes and documented.
-
-## Maintainer Set and Continuity
-
-### Minimum Maintainer Set
-
-- Target: at least 3 active maintainers from different networks/regions.
-- If the set drops below 2 active maintainers, release cadence pauses except for critical security fixes.
-
-### Release Authority
-
-- Releases require at least 2 maintainer signatures (2-of-N) before publishing.
-- Signing keys are personal and hardware-backed when possible.
-- Public key fingerprints are published in-repo and in multiple mirrors.
-
-### Bus-Factor Mitigation
-
-- Every sensitive module must have at least 2 knowledgeable reviewers.
-- Maintain “how to release” and “how to verify” steps as first-class docs.
-- Avoid hidden operational knowledge (no “only one person knows” steps).
-
-## Module Ownership (Non-Exclusive)
-
-- Ownership provides responsibility for review, not exclusive control.
-- Sensitive areas require additional scrutiny:
-  - cryptography and signature verification
-  - bundle format and verification
-  - update and distribution tooling
-  - local encrypted storage and key handling
-  - logging and diagnostics pathways
-
-## Fork and Mirror Policy
-
-- Forks are encouraged when they preserve user safety and verification.
-- Mirrors must not change trust roots silently; if they do, they must clearly document that they are a different trust domain.
-
-## Conflict Resolution
+### Conflict Resolution
+- Technical disputes are resolved through consensus. If consensus cannot be reached after 7 days, the SRG provides a binding safety assessment.
+- Governance disputes require a majority vote of all maintainers.
 
 - Technical conflicts: resolve by evidence (tests, reproducible results, threat modeling).
 - Governance conflicts: resolve publicly with a recorded decision and rationale.

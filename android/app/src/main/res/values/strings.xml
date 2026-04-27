@@ -32,6 +32,7 @@
     <string name="error_config_missing">Import configuration to connect.</string>
     <string name="error_config_invalid">Configuration is invalid or expired.</string>
     <string name="error_network_blocked">Connection blocked by network.</string>
+    <string name="error_storage_corrupt">Secure storage is corrupted.</string>
     <string name="details_title">Details</string>
     <string name="details_close">Close</string>
     <string name="profile_none">Profile: -</string>
@@ -40,4 +41,8 @@
     <string name="version_label">Version: %1$s</string>
     <string name="notif_channel_agent">SunLionet</string>
     <string name="notif_channel_vpn">SunLionet VPN</string>
+    <string name="secure_storage_error_title">Secure Storage Error</string>
+    <string name="secure_storage_error_message">Failed to initialize secure storage. This usually happens if the device\'s key store is corrupted. Would you like to reset app storage? This will delete your profiles.</string>
+    <string name="reset">Reset</string>
+    <string name="exit">Exit</string>
 </resources>

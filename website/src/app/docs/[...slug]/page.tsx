@@ -55,16 +55,10 @@ export async function generateStaticParams() {
   return params;
 }
 
-export default async function DocPage({
-  params,
-  basePrefix,
-}: {
-  params: Promise<{ slug: string[] }> | { slug: string[] };
-  basePrefix?: string;
-}) {
+export default async function Page({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const resolvedBase = basePrefix?.trim() ? basePrefix : "";
-  const prefersFa = resolvedBase === "/fa";
+  const resolvedBase = "";
+  const prefersFa = false;
 
   const legacy = tryLegacyRedirect(slug);
   if (legacy) redirect(`${resolvedBase}${legacy}`);

@@ -27,131 +27,99 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             actions={
               <>
                 <Link
-                  href={`${base}/installation`}
+                  href={`${base}/download`}
                   prefetch={false}
-                  className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
+                  className="bg-primary hover:opacity-90 text-primary-foreground px-6 py-3 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
                 >
-                  {copy.home.cta.getStarted}
+                  {copy.home.cta.download}
+                </Link>
+                <Link
+                  href={`${base}/docs/outside/verification`}
+                  prefetch={false}
+                  className="bg-card hover:opacity-90 text-foreground px-6 py-3 rounded-md text-sm font-semibold transition-opacity border border-border"
+                >
+                  {copy.home.cta.verify}
                 </Link>
                 <Link
                   href={`${base}/manifest`}
                   prefetch={false}
-                  className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
+                  className="bg-card hover:opacity-90 text-muted-foreground px-4 py-3 rounded-md text-sm font-semibold transition-opacity border border-border"
                 >
                   {copy.home.cta.readManifest}
-                </Link>
-                <Link
-                  href={`${base}/download`}
-                  prefetch={false}
-                  className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
-                >
-                  {copy.home.cta.download}
                 </Link>
               </>
             }
           />
 
-          <Callout title={isFa ? "هشدار ایمنی" : "Safety notice"} tone="warning">
-            {isFa ? (
-              <>
-                فرض کنید دستگاه‌ها قابل توقیف هستند و ترافیک قابل پایش است. لاگ‌ها را حداقلی نگه دارید، فایل‌ها را قبل از اجرا بررسی کنید و
-                راهنمای ایمنی عملیاتی را در{" "}
-                <Link href={`${base}/docs/user/safety`} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
-                  /docs/user/safety
-                </Link>{" "}
-                بخوانید.
-              </>
-            ) : (
-              <>
-                Assume devices can be seized and traffic can be monitored. Prefer minimal logs, verify downloaded artifacts, and follow the
-                operational safety guidance in{" "}
-                <Link href={`${base}/docs/user/safety`} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
-                  /docs/user/safety
-                </Link>
-                .
-              </>
-            )}
-          </Callout>
+          <section className="grid gap-8">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-foreground">{copy.home.why.title}</h2>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {copy.home.why.cards.map((card: any, i: number) => (
+                <InfoCard
+                  key={i}
+                  title={card.title}
+                  description={card.desc}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="grid gap-8 bg-card/40 border border-border rounded-2xl p-8 shadow-[0_0_0_1px_var(--border)]">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-foreground">{copy.home.steps.title}</h2>
+            </div>
+            <div className="grid md:grid-cols-3 gap-8">
+              {[copy.home.steps.s1, copy.home.steps.s2, copy.home.steps.s3].map((step: any, i: number) => (
+                <div key={i} className="flex flex-col items-center text-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg">
+                    {i + 1}
+                  </div>
+                  <h3 className="font-bold text-foreground">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground">{step.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center mt-4">
+              <Link
+                href={`${base}/download`}
+                className="text-primary font-semibold hover:underline"
+              >
+                {copy.home.cta.getStarted} →
+              </Link>
+            </div>
+          </section>
 
           <section className="grid gap-6">
-            <SectionHeader
-              title={isFa ? "معماری دو بخشی" : "Two-part architecture"}
-              subtitle={isFa ? "Inside حلقهٔ محلی detector/policy را اجرا می‌کند؛ Outside بسته‌ها را تولید و از کانال‌های قابل اعتماد توزیع می‌کند." : "Inside runs the local detector/policy loop. Outside produces bundles and shares them through trusted channels."}
-            />
+            <SectionHeader title={isFa ? "مستندات" : "Documentation"} subtitle={isFa ? "راهنمای استفاده و جزئیات فنی" : "Guides and technical details"} />
             <div className="grid md:grid-cols-2 gap-4">
               <InfoCard
-                eyebrow={isFa ? "روی دستگاه" : "On-device"}
-                title={isFa ? "SunLionet Inside" : "SunLionet Inside"}
-                description={
-                  isFa
-                    ? "Detector → موتور سیاست‌گذاری قطعی → reload در sing-box. رفتار قابل پیش‌بینی و محلی را ترجیح می‌دهد."
-                    : "Detector → deterministic policy engine → sing-box reload. Operates locally and prioritizes predictable behavior."
-                }
+                href={`${base}/docs`}
+                title={isFa ? "راهنمای کاربر" : "User Guides"}
+                description={isFa ? "آموزش نصب، استفاده و نکات ایمنی برای کاربران." : "Installation, usage, and safety tips for users."}
               />
               <InfoCard
-                eyebrow={isFa ? "نود پشتیبان" : "Supporter node"}
-                title={isFa ? "SunLionet Outside" : "SunLionet Outside"}
-                description={
-                  isFa
-                    ? "Discovery → validation → بسته‌های امضاشده+رمزگذاری‌شده. برای توزیع کنترل‌شده (مثلاً Signal) طراحی شده."
-                    : "Discovery → validation → signed+encrypted bundles. Produces artifacts intended for controlled delivery (e.g., Signal)."
-                }
+                href={`${base}/architecture`}
+                title={isFa ? "مستندات فنی" : "Technical Docs"}
+                description={isFa ? "جزئیات معماری، مدل امنیتی و توسعه‌دهندگان." : "Architecture details, security model, and developer info."}
               />
             </div>
           </section>
 
           <section className="grid gap-6">
-            <SectionHeader
-              title={isFa ? "چه کار می‌کند" : "What it does"}
-              subtitle={isFa ? "یک مجموعه قابلیت کوچک و قابل مشاهده/قابل تست." : "A small set of capabilities, designed to be observable and testable."}
-            />
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <InfoCard
-                title={isFa ? "سیگنال‌های DPI / مسدودسازی" : "DPI / blocking signals"}
-                description={
-                  isFa ? "سیگنال‌های محلی را جمع‌آوری می‌کند (DNS poisoning، reset، injection، UDP drop) و رویداد تولید می‌کند." : "Collects local signals (DNS poisoning, resets, injection, UDP drops) and emits events."
-                }
-              />
-              <InfoCard
-                title={isFa ? "چرخش پروتکل/پروفایل" : "Protocol/profile rotation"}
-                description={
-                  isFa ? "پروفایل‌ها را به‌صورت قطعی رتبه‌بندی می‌کند و با تغییر شبکه سوییچ می‌کند." : "Ranks candidate profiles deterministically and switches when the network changes."
-                }
-              />
-              <InfoCard
-                title={isFa ? "اعتبارسنجی بسته‌ها" : "Bundle verification"}
-                description={
-                  isFa ? "Outside بسته تولید می‌کند؛ Inside امضا را بررسی کرده و فقط کانفیگ‌های قابل اعتماد را اعمال می‌کند." : "Outside generates bundles; Inside verifies signatures and applies only trusted configs."
-                }
-              />
-              <InfoCard
-                title={isFa ? "مسیرهای انتقال آفلاین" : "Offline transfer paths"}
-                description={isFa ? "برای کارکرد در اختلال‌های شدید با انتقال خارج از بستر اینترنت طراحی شده." : "Designed to keep working during partial outages via out-of-band transfer."}
-              />
-            </div>
-          </section>
-
-          <section className="grid gap-6">
-            <SectionHeader title={isFa ? "از اینجا شروع کنید" : "Start here"} subtitle={isFa ? "برای شروع سریع صفحات وب کافی است؛ برای جزئیات از مستندات مخزن استفاده کنید." : "Use the website pages for quick orientation; use the repository-backed docs for depth."} />
-            <div className="grid md:grid-cols-3 gap-4">
-              <InfoCard href={`${base}/installation`} title={isFa ? "نصب" : "Installation"} description={isFa ? "مسیرهای نصب و نمونه‌های بررسی SHA256." : "Common install paths and SHA256 verification examples."} />
-              <InfoCard href={`${base}/docs`} title={isFa ? "مستندات" : "Documentation"} description={isFa ? "مستندات مبتنی بر مخزن با لینک‌های پایدار." : "Repository-backed docs with a table of contents and stable URLs."} />
-              <InfoCard href={`${base}/architecture`} title={isFa ? "معماری" : "Architecture"} description={isFa ? "جریان Inside/Outside، اجزا، و مدل عملیاتی." : "Inside vs Outside data flow, components, and operational model."} />
-            </div>
-          </section>
-
-          <DownloadSection releases={releases} basePrefix={base} />
-
-          <section className="grid gap-6">
-            <SectionHeader
-              title={isFa ? "همکاری و مشارکت" : "Contribute & cooperate"}
-              subtitle={isFa ? "تغییرات را کوچک، قابل بازبینی و حریم‌خصوصی‌محور نگه دارید. نیازی به اطلاعات شخصی نیست." : "Keep changes small, reviewable, and privacy-preserving. No personal data required."}
-            />
+            <SectionHeader title={isFa ? "حمایت و تماس" : "Support & Contact"} subtitle={isFa ? "دریافت کمک و راه‌های ارتباطی" : "Get help and reach out"} />
             <div className="grid md:grid-cols-2 gap-4">
-              <InfoCard title={isFa ? "Outside را اجرا کنید و بسته‌ها را منتقل کنید" : "Run Outside and deliver bundles"} description={isFa ? "پشتیبان‌ها می‌توانند SunLionet Outside را اجرا کنند و خروجی را از کانال‌های قابل اعتماد منتقل کنند." : "Supporters can run SunLionet Outside and transfer artifacts through trusted channels."} />
-              <InfoCard title={isFa ? "مشاهدات میدانی را گزارش کنید" : "Report field observations"} description={isFa ? "یادداشت‌های ناشناس دربارهٔ بلاک/ریست‌های جدید بدون اتصال به شناسه‌های شخصی." : "Share anonymized notes about new blocks/resets without linking personal identifiers."} />
-              <InfoCard title={isFa ? "مشارکت کد (AGPL-3.0)" : "Contribute code (AGPL-3.0)"} description={isFa ? "مشارکت ناشناس در GitHub خوش‌آمد است. PRهای کوچک و دارای تست ترجیح داده می‌شوند." : "Anonymous GitHub contributions are welcome. Prefer incremental PRs with tests."} />
-              <InfoCard href={`${base}/support`} title={isFa ? "حمایت" : "Support"} description={isFa ? "راه‌های کم‌ریسک و ناشناس برای کمک." : "Anonymous donation options and other low-risk ways to help."} />
+              <InfoCard
+                href={`${base}/support`}
+                title={isFa ? "حمایت مالی" : "Donate"}
+                description={isFa ? "کمک به پایداری پروژه به‌صورت ناشناس." : "Help sustain the project anonymously."}
+              />
+              <InfoCard
+                href="https://github.com/kaveh/sunlionet-agent/issues"
+                title={isFa ? "گزارش مشکل" : "Report Issues"}
+                description={isFa ? "ثبت مشکلات یا پیشنهادات در گیت‌هاب." : "Submit bugs or suggestions on GitHub."}
+              />
             </div>
           </section>
 

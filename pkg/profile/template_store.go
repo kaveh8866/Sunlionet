@@ -79,12 +79,12 @@ func (s *TemplateStore) Load() (map[string]string, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 	nonce, body := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decryption failed (wrong key or corrupted data): %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 	var templates map[string]string
 	if err := json.Unmarshal(plaintext, &templates); err != nil {

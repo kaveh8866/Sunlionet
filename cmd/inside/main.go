@@ -42,7 +42,7 @@ import (
 	signalsim "github.com/kaveh/sunlionet-agent/pkg/signalrx/sim"
 )
 
-var version = "dev"
+var version = "v0.3.0-rc1"
 var simpleConnectOutput = false
 
 func uiPrintf(format string, args ...any) {
@@ -426,7 +426,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 
 	allProfiles, err := store.Load()
 	if err != nil {
-		if strings.Contains(err.Error(), "decryption failed (wrong key or corrupted data)") {
+		if errors.Is(err, profile.ErrDecryptionFailed) || errors.Is(err, profile.ErrCorruptStore) {
 			return userError{Message: "Failed to decrypt local store (wrong key or corrupted file). If you lost the key, delete the state directory to reset.", Err: err}
 		}
 		return userError{Message: "Failed to load local profiles store", Err: err}

@@ -12,8 +12,10 @@ This document defines end-to-end coverage for user-facing web flows.
 ### Public pages
 
 - Homepage smoke: loads, nav visible, core CTA visible
+- Language toggle: EN/FA switch is deterministic on public routes
 - Docs landing: page loads, docs navigation visible, docs route (`/docs/all`) reachable
 - Download page: recommendation block visible, platform selector visible, verify/install sections visible
+- Download → Verification guide: `/docs/outside/verification` is reachable from the primary CTA (EN/FA)
 - Download fallback: selecting `Source code` renders a safe no-matching-artifact empty state
 - Support page key trust sections render
 - Navigation consistency across core pages (`/download`, `/docs`, `/support`)

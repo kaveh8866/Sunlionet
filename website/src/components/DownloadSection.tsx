@@ -181,28 +181,29 @@ type PlatformKey =
   | "source"
   | "unknown";
 
-function platformLabel(k: PlatformKey) {
+function platformLabel(k: PlatformKey, lang: "en" | "fa") {
+  const isFa = lang === "fa";
   switch (k) {
     case "windows-amd64":
-      return "Windows x86_64";
+      return isFa ? "ویندوز (Windows) x86_64" : "Windows x86_64";
     case "macos-arm64":
-      return "macOS Apple Silicon (arm64)";
+      return isFa ? "مک (macOS) Apple Silicon (arm64)" : "macOS Apple Silicon (arm64)";
     case "macos-amd64":
-      return "macOS Intel (x86_64)";
+      return isFa ? "مک (macOS) Intel (x86_64)" : "macOS Intel (x86_64)";
     case "linux-amd64":
-      return "Linux x86_64";
+      return isFa ? "لینوکس (Linux) x86_64" : "Linux x86_64";
     case "linux-arm64":
-      return "Linux arm64";
+      return isFa ? "لینوکس (Linux) arm64" : "Linux arm64";
     case "raspberrypi-arm64":
-      return "Raspberry Pi (ARM64)";
+      return isFa ? "رزبری‌پای (Raspberry Pi) ARM64" : "Raspberry Pi (ARM64)";
     case "android":
-      return "Android";
+      return isFa ? "اندروید (Android)" : "Android";
     case "ios":
-      return "iOS";
+      return isFa ? "آی‌اواس (iOS)" : "iOS";
     case "source":
-      return "Source code";
+      return isFa ? "کد منبع (Source code)" : "Source code";
     default:
-      return "Unknown";
+      return isFa ? "نامشخص" : "Unknown";
   }
 }
 
@@ -248,9 +249,11 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
   const pathname = usePathname();
   const lang = getUILangFromPathname(pathname);
   const copy = uiCopy[lang];
+  const isFa = lang === "fa";
   const origin = useOrigin();
   const { detection, supportsAutoRecommendation } = useOsDetection();
-  const [arch] = useState<DetectedArch>(() => detectArchFromNavigator());
+  const [hydrated, setHydrated] = useState(false);
+  const [arch, setArch] = useState<DetectedArch>("unknown");
   const resolvedBasePrefix = basePrefix?.trim() ? basePrefix : "";
   const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
 
@@ -258,12 +261,21 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
   const [manualPlatform, setManualPlatform] = useState<PlatformKey>("unknown");
   const [selectedTag, setSelectedTag] = useState<string>(releases[0]?.tag ?? "");
 
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setArch(detectArchFromNavigator());
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
+
   const selectedRelease = useMemo(() => releases.find((r) => r.tag === selectedTag) ?? releases[0] ?? null, [releases, selectedTag]);
   const createdAt = formatDate(selectedRelease?.createdAtUnix) ?? "n/a";
 
+  const effectiveAuto = hydrated && supportsAutoRecommendation;
   const autoPlatform = useMemo(
-    () => (supportsAutoRecommendation ? pickPlatform(detection.os, arch) : "unknown"),
-    [supportsAutoRecommendation, detection.os, arch],
+    () => (effectiveAuto ? pickPlatform(detection.os, arch) : "unknown"),
+    [effectiveAuto, detection.os, arch],
   );
 
   const effectivePlatform: PlatformKey = manualPlatform !== "unknown" ? manualPlatform : autoPlatform;
@@ -293,38 +305,81 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
   const recommendedSupport: { level: "stable" | "experimental" | "planned" | "unsupported"; note: string } = useMemo(() => {
     if (effectivePlatform === "android") {
-      if (role !== "inside") return { level: "unsupported", note: "Outside is not supported on Android. Run Outside on a separate machine." };
+      if (role !== "inside") {
+        return {
+          level: "unsupported",
+          note: isFa
+            ? "نسخه Outside روی اندروید پشتیبانی نمی‌شود. Outside را روی یک دستگاه جدا اجرا کنید."
+            : "Outside is not supported on Android. Run Outside on a separate machine.",
+        };
+      }
       const hasApk = Boolean(recommendedArtifact?.fileName?.toLowerCase()?.endsWith(".apk"));
       return {
         level: "experimental",
         note: hasApk
-          ? "Android APK is available for direct install (sideload). Verify checksums/signature before installing."
-          : "Android APK is not published in this build. Use the Termux CLI binary fallback, or download the APK from GitHub Releases when available.",
+          ? isFa
+            ? "APK اندروید برای نصب دستی موجود است. بعد از دانلود، اندروید هنگام نصب تأیید می‌خواهد و این سایت نصب بی‌صدا انجام نمی‌دهد. قبل از نصب، checksum/امضا را بررسی کنید."
+            : "Android APK is available for sideload install. After download, Android will ask you to confirm install and this site cannot install silently. Verify checksums/signature before installing."
+          : isFa
+            ? "در این بیلد، APK اندروید منتشر نشده است. از مسیر Termux/CLI استفاده کنید یا زمانی که موجود شد، APK را از GitHub Releases دریافت کنید."
+            : "Android APK is not published in this build. Use the Termux CLI binary fallback, or download the APK from GitHub Releases when available.",
       };
     }
     if (effectivePlatform === "ios") {
-      return { level: "planned", note: "iOS builds are not currently published from this site. Use the official App Store/TestFlight link when available." };
+      return {
+        level: "planned",
+        note: isFa
+          ? "در حال حاضر نسخه iOS از این سایت منتشر نمی‌شود. در صورت انتشار، از لینک رسمی App Store/TestFlight استفاده کنید."
+          : "iOS builds are not currently published from this site. Use the official App Store/TestFlight link when available.",
+      };
     }
     if (effectivePlatform === "windows-amd64") {
       return {
         level: "experimental",
-        note: "Windows bundles are provided, but the primary supported path is still Linux. Verify checksums before running.",
+        note: isFa
+          ? "بیلد ویندوز موجود است، اما مسیر اصلی فعلاً لینوکس است. قبل از اجرا، checksum را بررسی کنید."
+          : "Windows bundles are provided, but the primary supported path is still Linux. Verify checksums before running.",
       };
     }
     if (effectivePlatform === "macos-arm64") {
-      return { level: "experimental", note: "macOS bundles are available for Apple Silicon (arm64). Verify checksums before running." };
+      return {
+        level: "experimental",
+        note: isFa
+          ? "بیلد macOS برای Apple Silicon (arm64) موجود است. قبل از اجرا، checksum را بررسی کنید."
+          : "macOS bundles are available for Apple Silicon (arm64). Verify checksums before running.",
+      };
     }
     if (effectivePlatform === "macos-amd64") {
-      return { level: "unsupported", note: "No macOS Intel bundle is published in this build. Use Apple Silicon bundle or build from source." };
+      return {
+        level: "unsupported",
+        note: isFa
+          ? "برای macOS Intel در این بیلد فایل آماده منتشر نشده است. از نسخه Apple Silicon یا ساخت از کد منبع استفاده کنید."
+          : "No macOS Intel bundle is published in this build. Use Apple Silicon bundle or build from source.",
+      };
     }
     if (effectivePlatform === "raspberrypi-arm64") {
-      return { level: "experimental", note: "Uses the Linux arm64 bundle. Treat as experimental until long-running field testing is complete." };
+      return {
+        level: "experimental",
+        note: isFa
+          ? "از بیلد لینوکس arm64 استفاده می‌کند. تا تکمیل تست میدانی طولانی‌مدت، آزمایشی محسوب می‌شود."
+          : "Uses the Linux arm64 bundle. Treat as experimental until long-running field testing is complete.",
+      };
     }
     if (effectivePlatform === "linux-amd64" || effectivePlatform === "linux-arm64") {
-      return { level: "stable", note: "Linux bundles are the current MVP path (tarball + install script + systemd unit)." };
+      return {
+        level: "stable",
+        note: isFa
+          ? "بیلدهای لینوکس مسیر اصلی فعلی هستند (tarball + اسکریپت نصب + systemd)."
+          : "Linux bundles are the current MVP path (tarball + install script + systemd unit).",
+      };
     }
-    return { level: "unsupported", note: "Auto-detection is inconclusive. Use the platform grid and verify before running." };
-  }, [effectivePlatform, role, recommendedArtifact?.fileName]);
+    return {
+      level: "unsupported",
+      note: isFa
+        ? "تشخیص خودکار قطعی نیست. از جدول پلتفرم‌ها استفاده کنید و قبل از اجرا تأیید اصالت انجام دهید."
+        : "Auto-detection is inconclusive. Use the platform grid and verify before running.",
+    };
+  }, [effectivePlatform, role, recommendedArtifact?.fileName, isFa]);
 
   const releasePageUrl = selectedRelease ? `${githubReleases}/tag/${selectedRelease.tag}` : githubReleases;
   const sourceTarballUrl = selectedRelease ? `${githubTagTarballBase}/${selectedRelease.tag}.tar.gz` : `${githubRepo}/archive/refs/heads/main.tar.gz`;
@@ -353,6 +408,10 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
     if (effectivePlatform === "android") {
       const isApk = file.toLowerCase().endsWith(".apk");
+      const cliWarning =
+        lang === "fa"
+          ? "هشدار: این فایل یک برنامه خط فرمان است و APK امضا شده نیست. قبل از اجرا حتماً تأیید اصالت را انجام دهید."
+          : "WARNING: This is a CLI binary, not a signed APK. Verify checksum and only run if you trust the source.";
       return {
         language: "bash",
         download: isApk
@@ -367,7 +426,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
           : `sha256sum -c ${file}.sha256`,
         install: isApk
           ? `adb install -r ${file}`
-          : `echo 'WARNING: This is a CLI binary, not a signed APK. Verify checksum and only run if you trust the source.'\nchmod +x "${file}"\n./"${file}"`,
+          : `echo '${cliWarning}'\nchmod +x "${file}"\n./"${file}"`,
       };
     }
 
@@ -416,98 +475,118 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
     }
 
     return null;
-  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, origin, verificationFiles]);
+  }, [recommendedArtifact, artifactUrl, shaUrl, effectivePlatform, role, origin, verificationFiles, lang]);
 
   const hasLocalReleases = releases.length > 0;
 
   const recommendedHeading = useMemo(() => {
     if (lang === "fa") {
+      if (!hydrated) return "دانلود پیشنهادی";
       if (!supportsAutoRecommendation) return "دانلود پیشنهادی (انتخاب دستی)";
       if (autoPlatform === "unknown") return "دانلود پیشنهادی (تشخیص قطعی نیست)";
       return "دانلود پیشنهادی";
     }
+    if (!hydrated) return "Recommended download";
     if (!supportsAutoRecommendation) return "Recommended download (manual selection)";
     if (autoPlatform === "unknown") return "Recommended download (detection is uncertain)";
     return "Recommended download";
-  }, [supportsAutoRecommendation, autoPlatform, lang]);
+  }, [supportsAutoRecommendation, autoPlatform, lang, hydrated]);
 
-  const platformChoices: { key: PlatformKey; description: string; support: string; method: string; target?: string }[] = useMemo(
-    () => [
+  const platformChoices: { key: PlatformKey; description: string; support: string; method: string; target?: string }[] = useMemo(() => {
+    const isFa = lang === "fa";
+    const support = {
+      experimental: isFa ? "آزمایشی" : "Experimental",
+      planned: isFa ? "برنامه‌ریزی‌شده" : "Planned",
+      notPublished: isFa ? "منتشر نشده" : "Not published",
+      mvp: isFa ? "مسیر اصلی فعلی" : "MVP path",
+      mvpArm: isFa ? "مسیر اصلی فعلی (arm64)" : "MVP path (arm64)",
+      available: isFa ? "همیشه در دسترس" : "Always available",
+    };
+
+    return [
       {
         key: "windows-amd64",
-        description: "Windows x86_64 bundle (zip). Intended for development/testing while Linux remains the primary supported path.",
-        support: "Experimental",
-        method: "ZIP + verify SHA256 + unzip",
+        description: isFa
+          ? "بسته ویندوز (zip). فعلاً بیشتر برای تست/توسعه؛ مسیر اصلی همچنان لینوکس است."
+          : "Windows x86_64 bundle (zip). Intended for development/testing while Linux remains the primary supported path.",
+        support: support.experimental,
+        method: isFa ? "ZIP + بررسی SHA256 + استخراج" : "ZIP + verify SHA256 + unzip",
         target: "windows-amd64",
       },
       {
         key: "macos-arm64",
-        description: "macOS Apple Silicon (arm64) bundle (tarball).",
-        support: "Experimental",
-        method: "Tarball + verify SHA256",
+        description: isFa ? "بسته macOS برای Apple Silicon (arm64)." : "macOS Apple Silicon (arm64) bundle (tarball).",
+        support: support.experimental,
+        method: isFa ? "Tarball + بررسی SHA256" : "Tarball + verify SHA256",
         target: "darwin-arm64",
       },
       {
         key: "macos-amd64",
-        description: "macOS Intel bundles are not currently published (use source build or Apple Silicon bundle).",
-        support: "Not published",
-        method: "Source build",
+        description: isFa
+          ? "برای macOS Intel فایل آماده منتشر نشده است (از Apple Silicon یا ساخت از کد منبع استفاده کنید)."
+          : "macOS Intel bundles are not currently published (use source build or Apple Silicon bundle).",
+        support: support.notPublished,
+        method: isFa ? "ساخت از کد منبع" : "Source build",
         target: "darwin-amd64",
       },
       {
         key: "linux-amd64",
-        description: "Static bundle for Linux x86_64. Includes install script + systemd unit.",
-        support: "MVP path",
-        method: "Tarball + verify SHA256 + install script",
+        description: isFa ? "بسته لینوکس x86_64 با اسکریپت نصب و unit برای systemd." : "Static bundle for Linux x86_64. Includes install script + systemd unit.",
+        support: support.mvp,
+        method: isFa ? "Tarball + بررسی SHA256 + اسکریپت نصب" : "Tarball + verify SHA256 + install script",
         target: "linux-amd64",
       },
       {
         key: "linux-arm64",
-        description: "Static bundle for Linux arm64 (servers, SBCs). Includes install script + systemd unit.",
-        support: "MVP path (arm64)",
-        method: "Tarball + verify SHA256 + install script",
+        description: isFa ? "بسته لینوکس arm64 (سرورها/SBCها) با اسکریپت نصب و systemd." : "Static bundle for Linux arm64 (servers, SBCs). Includes install script + systemd unit.",
+        support: support.mvpArm,
+        method: isFa ? "Tarball + بررسی SHA256 + اسکریپت نصب" : "Tarball + verify SHA256 + install script",
         target: "linux-arm64",
       },
       {
         key: "raspberrypi-arm64",
-        description: "Uses the Linux arm64 Inside bundle (gateway use).",
-        support: "Experimental",
-        method: "Tarball + verify SHA256 + install script",
+        description: isFa ? "از بسته لینوکس arm64 برای Inside استفاده می‌کند (حالت gateway)." : "Uses the Linux arm64 Inside bundle (gateway use).",
+        support: support.experimental,
+        method: isFa ? "Tarball + بررسی SHA256 + اسکریپت نصب" : "Tarball + verify SHA256 + install script",
         target: "linux-arm64",
       },
       {
         key: "android",
-        description: "Signed APK sideload flow (when published). Optional Termux CLI fallback.",
-        support: "Experimental",
-        method: "APK + verify SHA256/signature + sideload",
+        description: isFa ? "نصب APK امضا شده (در صورت انتشار). مسیر Termux فقط برای کاربران فنی." : "Signed APK sideload flow (when published). Optional Termux CLI fallback.",
+        support: support.experimental,
+        method: isFa ? "APK + بررسی SHA256/امضا + نصب دستی" : "APK + verify SHA256/signature + sideload",
       },
       {
         key: "ios",
-        description: "iOS builds are not currently published from this site (App Store/TestFlight planned).",
-        support: "Planned",
+        description: isFa ? "در حال حاضر از این سایت منتشر نمی‌شود (App Store/TestFlight در آینده)." : "iOS builds are not currently published from this site (App Store/TestFlight planned).",
+        support: support.planned,
         method: "App Store/TestFlight",
       },
       {
         key: "source",
-        description: "Build from source (best fallback when your platform is not covered).",
-        support: "Always available",
-        method: "git clone or tag tarball + go build",
+        description: isFa ? "ساخت از کد منبع (بهترین گزینه وقتی پلتفرم شما پوشش داده نشده است)." : "Build from source (best fallback when your platform is not covered).",
+        support: support.available,
+        method: isFa ? "git clone یا tarball + go build" : "git clone or tag tarball + go build",
       },
-    ],
-    [],
-  );
+    ];
+  }, [lang]);
 
-  const effectivePlatformLabel = effectivePlatform === "unknown" ? "Choose a platform" : platformLabel(effectivePlatform);
-  const detectionSummary = supportsAutoRecommendation
+  const effectivePlatformLabel = effectivePlatform === "unknown" ? (lang === "fa" ? "انتخاب پلتفرم" : "Choose a platform") : platformLabel(effectivePlatform, lang);
+  const detectionSummary = effectiveAuto
     ? `${detection.label}${arch !== "unknown" ? ` • ${arch}` : ""}`
-    : `Unknown${arch !== "unknown" ? ` • ${arch}` : ""}`;
+    : `${lang === "fa" ? "نامشخص" : "Unknown"}${arch !== "unknown" ? ` • ${arch}` : ""}`;
 
   const hasChecksum = Boolean(recommendedArtifact?.sha256 && recommendedArtifact?.sha256Href);
   const hasSignature = Boolean(verificationFiles?.checksumsHref && verificationFiles?.signatureHref && verificationFiles?.keyHref);
 
   const missingArtifactMessage = useMemo(() => {
     if (!selectedRelease) return "No release metadata is available in this build.";
-    const platform = effectivePlatform === "unknown" ? "Unknown platform" : platformLabel(effectivePlatform);
+    const platform =
+      effectivePlatform === "unknown"
+        ? lang === "fa"
+          ? "پلتفرم نامشخص"
+          : "Unknown platform"
+        : platformLabel(effectivePlatform, lang);
     const targets = supportedTargets(selectedRelease);
     const available = targets.length ? `Available targets: ${targets.join(", ")}.` : "No targets are available in this release.";
     if (effectivePlatform === "ios") {
@@ -517,7 +596,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
       return `No matching artifact for ${platform} (${role}). This build does not publish a macOS Intel bundle. ${available} Use source build as fallback.`;
     }
     return `No matching artifact for ${platform} (${role}). ${available} Use source build or choose a different platform from the grid.`;
-  }, [selectedRelease, effectivePlatform, role]);
+  }, [selectedRelease, effectivePlatform, role, lang]);
 
   return (
     <section id="downloads" className="w-full">
@@ -540,8 +619,8 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
         <Callout title={lang === "fa" ? "وضعیت پروژه" : "Project status"} tone="warning">
           {lang === "fa"
-            ? "SunLionet فعلاً نسخه Beta (در حد MVP) است. مسیر اصلی پشتیبانی‌شده بسته‌های Linux است. قبل از نصب، checksum و فایل‌های امضاشده را حتماً بررسی کنید."
-            : "SunLionet is currently Beta (MVP-level). Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android builds publish a signed release APK. Always verify checksums and the signed checksum bundle before installing."}
+            ? "SunLionet فعلاً نسخه Beta (در حد MVP) است. مسیر اصلی پشتیبانی‌شده بسته‌های Linux است. انتشار اندروید ممکن است شامل APK امضا شده باشد. قبل از نصب/اجرا، checksum و در صورت وجود فایل‌های امضاشده را حتماً بررسی کنید."
+            : "SunLionet is currently Beta (MVP-level). Linux bundles (`.tar.gz` + `.deb`) are the primary supported path. Android releases may include a signed APK. Before installing/running, always verify checksums and (when published) the signed checksum bundle."}
         </Callout>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
@@ -549,8 +628,9 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
             title={recommendedHeading}
             subtitle={
               <>
-                Pick the correct artifact for your machine, verify it, then install in steps. Auto-detection is conservative and never hides other
-                options.
+                {isFa
+                  ? "فایل مناسب دستگاه خود را انتخاب کنید، تأیید اصالت را بررسی کنید، سپس نصب/اجرا را مرحله‌به‌مرحله انجام دهید. تشخیص خودکار محافظه‌کار است و هیچ گزینه‌ای را پنهان نمی‌کند."
+                  : "Pick the correct artifact for your machine, verify it, then install in steps. Auto-detection is conservative and never hides other options."}
               </>
             }
             actions={
@@ -579,49 +659,58 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Detected</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">{isFa ? "تشخیص" : "Detected"}</div>
               <div className="mt-2 text-foreground font-semibold">{detectionSummary}</div>
               <div className="mt-2 text-sm text-muted-foreground">
                 {supportsAutoRecommendation ? (
-                  <>
-                    Confidence: <span className="font-mono">{Math.round(detection.confidence * 100)}%</span>
-                  </>
+                  hydrated ? (
+                    <>
+                      {isFa ? "اطمینان" : "Confidence"}: <span className="font-mono">{Math.round(detection.confidence * 100)}%</span>
+                    </>
+                  ) : (
+                    <>
+                      {isFa ? "اطمینان" : "Confidence"}: <span className="font-mono">—</span>
+                    </>
+                  )
                 ) : (
-                  <>Detection is inconclusive in this environment.</>
+                  <>{isFa ? "در این محیط، تشخیص قطعی نیست." : "Detection is inconclusive in this environment."}</>
                 )}
               </div>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Release</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">{isFa ? "نسخه" : "Release"}</div>
               <div className="mt-2 text-foreground font-semibold font-mono">{selectedRelease ? selectedRelease.tag : "n/a"}</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Date: <span className="font-mono">{createdAt}</span>
+                {isFa ? "تاریخ" : "Date"}: <span className="font-mono">{createdAt}</span>
               </div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Artifacts: <span className="font-mono">{releaseArtifactCount(selectedRelease)}</span>
+                {isFa ? "فایل‌ها" : "Artifacts"}: <span className="font-mono">{releaseArtifactCount(selectedRelease)}</span>
               </div>
               <div className="mt-3 text-sm">
                 <a className="text-primary hover:opacity-90 transition-opacity" href={releasePageUrl} target="_blank" rel="noreferrer">
-                  View on GitHub
+                  {isFa ? "مشاهده در گیت‌هاب" : "View on GitHub"}
                 </a>
               </div>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Platform</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">{isFa ? "پلتفرم" : "Platform"}</div>
               <div className="mt-2 text-foreground font-semibold">{effectivePlatformLabel}</div>
               <div className="mt-3">
                 <select
                   value={manualPlatform}
                   onChange={(e) => setManualPlatform(e.target.value as PlatformKey)}
                   data-testid="download-platform-select"
+                  data-hydrated={hydrated ? "1" : "0"}
                   className="w-full bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
                 >
-                  <option value="unknown">{supportsAutoRecommendation ? "Auto (recommended)" : "Select…"}</option>
+                  <option value="unknown">
+                    {supportsAutoRecommendation ? (isFa ? "خودکار (پیشنهادی)" : "Auto (recommended)") : isFa ? "انتخاب…" : "Select…"}
+                  </option>
                   {platformChoices.map((p) => (
                     <option key={p.key} value={p.key}>
-                      {platformLabel(p.key)}
+                      {platformLabel(p.key, lang)}
                     </option>
                   ))}
                 </select>
@@ -632,18 +721,20 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-sm font-semibold text-foreground">Recommended artifact</div>
+              <div className="text-sm font-semibold text-foreground">{isFa ? "فایل پیشنهادی" : "Recommended artifact"}</div>
               {recommendedArtifact ? (
                 <>
-                  <div className="mt-2 text-xs text-muted-foreground uppercase tracking-wide">File</div>
+                  <div className="mt-2 text-xs text-muted-foreground uppercase tracking-wide">{isFa ? "فایل" : "File"}</div>
                   <div className="mt-1 font-mono text-sm text-foreground break-all">{recommendedArtifact.fileName}</div>
                   <div className="mt-2 text-sm text-muted-foreground">
-                    Type: <span className="font-mono">{recommendedArtifact.kind}</span> • Size:{" "}
+                    {isFa ? "نوع" : "Type"}: <span className="font-mono">{recommendedArtifact.kind}</span> • {isFa ? "حجم" : "Size"}:{" "}
                     <span className="font-mono">{formatBytes(recommendedArtifact.sizeBytes)}</span>
                   </div>
                   {effectivePlatform === "android" && !recommendedArtifact.fileName.toLowerCase().endsWith(".apk") ? (
                     <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      Android APK is not published for this release. This download is the Termux CLI binary (android-arm64).
+                      {isFa
+                        ? "برای این نسخه، APK اندروید منتشر نشده است. این دانلود مربوط به باینری خط فرمان Termux (android-arm64) است."
+                        : "Android APK is not published for this release. This download is the Termux CLI binary (android-arm64)."}
                     </div>
                   ) : null}
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -653,7 +744,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                       className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)]"
                       download
                     >
-                      Download
+                      {isFa ? "دانلود" : "Download"}
                     </a>
                     {recommendedArtifact.sha256Href ? (
                       <a
@@ -670,7 +761,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
                         download
                       >
-                        Signature
+                        {isFa ? "امضا" : "Signature"}
                       </a>
                     ) : null}
                     {verificationFiles?.keyHref ? (
@@ -679,7 +770,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border"
                         download
                       >
-                        Cosign key
+                        {isFa ? "کلید Cosign" : "Cosign key"}
                       </a>
                     ) : null}
                     {!isAbsoluteUrl(recommendedArtifact.href) ? (
@@ -689,19 +780,41 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Browse source
+                        {isFa ? "مشاهده در مخزن" : "Browse source"}
                       </a>
                     ) : null}
                   </div>
+                  {effectivePlatform === "android" && recommendedArtifact.fileName.toLowerCase().endsWith(".apk") ? (
+                    <div
+                      className="mt-4 rounded-lg border border-border bg-card/40 p-4 text-sm text-muted-foreground"
+                      data-testid="android-install-handoff"
+                    >
+                      {isFa ? (
+                        <>
+                          بعد از دانلود، روی فایل APK بزنید تا نصب‌کننده اندروید باز شود. اندروید هنگام نصب از شما تأیید می‌خواهد (این سایت نصب بی‌صدا انجام
+                          نمی‌دهد). پس از نصب، برنامه را باز کنید و مجوز VPN را تأیید کنید.
+                        </>
+                      ) : (
+                        <>
+                          After download, tap the APK to open Android’s installer. Android will ask you to confirm install (this site cannot install
+                          silently). After install, open the app and approve the VPN permission prompt.
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                   <div className="mt-4 text-sm text-muted-foreground">
-                    Verification:{" "}
+                    {isFa ? "تأیید اصالت" : "Verification"}:{" "}
                     {hasChecksum ? (
-                      <span className="text-emerald-300">checksum available</span>
+                      <span className="text-emerald-300">{isFa ? "checksum موجود است" : "checksum available"}</span>
                     ) : (
-                      <span className="text-amber-300">checksum missing</span>
+                      <span className="text-amber-300">{isFa ? "checksum موجود نیست" : "checksum missing"}</span>
                     )}{" "}
-                    • Signature:{" "}
-                    {hasSignature ? <span className="text-emerald-300">published (cosign)</span> : <span className="text-amber-300">missing</span>}
+                    • {isFa ? "امضا" : "Signature"}:{" "}
+                    {hasSignature ? (
+                      <span className="text-emerald-300">{isFa ? "منتشر شده (cosign)" : "published (cosign)"}</span>
+                    ) : (
+                      <span className="text-amber-300">{isFa ? "موجود نیست" : "missing"}</span>
+                    )}
                   </div>
                   {recommendedArtifact.sha256 ? (
                     <div className="mt-2 text-xs text-muted-foreground">
@@ -710,7 +823,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                   ) : null}
                   {verificationFiles?.keyFingerprint ? (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      Cosign key fingerprint:{" "}
+                      {isFa ? "اثر انگشت کلید Cosign" : "Cosign key fingerprint"}:{" "}
                       <span className="font-mono break-all text-foreground">{verificationFiles.keyFingerprint}</span>
                     </div>
                   ) : null}
@@ -747,7 +860,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-sm font-semibold text-foreground">Quick install (stepwise)</div>
+              <div className="text-sm font-semibold text-foreground">{isFa ? "نصب سریع (مرحله‌به‌مرحله)" : "Quick install (stepwise)"}</div>
               {installSteps ? (
                 <div className="mt-3 grid gap-3">
                   <CommandBlock
@@ -783,7 +896,9 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                 </div>
               ) : (
                 <div className="mt-3 text-sm text-muted-foreground">
-                  Select a supported platform to generate commands, or use the source build path below.
+                  {isFa
+                    ? "برای ساخت فرمان‌ها یک پلتفرم پشتیبانی‌شده را انتخاب کنید، یا از مسیر ساخت از کد منبع در پایین استفاده کنید."
+                    : "Select a supported platform to generate commands, or use the source build path below."}
                 </div>
               )}
             </div>
@@ -792,8 +907,12 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
         <div>
           <SectionHeader
-            title="Platform grid"
-            subtitle="All primary artifacts and recommended methods. Nothing is hidden; you can always override the recommendation."
+            title={isFa ? "جدول پلتفرم‌ها" : "Platform grid"}
+            subtitle={
+              isFa
+                ? "همه فایل‌های اصلی و روش پیشنهادی. هیچ چیز پنهان نیست؛ همیشه می‌توانید پیشنهاد را دستی تغییر دهید."
+                : "All primary artifacts and recommended methods. Nothing is hidden; you can always override the recommendation."
+            }
           />
           <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {platformChoices.map((p) => {
@@ -819,7 +938,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         ? findArtifact(selectedRelease, role, p.target)
                         : null;
 
-              const title = platformLabel(p.key);
+              const title = platformLabel(p.key, lang);
               const support = p.support;
               const method = p.method;
 
@@ -835,17 +954,17 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                       onClick={() => setManualPlatform(p.key)}
                       className="px-3 py-2 rounded-md border border-border bg-card text-xs font-semibold text-foreground hover:opacity-90 transition-opacity"
                     >
-                      Select
+                      {isFa ? "انتخاب" : "Select"}
                     </button>
                   </div>
 
                   <div className="mt-4 grid gap-2 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Support</span>
+                      <span className="text-muted-foreground">{isFa ? "پشتیبانی" : "Support"}</span>
                       <span className="font-mono text-foreground">{support}</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Method</span>
+                      <span className="text-muted-foreground">{isFa ? "روش" : "Method"}</span>
                       <span className="font-mono text-foreground">{method}</span>
                     </div>
                   </div>
@@ -856,7 +975,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         href={sourceTarballUrl}
                         className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)] text-center"
                       >
-                        Download source tarball
+                        {isFa ? "دانلود سورس (tarball)" : "Download source tarball"}
                       </a>
                       <a
                         href={githubRepo}
@@ -864,7 +983,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Repository
+                        {isFa ? "مخزن" : "Repository"}
                       </a>
                     </div>
                   ) : (
@@ -876,7 +995,7 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                             className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity shadow-[0_0_0_1px_var(--border)] text-center"
                             download
                           >
-                            Download
+                            {isFa ? "دانلود" : "Download"}
                           </a>
                           <div className="text-xs text-muted-foreground break-all">
                             <span className="font-mono">{a.fileName}</span> • <span className="font-mono">{formatBytes(a.sizeBytes)}</span>
@@ -887,15 +1006,19 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
                               className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
                               download
                             >
-                              Verification (SHA256)
+                              {isFa ? "تأیید اصالت (SHA256)" : "Verification (SHA256)"}
                             </a>
                           ) : (
-                            <div className="text-sm text-amber-300">No checksum file present for this artifact.</div>
+                            <div className="text-sm text-amber-300">
+                              {isFa ? "برای این فایل، checksum منتشر نشده است." : "No checksum file present for this artifact."}
+                            </div>
                           )}
                         </>
                       ) : (
                         <div className="text-sm text-muted-foreground">
-                          No artifact available for this role in this release. Use source build or switch role/platform.
+                          {isFa
+                            ? "برای این نقش (Inside/Outside) در این نسخه فایلی موجود نیست. از ساخت از سورس استفاده کنید یا نقش/پلتفرم را تغییر دهید."
+                            : "No artifact available for this role in this release. Use source build or switch role/platform."}
                         </div>
                       )}
                     </div>
@@ -908,35 +1031,63 @@ export function DownloadSection({ releases, basePrefix }: { releases: LocalRelea
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
           <SectionHeader
-            title="Verification"
+            title={isFa ? "تأیید اصالت" : "Verification"}
             subtitle={
               <>
-                Verification protects you against corruption and tampering in transit. It does not magically make software “safe”.
+                {isFa
+                  ? "تأیید اصالت از شما در برابر خرابی یا دستکاری هنگام انتقال محافظت می‌کند، اما به‌تنهایی نرم‌افزار را «ایمن» نمی‌کند."
+                  : "Verification protects you against corruption and tampering in transit. It does not magically make software “safe”."}
               </>
             }
           />
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-sm font-semibold text-foreground">What the SHA256 check gives you</div>
+              <div className="text-sm font-semibold text-foreground">{isFa ? "SHA256 چه چیزی را به شما می‌دهد؟" : "What the SHA256 check gives you"}</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>- File integrity: you got exactly the bytes the publisher intended to publish.</li>
-                <li>- Tamper detection: if a mirror/CDN modifies the file, the check fails.</li>
-                <li>- A consistent hash value you can compare across mirrors and friends.</li>
-                <li>- Signature validation (`cosign verify-blob`) confirms checksums were signed by a trusted release key.</li>
+                <li>
+                  {isFa
+                    ? "- یکپارچگی فایل: دقیقاً همان بایتی را دارید که منتشرکننده قصد انتشار داشته است."
+                    : "- File integrity: you got exactly the bytes the publisher intended to publish."}
+                </li>
+                <li>
+                  {isFa
+                    ? "- کشف دستکاری: اگر mirror/CDN فایل را تغییر دهد، بررسی شکست می‌خورد."
+                    : "- Tamper detection: if a mirror/CDN modifies the file, the check fails."}
+                </li>
+                <li>
+                  {isFa
+                    ? "- یک مقدار هش ثابت برای مقایسه بین چند منبع/دوستان."
+                    : "- A consistent hash value you can compare across mirrors and friends."}
+                </li>
+                <li>
+                  {isFa
+                    ? "- تأیید امضا (`cosign verify-blob`) نشان می‌دهد فایل checksum توسط کلید انتشار مورد اعتماد امضا شده است."
+                    : "- Signature validation (`cosign verify-blob`) confirms checksums were signed by a trusted release key."}
+                </li>
               </ul>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-sm font-semibold text-foreground">What it does not guarantee</div>
+              <div className="text-sm font-semibold text-foreground">{isFa ? "چه چیزی را تضمین نمی‌کند؟" : "What it does not guarantee"}</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
-                <li>- No guarantee of anonymity or safety in your threat model.</li>
-                <li>- No guarantee the binary is bug-free or appropriate for your local legal risk.</li>
-                <li>- If an attacker controls both the binary and checksum source, checksums alone are not enough.</li>
+                <li>
+                  {isFa ? "- هیچ تضمینی برای ناشناس‌بودن یا امنیت در مدل تهدید شما نیست." : "- No guarantee of anonymity or safety in your threat model."}
+                </li>
+                <li>
+                  {isFa
+                    ? "- هیچ تضمینی برای بدون‌باگ بودن یا تناسب با ریسک قانونی محلی وجود ندارد."
+                    : "- No guarantee the binary is bug-free or appropriate for your local legal risk."}
+                </li>
+                <li>
+                  {isFa
+                    ? "- اگر مهاجم هم به فایل و هم به منبع checksum دسترسی داشته باشد، checksum به‌تنهایی کافی نیست."
+                    : "- If an attacker controls both the binary and checksum source, checksums alone are not enough."}
+                </li>
               </ul>
             </div>
           </div>
 
           <details className="mt-6 rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-            <summary className="cursor-pointer text-foreground font-semibold">Platform-specific commands</summary>
+            <summary className="cursor-pointer text-foreground font-semibold">{isFa ? "فرمان‌های مخصوص هر پلتفرم" : "Platform-specific commands"}</summary>
             <div className="mt-4 grid gap-4">
               <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">Linux</div>
@@ -952,7 +1103,7 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
                 <CodeBlock>{`certutil -hashfile <file> SHA256`}</CodeBlock>
               </div>
               <div className="text-sm text-muted-foreground">
-                For bundle authenticity (publisher signatures enforced by the agent), see{" "}
+                {isFa ? "برای اصالت bundle (امضاهای ناشر که توسط agent بررسی می‌شود) به" : "For bundle authenticity (publisher signatures enforced by the agent), see"}{" "}
                 <Link href={hrefFor("/docs/outside/verification")} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
                   /docs/outside/verification
                 </Link>
@@ -963,24 +1114,33 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
         </div>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-          <SectionHeader title="Installation paths" subtitle="Choose the flow that matches your skill level and risk tolerance." />
+          <SectionHeader
+            title={isFa ? "مسیرهای نصب" : "Installation paths"}
+            subtitle={isFa ? "مسیر مناسب سطح مهارت و ریسک‌پذیری خود را انتخاب کنید." : "Choose the flow that matches your skill level and risk tolerance."}
+          />
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Quick path</div>
+              <div className="text-foreground font-semibold">{isFa ? "مسیر سریع" : "Quick path"}</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Use the recommended artifact and the stepwise commands above. Intended for experienced users who still verify checksums.
+                {isFa
+                  ? "از فایل پیشنهادی و مراحل بالا استفاده کنید. مناسب کاربرانی که همچنان checksum را بررسی می‌کنند."
+                  : "Use the recommended artifact and the stepwise commands above. Intended for experienced users who still verify checksums."}
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Careful verified path</div>
+              <div className="text-foreground font-semibold">{isFa ? "مسیر دقیق و تأیید شده" : "Careful verified path"}</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Verify SHA256, verify `checksums.txt` signature with cosign, and cross-check key fingerprint from a second trusted channel.
+                {isFa
+                  ? "SHA256 را بررسی کنید، در صورت وجود امضا، `checksums.txt` را با cosign تأیید کنید و اثرانگشت کلید را از یک کانال دومِ مورد اعتماد هم چک کنید."
+                  : "Verify SHA256, verify `checksums.txt` signature with cosign, and cross-check key fingerprint from a second trusted channel."}
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Source build path</div>
+              <div className="text-foreground font-semibold">{isFa ? "مسیر ساخت از سورس" : "Source build path"}</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Build from source if your platform is not covered. Use the repository-backed docs for build tags and Go toolchain details.
+                {isFa
+                  ? "اگر پلتفرم شما پوشش داده نشده است، از سورس بسازید. برای build tagها و جزئیات ابزار Go، از مستندات مخزن استفاده کنید."
+                  : "Build from source if your platform is not covered. Use the repository-backed docs for build tags and Go toolchain details."}
               </div>
               <div className="mt-4">
                 <CommandBlock
@@ -997,10 +1157,13 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
         </div>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-          <SectionHeader title="Limitations / readiness" subtitle="Truthful constraints so users can make informed decisions." />
+          <SectionHeader
+            title={isFa ? "محدودیت‌ها / آمادگی" : "Limitations / readiness"}
+            subtitle={isFa ? "محدودیت‌های واقعی تا کاربر تصمیم آگاهانه بگیرد." : "Truthful constraints so users can make informed decisions."}
+          />
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">What works today</div>
+              <div className="text-foreground font-semibold">{isFa ? "چیزهایی که امروز کار می‌کند" : "What works today"}</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
                 <li>- Linux bundles with install script + systemd service (Inside/Outside).</li>
                 <li>- Linux `.deb` packaging for amd64 hosts.</li>
@@ -1009,7 +1172,7 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
               </ul>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">What is still experimental</div>
+              <div className="text-foreground font-semibold">{isFa ? "چیزهایی که هنوز آزمایشی است" : "What is still experimental"}</div>
               <ul className="mt-3 text-sm text-muted-foreground space-y-2">
                 <li>- Optional RPM packaging (builds only when rpm tooling is available).</li>
                 <li>- Full multi-maintainer release-signing policy and rotation tooling.</li>
@@ -1020,11 +1183,20 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
         </div>
 
         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-          <SectionHeader title="Fallback sources" subtitle="If a platform artifact or metadata is missing, these are the safe next steps." />
+          <SectionHeader
+            title={isFa ? "منابع جایگزین" : "Fallback sources"}
+            subtitle={
+              isFa
+                ? "اگر فایل یا متادیتا موجود نبود، این‌ها قدم‌های بعدیِ امن هستند."
+                : "If a platform artifact or metadata is missing, these are the safe next steps."
+            }
+          />
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Source tarball</div>
-              <div className="mt-2 text-sm text-muted-foreground">Use a tagged source tarball when binaries are not suitable.</div>
+              <div className="text-foreground font-semibold">{isFa ? "سورس (tarball)" : "Source tarball"}</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {isFa ? "وقتی باینری مناسب نیست، از سورس نسخه‌دار استفاده کنید." : "Use a tagged source tarball when binaries are not suitable."}
+              </div>
               <div className="mt-4">
                 <a
                   href={sourceTarballUrl}
@@ -1035,8 +1207,10 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Repository</div>
-              <div className="mt-2 text-sm text-muted-foreground">Canonical code and docs, mirrored and reviewable.</div>
+              <div className="text-foreground font-semibold">{isFa ? "مخزن" : "Repository"}</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {isFa ? "کد و مستندات مرجع؛ قابل بررسی و قابل mirror." : "Canonical code and docs, mirrored and reviewable."}
+              </div>
               <div className="mt-4">
                 <a
                   href={githubRepo}
@@ -1044,34 +1218,38 @@ cosign verify-blob --key checksums.pub --signature checksums.sig checksums.txt`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  GitHub repo
+                  {isFa ? "مخزن گیت‌هاب" : "GitHub repo"}
                 </a>
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-              <div className="text-foreground font-semibold">Docs</div>
-              <div className="mt-2 text-sm text-muted-foreground">Installation, safety guidance, and verification details.</div>
+              <div className="text-foreground font-semibold">{isFa ? "مستندات" : "Docs"}</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {isFa ? "نصب، نکات ایمنی، و جزئیات تأیید اصالت." : "Installation, safety guidance, and verification details."}
+              </div>
               <div className="mt-4 grid gap-2">
                 <Link
                   href={hrefFor("/docs/install")}
                   prefetch={false}
                   className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
                 >
-                  Install guide
+                  {isFa ? "راهنمای نصب" : "Install guide"}
                 </Link>
                 <Link
                   href={hrefFor("/docs/outside/verification")}
                   prefetch={false}
                   className="bg-card hover:opacity-90 text-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity border border-border text-center"
                 >
-                  Verification guide
+                  {isFa ? "راهنمای تأیید اصالت" : "Verification guide"}
                 </Link>
               </div>
             </div>
           </div>
 
           <details className="mt-6 rounded-xl border border-border bg-card p-5 shadow-[0_0_0_1px_var(--border)]">
-            <summary className="cursor-pointer text-foreground font-semibold">Available targets in this release</summary>
+            <summary className="cursor-pointer text-foreground font-semibold">
+              {isFa ? "هدف‌های موجود در این نسخه" : "Available targets in this release"}
+            </summary>
             <div className="mt-3 text-sm text-muted-foreground">
               {selectedRelease ? (
                 <div className="font-mono break-all">{supportedTargets(selectedRelease).join(", ") || "n/a"}</div>

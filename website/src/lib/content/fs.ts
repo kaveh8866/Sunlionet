@@ -1,6 +1,8 @@
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import { existsSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { cache } from "react";
 
 export type ContentType = "blog" | "docs" | "pages" | "updates";
@@ -21,7 +23,12 @@ function titleFromFilename(name: string) {
 }
 
 async function readTitle(filePath: string) {
-  const raw = await readFile(filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf8");
+  } catch {
+    return titleFromFilename(path.basename(filePath));
+  }
   const lines = raw.split(/\r?\n/);
   for (const line of lines) {
     const m = /^#\s+(.+)\s*$/.exec(line);
@@ -39,30 +46,24 @@ function isContentRoot(candidate: string) {
 }
 
 function findContentRoot() {
-  const cwd = process.cwd();
-  const directCandidates = [
-    path.join(cwd, "content"),
-    path.join(cwd, "..", "content"),
-    path.join(cwd, "..", "..", "content"),
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, "../../../content"),
+    path.join(here, "../../../../content"),
   ];
-  for (const c of directCandidates) {
+  for (const c of candidates) {
     if (isContentRoot(c)) return c;
   }
-
-  let dir = cwd;
-  for (let i = 0; i < 8; i++) {
-    const c = path.join(dir, "content");
-    if (isContentRoot(c)) return c;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-
-  return path.join(cwd, "content");
+  return candidates[0];
 }
 
 async function walk(dir: string, root: string): Promise<Array<{ slug: string[]; filePath: string; title: string }>> {
-  const entries = await readdir(dir, { withFileTypes: true });
+  let entries: Dirent[];
+  try {
+    entries = (await readdir(dir, { withFileTypes: true })) as Dirent[];
+  } catch {
+    return [];
+  }
   const out: Array<{ slug: string[]; filePath: string; title: string }> = [];
 
   for (const e of entries) {
@@ -107,7 +108,11 @@ export const getContentBySlug = cache(async (type: ContentType, lang: "en" | "fa
 export async function readContentMarkdownBySlug(type: ContentType, lang: "en" | "fa", slug: string[]) {
   const entry = await getContentBySlug(type, lang, slug);
   if (!entry) return null;
-  const raw = await readFile(entry.filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(entry.filePath, "utf8");
+  } catch {
+    return null;
+  }
   return { entry, raw };
 }
-

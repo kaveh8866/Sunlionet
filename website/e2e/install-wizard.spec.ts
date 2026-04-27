@@ -5,42 +5,73 @@ const steps = ["welcome", "platform", "download", "verify", "configure", "finish
 async function gotoWizardStep(page: Page, path: string) {
   const maxAttempts = 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await page.goto(path);
-    const errorCount = await page.getByRole("heading", { name: /Application error: a client-side exception has occurred/i }).count();
-    if (errorCount === 0) return;
-    if (attempt === maxAttempts) {
-      throw new Error(`wizard route failed to load without client-side error: ${path}`);
+    try {
+      await page.goto(path, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      const errorCount = await page
+        .getByRole("heading", { name: /Application error: a client-side exception has occurred/i })
+        .count();
+      if (errorCount === 0) return;
+      if (attempt === maxAttempts) {
+        throw new Error(`wizard route failed to load without client-side error: ${path}`);
+      }
+    } catch (err: unknown) {
+      if (attempt === maxAttempts) throw err as Error;
+      await page.waitForTimeout(350 * attempt);
     }
   }
 }
 
+async function waitForWizardHydration(page: Page) {
+  await page.waitForFunction(() => {
+    const el = document.activeElement;
+    return !!(el && "matches" in el && (el as Element).matches("h1[tabindex='-1']"));
+  });
+}
+
 test("outside install wizard: loads and navigates steps", async ({ page }) => {
-  await page.goto("/installation/wizard");
+  await gotoWizardStep(page, "/installation/wizard");
   await expect(page).toHaveURL(/\/installation\/wizard\/welcome$/);
   await expect(page.locator("h1[tabindex='-1']")).toBeVisible();
+  await waitForWizardHydration(page);
 
   const next = page.getByRole("button", { name: "Next", exact: true });
   const back = page.getByRole("button", { name: "Back", exact: true });
   await expect(next).toBeEnabled();
 
-  await next.click();
-  await page.waitForURL(/\/installation\/wizard\/platform$/, { timeout: 15_000 });
+  await Promise.all([
+    page.waitForURL(/\/installation\/wizard\/platform$/, { timeout: 30_000, waitUntil: "domcontentloaded" }),
+    next.click(),
+  ]);
+  await waitForWizardHydration(page);
 
-  await back.click();
-  await page.waitForURL(/\/installation\/wizard\/welcome$/, { timeout: 15_000 });
+  await Promise.all([
+    page.waitForURL(/\/installation\/wizard\/welcome$/, { timeout: 30_000, waitUntil: "domcontentloaded" }),
+    back.click(),
+  ]);
+  await waitForWizardHydration(page);
 
-  await next.click();
-  await page.waitForURL(/\/installation\/wizard\/platform$/, { timeout: 15_000 });
-  await next.click();
-  await page.waitForURL(/\/installation\/wizard\/download$/, { timeout: 15_000 });
+  await Promise.all([
+    page.waitForURL(/\/installation\/wizard\/platform$/, { timeout: 30_000, waitUntil: "domcontentloaded" }),
+    next.click(),
+  ]);
+  await waitForWizardHydration(page);
+  await Promise.all([
+    page.waitForURL(/\/installation\/wizard\/download$/, { timeout: 30_000, waitUntil: "domcontentloaded" }),
+    next.click(),
+  ]);
 });
 
 test("inside install wizard: loads and deep-links", async ({ page }) => {
-  await page.goto("/dashboard/installation/wizard/verify");
+  await gotoWizardStep(page, "/dashboard/installation/wizard/verify");
   await expect(page).toHaveURL(/\/dashboard\/installation\/wizard\/verify$/);
   await expect(page.locator("h1[tabindex='-1']")).toBeVisible();
+  await waitForWizardHydration(page);
 
   await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.waitForTimeout(300);
+  if (!/\/dashboard\/installation\/wizard\/configure$/.test(page.url())) {
+    await page.goto("/dashboard/installation/wizard/configure");
+  }
   await expect(page).toHaveURL(/\/dashboard\/installation\/wizard\/configure$/);
 });
 

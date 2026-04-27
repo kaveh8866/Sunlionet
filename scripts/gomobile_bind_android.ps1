@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $outDir = Join-Path $repoRoot "android\app\libs"
-$outFile = Join-Path $outDir "SUNLIONET.aar"
+$outFile = Join-Path $outDir "sunlionet.aar"
 $androidApi = 26
 
 if (-not (Get-Command gomobile -ErrorAction SilentlyContinue)) {
@@ -19,7 +19,7 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "gomobile init failed with exit code $LASTEXITCODE"
   }
-  gomobile bind -androidapi $androidApi -target android -javapkg "com.SUNLIONET.mobile" -o $outFile ./pkg/mobile
+  gomobile bind -androidapi $androidApi -target android -javapkg "com.sunlionet.mobile" -o $outFile ./pkg/mobile
   if ($LASTEXITCODE -ne 0) {
     throw "gomobile bind failed with exit code $LASTEXITCODE"
   }

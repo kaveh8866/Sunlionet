@@ -15,18 +15,11 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/", key: "home" },
-  { href: "/manifest", key: "manifest" },
-  { href: "/technology", key: "technology" },
-  { href: "/security", key: "security" },
-  { href: "/docs", key: "docs" },
-  { href: "/blog", key: "blog" },
-  { href: "/updates", key: "updates" },
   { href: "/download", key: "download" },
-  { href: "/architecture", key: "architecture" },
-  { href: "/dashboard", key: "dashboard" },
-  { href: "/roadmap", key: "roadmap" },
-  { href: "/community", key: "community" },
+  { href: "/docs", key: "docs" },
   { href: "/support", key: "support" },
+  { href: "/manifest", key: "manifest" },
+  { href: "/dashboard", key: "dashboard" },
 ];
 
 export function SiteHeader() {
@@ -84,7 +77,7 @@ export function SiteHeader() {
               alt="SunLionet"
               width={32}
               height={32}
-              className="w-8 h-8 object-contain dark:hidden"
+              className="object-contain dark:hidden"
               priority={false}
             />
             <Image
@@ -92,7 +85,7 @@ export function SiteHeader() {
               alt="SunLionet"
               width={32}
               height={32}
-              className="w-8 h-8 object-contain hidden dark:block"
+              className="object-contain hidden dark:block"
               priority={false}
             />
           </span>
@@ -120,6 +113,7 @@ export function SiteHeader() {
           <Link
             href={otherLangHref}
             prefetch={false}
+            data-testid="nav-lang-toggle"
             className="hidden sm:inline-flex rounded-md border border-border bg-card/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
           >
             {otherLang.toUpperCase()}

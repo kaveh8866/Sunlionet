@@ -122,6 +122,12 @@ function New-ZipPackage {
   Write-TextFile -Path ($zipPath + ".sha256") -Content ($sha + "  " + (Split-Path -Leaf $zipPath) + "`n")
 }
 
+$releaseManifest = @{
+  version = $Version
+  date = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
+  artifacts = @()
+}
+
 function Build-And-Package {
   param(
     [string]$Mode,
@@ -151,17 +157,34 @@ function Build-And-Package {
     Copy-Item -Force (Join-Path $tmpDir "sunlionet-outside.service") (Join-Path $work "sunlionet-outside.service")
   }
 
+  $artifactPath = ""
+  $artifactName = ""
   if ($Format -eq "targz") {
     New-TarGzPackage -BaseName $binBase -WorkDir $work
+    $artifactName = $binBase + ".tar.gz"
+    $artifactPath = Join-Path $outDir $artifactName
   } elseif ($Format -eq "zip") {
     New-ZipPackage -BaseName $binBase -WorkDir $work
+    $artifactName = $binBase + ".zip"
+    $artifactPath = Join-Path $outDir $artifactName
   } elseif ($Format -eq "raw") {
-    $rawPath = Join-Path $outDir ("sunlionet-$Mode-$Version-$GoOS-$GoArch")
-    Copy-Item -Force $binPath $rawPath
-    $sha = Sha256File $rawPath
-    Write-TextFile -Path ($rawPath + ".sha256") -Content ($sha + "  " + (Split-Path -Leaf $rawPath) + "`n")
+    $artifactName = "sunlionet-$Mode-$Version-$GoOS-$GoArch"
+    $artifactPath = Join-Path $outDir $artifactName
+    Copy-Item -Force $binPath $artifactPath
+    $sha = Sha256File $artifactPath
+    Write-TextFile -Path ($artifactPath + ".sha256") -Content ($sha + "  " + (Split-Path -Leaf $artifactPath) + "`n")
   } else {
     throw "unknown format: $Format"
+  }
+
+  $sha256 = Sha256File $artifactPath
+  $releaseManifest.artifacts += @{
+    name = $artifactName
+    mode = $Mode
+    os = $GoOS
+    arch = $GoArch
+    sha256 = $sha256
+    size = (Get-Item $artifactPath).Length
   }
 }
 
@@ -175,6 +198,9 @@ Build-And-Package -Mode "outside" -Tags "outside" -GoOS "linux" -GoArch "amd64" 
 Build-And-Package -Mode "outside" -Tags "outside" -GoOS "linux" -GoArch "arm64" -Format "targz"
 Build-And-Package -Mode "outside" -Tags "outside" -GoOS "darwin" -GoArch "arm64" -Format "targz"
 Build-And-Package -Mode "outside" -Tags "outside" -GoOS "windows" -GoArch "amd64" -Format "zip"
+
+$manifestJson = $releaseManifest | ConvertTo-Json -Depth 10
+Write-TextFile -Path (Join-Path $outDir "RELEASES.json") -Content $manifestJson
 
 Write-TextFile -Path (Join-Path $outDir "VERSION.txt") -Content ($Version + "`n")
 

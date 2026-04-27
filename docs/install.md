@@ -10,6 +10,7 @@ Migration note: this repository is still named `SUNLIONET-agent` during the tran
 If you are installing for the first time, start here:
 
 - [Getting Started](getting-started.md)
+- [Official Distribution Policy](distribution-policy.md)
 
 ## Build tags
 

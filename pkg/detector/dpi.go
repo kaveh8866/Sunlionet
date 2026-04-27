@@ -61,6 +61,9 @@ func CheckSNIReset(domain string, targetIP string) (bool, error) {
 }
 
 func CheckSNIResetWith(ctx context.Context, dialer Dialer, domain string, targetAddr string) (bool, error) {
+	if dialer == nil {
+		dialer = &net.Dialer{}
+	}
 	conn, err := dialer.DialContext(ctx, "tcp", targetAddr)
 	if err != nil {
 		if isConnResetLike(err) {
@@ -114,6 +117,9 @@ func isConnResetLike(err error) bool {
 	if strings.Contains(errStr, "connection reset") || strings.Contains(errStr, "broken pipe") || strings.Contains(errStr, "forcibly closed") {
 		return true
 	}
+	if strings.Contains(errStr, "closed pipe") {
+		return true
+	}
 	if strings.Contains(errStr, "unexpected eof") || strings.HasSuffix(errStr, "eof") || strings.Contains(errStr, ": eof") {
 		return true
 	}
@@ -159,6 +165,9 @@ func CheckUDPBlocked(echoServer string) (bool, error) {
 }
 
 func CheckUDPBlockedWith(ctx context.Context, dialer Dialer, echoServer string) (bool, error) {
+	if dialer == nil {
+		dialer = &net.Dialer{}
+	}
 	conn, err := dialer.DialContext(ctx, "udp", echoServer)
 	if err != nil {
 		return true, fmt.Errorf("udp connect failed: %w", err)

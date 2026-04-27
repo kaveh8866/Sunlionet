@@ -13,6 +13,11 @@ import (
 	"sync"
 )
 
+var (
+	ErrCorruptStore     = errors.New("aipolicy: corrupt store")
+	ErrDecryptionFailed = errors.New("aipolicy: decryption failed")
+)
+
 type Store struct {
 	dbPath string
 	key    []byte
@@ -90,12 +95,12 @@ func (s *Store) Load() (*Policy, error) {
 		return nil, err
 	}
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, errors.New("aipolicy: malformed ciphertext")
+		return nil, fmt.Errorf("%w: malformed ciphertext", ErrCorruptStore)
 	}
 	nonce, c := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("aipolicy: decryption failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}
 	var p Policy
 	if err := json.Unmarshal(plaintext, &p); err != nil {

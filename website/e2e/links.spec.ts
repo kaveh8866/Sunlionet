@@ -57,7 +57,7 @@ test.setTimeout(180_000);
 
 test("all internal links resolve (crawl)", async ({ page, baseURL }) => {
   expect(baseURL).toBeTruthy();
-  const origin = new URL(baseURL ?? "http://127.0.0.1:3011").origin;
+  const origin = new URL(baseURL ?? "http://127.0.0.1:3001").origin;
 
   const seedPaths = ["/", "/docs", "/docs/all", "/download", "/installation", "/dashboard", "/support", "/community", "/video"];
   const queue: URL[] = seedPaths.map((p) => new URL(p, origin));

@@ -43,7 +43,7 @@ object ConnectionProbe {
                 ResultInfo(status = "failed", reason = "HTTP_${code}", httpStatus = code, error = "unexpected status")
             }
         } catch (e: Exception) {
-            ResultInfo(status = "failed", reason = classify(e), error = e.message ?: e.javaClass.simpleName)
+            ResultInfo(status = "failed", reason = classifyException(e), error = e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -68,7 +68,7 @@ object ConnectionProbe {
         }
     }
 
-    private fun classify(e: Exception): String {
+    internal fun classifyException(e: Exception): String {
         val msg = (e.message ?: "").lowercase()
         return when {
             e is java.net.UnknownHostException -> "DNS_BLOCKED"

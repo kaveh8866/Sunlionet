@@ -14,11 +14,39 @@
   },
   "home": {
     "headline": "A Free Network for a Free World",
-    "subheadline": "SunLionet is a decentralized, open-source platform for secure communication, uncensored information, and digital freedom.",
+    "subheadline": "SunLionet is an open-source platform for secure communication and digital freedom, designed to work even under extreme network restrictions.",
     "cta": {
       "getStarted": "Get Started",
       "readManifest": "Read Manifest",
-      "download": "Download"
+      "download": "Download",
+      "verify": "Verify"
+    },
+    "why": {
+      "title": "Why SunLionet?",
+      "cards": [
+        {
+          "title": "Private Communication",
+          "desc": "Built-in encryption and privacy by design. No phone number or personal data required."
+        },
+        {
+          "title": "Censorship Resilience",
+          "desc": "Uses advanced DPI-resistant protocols to maintain access during partial outages."
+        },
+        {
+          "title": "Open Source",
+          "desc": "Transparent, reviewable, and community-driven under the AGPL-3.0 license."
+        },
+        {
+          "title": "Bilingual Support",
+          "desc": "Persian (Farsi) and English are treated as first-class languages."
+        }
+      ]
+    },
+    "steps": {
+      "title": "Get Started in 3 Steps",
+      "s1": { "title": "Download", "desc": "Get the official release for your platform." },
+      "s2": { "title": "Verify", "desc": "Check the SHA256 sum to ensure the file is safe." },
+      "s3": { "title": "Connect", "desc": "Import your config and connect securely." }
     }
   },
   "manifest": {

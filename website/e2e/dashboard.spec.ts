@@ -13,14 +13,18 @@ async function gotoWithRetry(page: Page, url: string, options?: Parameters<Page[
   return null;
 }
 
+async function waitForRuntimeSnapshot(page: Page) {
+  await page.waitForResponse((r) => r.url().includes("/api/proxy/state") && r.status() === 200, { timeout: 30_000 });
+}
+
 test("/dashboard/runtime renders (offline)", async ({ page }) => {
-  await page.goto("/dashboard/runtime");
+  await gotoWithRetry(page, "/dashboard/runtime", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByRole("heading", { name: /Dashboard/i })).toBeVisible();
   await expect(page.getByText("No active SunLionet runtime detected")).toBeVisible();
 });
 
 test("/dashboard/runtime renders (connected)", async ({ page }) => {
-  await page.route("**/api/proxy/state", async (route) => {
+  await page.route("**/api/proxy/state**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -34,7 +38,7 @@ test("/dashboard/runtime renders (connected)", async ({ page }) => {
       }),
     });
   });
-  await page.route("**/api/proxy/events/list", async (route) => {
+  await page.route("**/api/proxy/events/list**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -43,7 +47,7 @@ test("/dashboard/runtime renders (connected)", async ({ page }) => {
       ]),
     });
   });
-  await page.route("**/api/proxy/events", async (route) => {
+  await page.route("**/api/proxy/events**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -56,15 +60,17 @@ test("/dashboard/runtime renders (connected)", async ({ page }) => {
     });
   });
 
-  await page.goto("/dashboard/runtime");
-  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/connected/i);
-  await expect(page.getByText("reality-1", { exact: true })).toBeVisible();
+  await gotoWithRetry(page, "/dashboard/runtime", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await waitForRuntimeSnapshot(page);
+  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/^Connected$/);
+  await expect(page.getByTestId("runtime-active-profile")).toHaveText("reality-1");
   await page.locator("summary").filter({ hasText: /Show activity/i }).click();
-  await expect(page.getByText("PROFILE_SWITCH")).toBeVisible();
+  await expect(page.getByText("Event Timeline")).toBeVisible();
+  await expect(page.getByText("Connection validated by HTTP probe", { exact: true })).toBeVisible();
 });
 
 test("/dashboard/runtime renders (error status)", async ({ page }) => {
-  await page.route("**/api/proxy/state", async (route) => {
+  await page.route("**/api/proxy/state**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -78,14 +84,14 @@ test("/dashboard/runtime renders (error status)", async ({ page }) => {
       }),
     });
   });
-  await page.route("**/api/proxy/events/list", async (route) => {
+  await page.route("**/api/proxy/events/list**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([{ timestamp: 1710000000, type: "CONNECTION_FAIL", message: "Probe timeout" }]),
     });
   });
-  await page.route("**/api/proxy/events", async (route) => {
+  await page.route("**/api/proxy/events**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -97,8 +103,9 @@ test("/dashboard/runtime renders (error status)", async ({ page }) => {
     });
   });
 
-  await page.goto("/dashboard/runtime");
-  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/error/i);
+  await gotoWithRetry(page, "/dashboard/runtime", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await waitForRuntimeSnapshot(page);
+  await expect(page.getByTestId("runtime-status-badge")).toHaveText(/^Error$/i);
   await expect(page.getByText("Not secure")).toBeVisible();
 });
 

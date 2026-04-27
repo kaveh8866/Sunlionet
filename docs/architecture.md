@@ -13,6 +13,19 @@ The product/repo map is captured in: [production-map.md](production-map.md).
 
 Trust boundaries and enforcement points are captured in: [security/boundaries.md](security/boundaries.md).
 
+## What Ships (Concrete Deliverables)
+
+This repo currently ships multiple user/operator-facing surfaces:
+
+- Go binaries:
+  - Inside CLI/runtime (`cmd/inside`, `-tags inside`, default `!daemon`)
+  - Outside CLI/tooling (`cmd/outside`, `-tags outside`, includes optional `relay` server mode)
+- Android APK (`android/`):
+  - Kotlin wrapper (VPN lifecycle + import UI + local diagnostics)
+  - Embedded Go mobile API surface (gomobile artifacts referenced by `android/app/libs/`)
+- Website + dashboard (`website/`):
+  - Public docs/pages plus a local dashboard that proxies to the Inside localhost runtime API
+
 ## SunLionet Inside
 
 Inside runs on the user device and owns all real-time decisions. It is designed to be lightweight, seizure-resistant, and able to operate during partial or total blackouts.
@@ -37,16 +50,31 @@ Concrete enforcement points live in:
 
 `cmd/inside/daemon.go` (build tag `inside && daemon`) is a separate autonomous-agent runtime path that integrates additional subsystems (LLM client, relay polling, ledger sync). It is not built by default and is not part of the public release boundary until explicitly hardened and gated.
 
-### Control plane components (Conceptual)
+### Android Agent Runtime (Release, via gomobile)
 
-- Supervisor (`SUNLIONETd`): starts/stops detector, policy, sing-box controller, mesh, and Signal receiver (legacy name during transition)
-- Detector: produces network-interference events (timeouts, resets, DNS poisoning suspicion, UDP disruption suspicion)
-- Policy Engine (deterministic): handles routine decisions without any AI
-- LLM Advisor (bounded): invoked sparingly when events are ambiguous; must output strict JSON selecting only from allowed actions/mutations
-- Secure Local Store: encrypted profile store + health statistics
-- sing-box Controller: hot-reloads outbound config without leaking secrets to the advisor
-- Bluetooth Mesh: local sharing of working seeds during blackout
-- Signal Receiver: receive-only by default
+The Android app does not simply “wrap the Inside CLI”. It embeds a Go agent loop exposed via `pkg/mobilebridge` and invoked from Kotlin (`android/app/src/main/java/com/sunlionet/agent/Bridge.kt`).
+
+Concrete responsibilities in the Android/Go combined runtime:
+
+- Bundle import and encrypted storage: `pkg/mobilebridge` → `pkg/importctl`, `pkg/profile`, `pkg/profile.TemplateStore`
+- Deterministic selection/rotation: `pkg/mobilebridge` → `pkg/policy`
+- Optional local orchestrator (Pi) client: `pkg/mobilebridge` → `pkg/orchestrator` (local-only contract; treated as untrusted advisor)
+- sing-box config generation + validation: `pkg/sbctl` (Go) and `SingBoxController.kt` (Android)
+
+Note: `android/app/libs/` contains the gomobile artifacts that the APK links against; treat these as release-critical inputs (see [production-map.md](production-map.md)).
+
+### Control Plane Components (Only Where They Exist Today)
+
+Some subsystems exist as real code but intentionally return “unavailable” in real mode until a real implementation is introduced. This is a deliberate boundary: it prevents accidental reliance on a fake “real” mesh/Signal receiver.
+
+- Detector: implemented for both real and sim modes (`pkg/detector/real`, `pkg/detector/sim`)
+- Policy engine (deterministic): `pkg/policy`
+- Secure local stores (encrypted-at-rest): `pkg/profile` and other `pkg/*/store.go`
+- Mesh and Signal receiver:
+  - Simulation implementations exist for testing (`pkg/mesh/sim`, `pkg/signalrx/sim`)
+  - “Real” implementations currently return `unavailable` (`pkg/mesh/real`, `pkg/signalrx/real`)
+- LLM advisor:
+  - Present only in the non-release daemon build (`cmd/inside/daemon.go` uses `pkg/llm`)
 
 ## SunLionet Outside (Helper)
 

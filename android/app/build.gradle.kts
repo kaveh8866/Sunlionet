@@ -16,8 +16,8 @@ android {
 		applicationId = "com.sunlionet.agent"
 		minSdk = 26
 		targetSdk = 34
-		versionCode = 2
-		versionName = "v0.2.0-beta"
+		versionCode = 3
+		versionName = "v0.3.0-rc1"
 		testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 		val testerMode = envOrProp("TESTER_MODE").lowercase() == "true"
 		buildConfigField("boolean", "TESTER_MODE", testerMode.toString())

@@ -26,3 +26,15 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*
+
+      - name: Notify Telegram Mirror
+        if: success()
+        shell: bash
+        run: |
+          echo "Simulating Telegram mirror update for version ${{ inputs.version }}"
+          # In a real environment, this would call a bot API or use a dedicated action:
+          # curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          #   -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=New SunLionet Release: ${{ inputs.version }} - https://github.com/SunLionet/Iran-Agent-Vpn/releases/tag/${{ inputs.version }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

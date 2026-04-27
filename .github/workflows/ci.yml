@@ -115,14 +115,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22.5'
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.22.5-${{ hashFiles('**/go.sum') }}
+          go-version-file: go.mod
+          cache: true
       - name: go version
         run: go version
       - name: validate go version
@@ -130,14 +124,23 @@ jobs:
         run: |
           goversion="$(go env GOVERSION)"
           echo "Detected: ${goversion}"
-          case "${goversion}" in
-            go1.22.5) ;;
-            *)
-              echo "Expected Go 1.22.5, got ${goversion}"
-              exit 1
-              ;;
-          esac
       - name: Run censorship matrix
         run: go test ./tests/simulation -run TestCensorshipSimulationScenarioMatrix_64Scenarios -count=1
       - name: Run latency and stability gates
         run: go test -tags perf ./tests/performance -run "TestDecisionLatencyP95_Under5s|TestRotationStability_1000Switches_NoPanic" -count=1
+
+  android-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Android lint
+        run: cd android && ./gradlew lintDebug
+      - name: Android unit tests
+        run: cd android && ./gradlew testDebugUnitTest

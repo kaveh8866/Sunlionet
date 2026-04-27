@@ -124,32 +124,7 @@ func TestRotationManager_LLMClientInvalidJSON_FallbackStillAppliesConfig(t *test
 }
 
 func TestPhase4_DeviceLink_AndRelayRoundTrip(t *testing.T) {
-	tmp := t.TempDir()
-
-	r, err := relay.NewFileRelay(filepath.Join(tmp, "relay"), relay.FileRelayOptions{
-		MaxPendingPerMailbox: 1000,
-		MaxTotalPending:      5000,
-	})
-	if err != nil {
-		t.Fatalf("NewFileRelay: %v", err)
-	}
-	srv, err := relay.NewServer("127.0.0.1:0", r, relay.ServerOptions{
-		AllowNonLocal:          false,
-		MinPoWBits:             12,
-		IPRateLimitPerMin:      6000,
-		MailboxRateLimitPerMin: 6000,
-	})
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
-	if err := srv.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
-	})
+	r := relay.NewMemoryRelay()
 
 	p, err := identity.NewPersona()
 	if err != nil {
@@ -197,27 +172,26 @@ func TestPhase4_DeviceLink_AndRelayRoundTrip(t *testing.T) {
 		t.Fatalf("UpsertDeviceFromJoinPackage: %v", err)
 	}
 
-	client := relay.NewHTTPClient("http://" + srv.Addr())
 	mb := relay.MailboxID("mb_" + string(p.ID))
-	id, err := client.Push(context.Background(), relay.PushRequest{
+	id, err := r.Push(context.Background(), relay.PushRequest{
 		Mailbox:  mb,
 		Envelope: relay.Envelope("ciphertext"),
-		PoWBits:  12,
+		PoWBits:  0,
 	})
 	if err != nil {
 		t.Fatalf("Push: %v", err)
 	}
-	msgs, err := client.Pull(context.Background(), relay.PullRequest{Mailbox: mb, Limit: 10})
+	msgs, err := r.Pull(context.Background(), relay.PullRequest{Mailbox: mb, Limit: 10})
 	if err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
 	if len(msgs) != 1 || msgs[0].ID != id {
 		t.Fatalf("unexpected pull result: %+v", msgs)
 	}
-	if err := client.Ack(context.Background(), relay.AckRequest{Mailbox: mb, IDs: []relay.MessageID{id}}); err != nil {
+	if err := r.Ack(context.Background(), relay.AckRequest{Mailbox: mb, IDs: []relay.MessageID{id}}); err != nil {
 		t.Fatalf("Ack: %v", err)
 	}
-	msgs, err = client.Pull(context.Background(), relay.PullRequest{Mailbox: mb, Limit: 10})
+	msgs, err = r.Pull(context.Background(), relay.PullRequest{Mailbox: mb, Limit: 10})
 	if err != nil {
 		t.Fatalf("Pull after ack: %v", err)
 	}

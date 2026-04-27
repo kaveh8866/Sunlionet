@@ -6,9 +6,12 @@ import (
 )
 
 var (
-	reEmail = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
-	reURL   = regexp.MustCompile(`(?i)\bhttps?://[^\s]+\b`)
-	reDigit = regexp.MustCompile(`\d{3,}`)
+	reEmail        = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
+	reURL          = regexp.MustCompile(`(?i)\bhttps?://[^\s]+\b`)
+	reDigit        = regexp.MustCompile(`\d{3,}`)
+	reAgeSecretKey = regexp.MustCompile(`(?i)\bage-secret-key-[a-z0-9]+\b`)
+	reHexLong      = regexp.MustCompile(`(?i)\b[0-9a-f]{48,}\b`)
+	reB64Long      = regexp.MustCompile(`\b[A-Za-z0-9_-]{40,}\b`)
 )
 
 func RedactText(s string, profile RedactionProfile) string {
@@ -26,6 +29,9 @@ func RedactText(s string, profile RedactionProfile) string {
 	default:
 		s = reEmail.ReplaceAllString(s, "[redacted_email]")
 		s = reURL.ReplaceAllString(s, "[redacted_url]")
+		s = reAgeSecretKey.ReplaceAllString(s, "[redacted_age_secret]")
+		s = reHexLong.ReplaceAllString(s, "[redacted_hex]")
+		s = reB64Long.ReplaceAllString(s, "[redacted_b64]")
 		s = reDigit.ReplaceAllString(s, "[redacted_digits]")
 		return s
 	}

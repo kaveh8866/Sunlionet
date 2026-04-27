@@ -93,11 +93,17 @@ export default async function SupportPage({ params }: { params: Promise<{ lang?:
       </section>
 
       <section className="mt-10 rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-        <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Other Support Options</h2>
+        <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
+          {isFa ? "گزینه‌های دیگر حمایت" : "Other Support Options"}
+        </h2>
         <ul className="mt-4 space-y-2 text-sm text-muted">
-          <li>Run the Outside version and share fresh configs via Signal with trusted contacts.</li>
           <li>
-            Contribute code on{" "}
+            {isFa 
+              ? "اجرای نسخه Outside و اشتراک‌گذاری کانفیگ‌های تازه از طریق کانال‌های امن با افراد مورد اعتماد."
+              : "Run the Outside version and share fresh configs via secure channels with trusted contacts."}
+          </li>
+          <li>
+            {isFa ? "مشارکت در کدنویسی در " : "Contribute code on "}
             <a
               href={repoUrl}
               target="_blank"
@@ -108,19 +114,27 @@ export default async function SupportPage({ params }: { params: Promise<{ lang?:
             </a>
             .
           </li>
-          <li>Spread the word by sharing the landing page, docs, or architecture video.</li>
+          <li>
+            {isFa
+              ? "معرفی پروژه به دیگران با اشتراک‌گذاری آدرس سایت یا مستندات."
+              : "Spread the word by sharing the landing page or documentation."}
+          </li>
         </ul>
       </section>
 
       <section className="mt-10 rounded-2xl border border-border bg-card/60 p-6 shadow-[0_0_0_1px_var(--border)]">
-        <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Transparency & Responsibility</h2>
+        <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
+          {isFa ? "شفافیت و مسئولیت" : "Transparency & Responsibility"}
+        </h2>
         <p className="mt-4 text-sm leading-relaxed text-muted">
-          SunLionet is 100% free and open-source. All donations go directly to development, server costs for testing,
-          and maintaining config seeds. No company or organization takes a cut.
+          {isFa
+            ? "سان‌لاین‌نت ۱۰۰٪ رایگان و متن‌باز است. تمامی حمایت‌ها مستقیماً صرف هزینه‌های توسعه و نگهداری سرورهای تست می‌شود."
+            : "SunLionet is 100% free and open-source. All donations go directly to development and server costs for testing."}
         </p>
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          Responsibility for using SunLionet lies with the user. The goal is private, resilient communication and access
-          to information without relying on a central service.
+          {isFa
+            ? "مسئولیت استفاده از سان‌لاین‌نت با خود کاربر است. هدف ما فراهم کردن امکان ارتباط امن و آزاد بدون وابستگی به سرویس‌های مرکزی است."
+            : "Responsibility for using SunLionet lies with the user. The goal is private, resilient communication without relying on a central service."}
         </p>
       </section>
     </div>

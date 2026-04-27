@@ -8,11 +8,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,18 @@ type fakeResolver struct {
 
 func (r *fakeResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
 	return r.ips, r.err
+}
+
+type DialerFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
+func (f DialerFunc) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return f(ctx, network, address)
+}
+
+type HTTPDoerFunc func(req *http.Request) (*http.Response, error)
+
+func (f HTTPDoerFunc) Do(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 func TestPassiveTCPStats(t *testing.T) {
@@ -114,26 +127,20 @@ func selfSignedTLSConfig(t *testing.T) *tls.Config {
 }
 
 func TestCheckSNIReset_DetectsResetLikeClose(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-
+	client, server := net.Pipe()
+	defer client.Close()
 	go func() {
-		c, err := ln.Accept()
-		if err == nil {
-			if tc, ok := c.(*net.TCPConn); ok {
-				_ = tc.SetLinger(0)
-			}
-			_ = c.Close()
-		}
+		_ = server.Close()
 	}()
+
+	dialer := DialerFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
+		return client, nil
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	blocked, err := CheckSNIResetWith(ctx, &net.Dialer{}, "blocked.example", ln.Addr().String())
+	blocked, err := CheckSNIResetWith(ctx, dialer, "blocked.example", "pipe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,27 +151,23 @@ func TestCheckSNIReset_DetectsResetLikeClose(t *testing.T) {
 
 func TestCheckSNIReset_AllowsHandshake(t *testing.T) {
 	cfg := selfSignedTLSConfig(t)
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", cfg)
-	if err != nil {
-		t.Fatalf("tls listen: %v", err)
-	}
-	defer ln.Close()
-
+	client, server := net.Pipe()
+	defer client.Close()
 	go func() {
-		c, err := ln.Accept()
-		if err == nil {
-			if tc, ok := c.(*tls.Conn); ok {
-				_ = tc.Handshake()
-			}
-			time.Sleep(20 * time.Millisecond)
-			_ = c.Close()
-		}
+		srv := tls.Server(server, cfg)
+		_ = srv.Handshake()
+		time.Sleep(20 * time.Millisecond)
+		_ = srv.Close()
 	}()
+
+	dialer := DialerFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
+		return client, nil
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	blocked, err := CheckSNIResetWith(ctx, &net.Dialer{}, "localhost", ln.Addr().String())
+	blocked, err := CheckSNIResetWith(ctx, dialer, "localhost", "pipe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,16 +177,18 @@ func TestCheckSNIReset_AllowsHandshake(t *testing.T) {
 }
 
 func TestCheckHTTPFiltering_DetectsInjected403(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`<html><body><iframe src="http://10.10.34.34/"></iframe></body></html>`))
-	}))
-	defer srv.Close()
+	client := HTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body:       io.NopCloser(strings.NewReader(`<html><body><iframe src="http://10.10.34.34/"></iframe></body></html>`)),
+			Header:     make(http.Header),
+		}, nil
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	blocked, err := CheckHTTPFilteringWith(ctx, srv.Client(), srv.URL)
+	blocked, err := CheckHTTPFilteringWith(ctx, client, "http://example.invalid/")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,16 +198,18 @@ func TestCheckHTTPFiltering_DetectsInjected403(t *testing.T) {
 }
 
 func TestCheckHTTPFiltering_NotFiltered(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`ok`))
-	}))
-	defer srv.Close()
+	client := HTTPDoerFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`ok`)),
+			Header:     make(http.Header),
+		}, nil
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	blocked, err := CheckHTTPFilteringWith(ctx, srv.Client(), srv.URL)
+	blocked, err := CheckHTTPFilteringWith(ctx, client, "http://example.invalid/")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -263,23 +270,20 @@ func TestCheckUDPBlocked_DetectsDrop(t *testing.T) {
 }
 
 func TestCheckConnectivityBaseline_LocalTCP(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-
+	client, server := net.Pipe()
+	defer client.Close()
 	go func() {
-		c, err := ln.Accept()
-		if err == nil {
-			_ = c.Close()
-		}
+		_ = server.Close()
 	}()
+
+	dialer := DialerFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
+		return client, nil
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	ok, err := CheckConnectivityBaselineWith(ctx, &net.Dialer{}, ln.Addr().String())
+	ok, err := CheckConnectivityBaselineWith(ctx, dialer, "pipe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

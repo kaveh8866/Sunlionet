@@ -15,12 +15,44 @@ async function gotoWithRetry(page: Page, url: string, options?: Parameters<Page[
 
 test("homepage smoke: loads, nav visible, CTA visible", async ({ page }) => {
   await gotoWithRetry(page, "/", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page).toHaveURL(/\/(en|fa)$/);
+  await expect(page).toHaveURL(/\/(en|fa)\/?$/);
   await expect(page.getByTestId("site-header")).toBeVisible();
   await expect(page.getByTestId("nav-desktop")).toBeVisible();
   await expect(page.getByTestId("nav-cta-download")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.locator("#downloads")).toHaveCount(1);
+});
+
+test("language toggle switches EN/FA deterministically on public routes", async ({ page }) => {
+  await gotoWithRetry(page, "/en/download", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await expect(page).toHaveURL(/\/en\/download\/?$/);
+  await expect(page.getByTestId("nav-lang-toggle")).toBeVisible();
+  await expect(page.getByTestId("nav-lang-toggle")).toHaveText("FA");
+
+  await Promise.all([
+    page.waitForURL(/\/fa\/download\/?$/, { timeout: 30_000, waitUntil: "domcontentloaded" }),
+    page.getByTestId("nav-lang-toggle").click(),
+  ]);
+
+  await expect(page).toHaveURL(/\/fa\/download\/?$/);
+  await expect(page.locator('div[dir="rtl"]').first()).toBeVisible();
+  await expect(page.getByTestId("nav-lang-toggle")).toHaveText("EN");
+  await expect(page.getByTestId("nav-cta-download")).toBeVisible();
+});
+
+test("download -> verification guide route is reachable (EN/FA)", async ({ page }) => {
+  const assertLang = async (lang: "en" | "fa") => {
+    await gotoWithRetry(page, `/${lang}/download`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await expect(page.getByTestId("cta-verification")).toBeVisible();
+    await Promise.all([
+      page.waitForURL(new RegExp(`/${lang}/docs/outside/verification/?$`), { timeout: 30_000, waitUntil: "domcontentloaded" }),
+      page.getByTestId("cta-verification").click(),
+    ]);
+    const h1 = page.getByRole("heading", { level: 1, name: /verification|تأیید/i }).first();
+    await expect(h1).toBeVisible();
+  };
+
+  await assertLang("en");
+  await assertLang("fa");
 });
 
 test("download section recommends Android when UA indicates Android", async ({ browser }) => {
@@ -38,21 +70,20 @@ test("download section recommends Android when UA indicates Android", async ({ b
 
 test("download page shows platform options, verify/install sections, and local-fallback message", async ({ page }) => {
   await gotoWithRetry(page, "/download", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page).toHaveURL(/\/(?:(?:en|fa)\/)?download$/);
-  await expect(page.getByText("Recommended artifact", { exact: true })).toBeVisible();
-  await expect(page.getByText("Quick install (stepwise)")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Verification" })).toBeVisible();
+  await expect(page).toHaveURL(/\/(?:(?:en|fa)\/)?download\/?$/);
+  await expect(page.getByTestId("cta-verification")).toBeVisible();
+  await expect(page.getByTestId("download-release-select")).toBeVisible();
   await expect(page.getByTestId("download-platform-select")).toBeVisible();
-  await expect(page.getByText("Confidence:")).toBeVisible();
   const platformSelect = page.getByTestId("download-platform-select");
+  await expect(platformSelect).toHaveAttribute("data-hydrated", "1", { timeout: 30_000 });
 
   const assertDownloadOk = async (platform: string, filePattern: RegExp) => {
     await platformSelect.selectOption(platform);
     const link = page.getByTestId("recommended-download");
-    await expect(link).toBeVisible();
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await expect(link).toHaveAttribute("href", filePattern, { timeout: 30_000 });
     const href = await link.getAttribute("href");
     expect(href).toBeTruthy();
-    expect(href!).toMatch(filePattern);
     const absolute = new URL(href!, page.url()).toString();
     const res = await page.request.fetch(absolute, { method: "HEAD", timeout: 30_000 });
     expect(res.status()).toBeGreaterThanOrEqual(200);
@@ -64,13 +95,47 @@ test("download page shows platform options, verify/install sections, and local-f
   await assertDownloadOk("macos-arm64", /darwin-arm64\.tar\.gz$/);
 
   await platformSelect.selectOption("android");
-  await expect(page.getByText(/Android APK is not published for this release/i)).toBeVisible();
+  const androidHandoff = page.getByTestId("android-install-handoff");
+  const androidFallback = page.getByText(/Android APK is not published for this release/i);
+  await expect(androidHandoff.or(androidFallback)).toBeVisible();
 
   await platformSelect.selectOption("macos-amd64");
   await expect(page.getByText(/No matching artifact/i)).toBeVisible();
 
   await platformSelect.selectOption("source");
   await expect(page.getByText(/No matching artifact/i)).toBeVisible();
+});
+
+test("download hub exposes official sources and stays honest about Android install handoff (EN/FA)", async ({ page }) => {
+  const assertLang = async (lang: "en" | "fa") => {
+    await gotoWithRetry(page, `/${lang}/download`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await expect(page).toHaveURL(new RegExp(`/${lang}/download/?$`));
+
+    await expect(page.getByTestId("source-github-releases")).toBeVisible();
+    await expect(page.getByTestId("source-direct-apk")).toBeVisible();
+    await expect(page.getByTestId("source-termux")).toBeVisible();
+
+    const fdroidLink = page.getByTestId("source-fdroid");
+    const fdroidDisabled = page.getByTestId("source-fdroid-disabled");
+    await expect(fdroidLink.or(fdroidDisabled)).toBeVisible();
+
+    await expect(page.getByText(/Trust Note|یادداشت اعتماد/)).toBeVisible();
+    await expect(page.getByText(/cannot silently install|بی.?صدا/)).toBeVisible();
+
+    if (lang === "fa") {
+      await expect(page.locator('div[dir="rtl"]').first()).toBeVisible();
+    }
+  };
+
+  await assertLang("en");
+  await assertLang("fa");
+});
+
+test("fa download loads via localhost without connection refused", async ({ page }) => {
+  await gotoWithRetry(page, "http://localhost:3001/fa/download", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await expect(page).toHaveURL(/\/fa\/download\/?$/);
+  await expect(page.getByTestId("download-platform-select")).toBeVisible();
+  await expect(page.locator('div[dir="rtl"]').first()).toBeVisible();
 });
 
 test("downloads API returns latest release metadata and platform map", async ({ page }) => {

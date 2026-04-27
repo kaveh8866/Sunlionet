@@ -25,14 +25,16 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
   );
 }
 
-export default async function InstallationPage({ params }: { params: Promise<{ lang?: string }> }) {
+type InstallationParams = { lang?: string };
+
+export default async function InstallationPage({ params }: { params?: Promise<InstallationParams> }) {
   const resolved = await params;
-  const lang = resolveUILang(resolved.lang);
+  const lang = resolveUILang(resolved?.lang);
+  const isFa = lang === "fa";
   const copy = uiCopy[lang].installationPage;
   const releases = await getLocalReleases();
   const tag = releases[0]?.tag ?? "v0.1.0";
-  const githubDownloads = `${githubRepo}/tree/main/website/public/downloads/${tag}`;
-  const resolvedBasePrefix = resolved.lang === "fa" ? "/fa" : resolved.lang === "en" ? "/en" : "";
+  const resolvedBasePrefix = resolved?.lang === "fa" ? "/fa" : resolved?.lang === "en" ? "/en" : "";
   const hrefFor = (href: string) => `${resolvedBasePrefix}${href}`;
 
   const linuxAmd64 =
@@ -74,67 +76,55 @@ export default async function InstallationPage({ params }: { params: Promise<{ l
         />
 
         <div className="grid gap-6">
-          <Step n="1" title="Download + verify">
-            Go to{" "}
-            <Link href={hrefFor("/download")} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
-              /download
-            </Link>{" "}
-            and download the artifact plus its <span className="font-mono">.sha256</span> file. Always verify before running.
-            <div className="mt-3 text-sm text-muted-foreground">
-              These examples assume you set <span className="font-mono">BASE_URL</span> to the website you are using (example:
-              <span className="font-mono"> https://sunlionet.example</span>).
-            </div>
-            <div className="mt-3 text-sm text-muted-foreground">
-              You can also browse the exact files on GitHub:{" "}
-            <a className="text-primary hover:opacity-90 transition-opacity" href={githubDownloads} target="_blank" rel="noreferrer">
-                downloads/{tag}
-            </a>
-            .
-            </div>
+          <Step n="1" title={copy.steps.download.title}>
+            {copy.steps.download.desc}
             <div className="mt-4">
-              <CodeBlockShell
-                language="bash"
-                code={`BASE_URL="https://sunlionet.example"
-curl -fL -O "$BASE_URL/downloads/${tag}/${linuxAmd64}"
-curl -fL -O "$BASE_URL/downloads/${tag}/${linuxAmd64}.sha256"
-sha256sum -c "${linuxAmd64}.sha256"`}
-              />
+              <Link
+                href={hrefFor("/download")}
+                className="text-primary font-bold hover:underline"
+              >
+                {isFa ? "برو به صفحه دانلود" : "Go to Download Page"} →
+              </Link>
             </div>
           </Step>
 
-          <Step n="2" title="Install (Linux bundle)">
-            Extract and install:
+          <Step n="2" title={copy.steps.android.title}>
+            {copy.steps.android.desc}
+            <div className="mt-4 text-sm text-muted-foreground italic">
+              {isFa ? "پیشنهادی برای کاربران اندروید" : "Recommended for Android users"}
+            </div>
+          </Step>
+
+          <Step n="3" title={copy.steps.linux.title}>
+            {copy.steps.linux.desc}
             <div className="mt-4">
               <CodeBlockShell
                 language="bash"
                 code={`tar -xzf ${linuxAmd64}
 sudo ./install-linux.sh inside
-sudo systemctl enable --now sunlionet-inside.service || sudo systemctl enable --now SUNLIONET-inside.service`}
+sudo systemctl enable --now sunlionet-inside.service`}
               />
             </div>
-            <div className="mt-3 text-sm text-muted-foreground">
-              Full install reference (GitHub source):{" "}
-              <a className="text-primary hover:opacity-90 transition-opacity" href={githubDocsInstall} target="_blank" rel="noreferrer">
-                docs/install.md
-              </a>
-            </div>
           </Step>
 
-          <Step n="3" title="Install (Android app)">
-            Install SunLionet as a signed APK from GitHub Releases, then import a trusted configuration bundle and connect.
-            <div className="mt-4 text-sm text-muted-foreground">
-              Follow:{" "}
-              <Link href={hrefFor("/docs/install/android")} prefetch={false} className="text-primary hover:opacity-90 transition-opacity">
-                /docs/install/android
+          <Step n="4" title={copy.steps.seeds.title}>
+            {copy.steps.seeds.desc}
+            <div className="mt-4">
+              <Link
+                href={hrefFor("/docs/user/safety")}
+                className="text-primary text-sm font-bold hover:underline"
+              >
+                {isFa ? "مطالعه نکات ایمنی" : "Read Safety Tips"} →
               </Link>
-              .
             </div>
           </Step>
+        </div>
 
-          <Step n="4" title="Seeds via Signal (trusted contact)">
-            Ask a trusted supporter to run Outside and send you signed + encrypted bundles via Signal. Inside accepts bundles only from
-            explicitly trusted publisher keys. No domains are stored, and only a bounded event buffer is retained locally.
-          </Step>
+        <div className="rounded-2xl border border-border bg-card/40 p-8 shadow-[0_0_0_1px_var(--border)] mt-4">
+          <h2 className="text-2xl font-bold text-foreground mb-4">{copy.whyNoStore}</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            {copy.whyNoStoreDesc}
+          </p>
         </div>
       </div>
     </div>

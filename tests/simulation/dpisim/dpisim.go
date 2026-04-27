@@ -1,6 +1,7 @@
 package dpisim
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -11,14 +12,30 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"time"
 )
 
 type Servers struct {
-	HTTP403 *httptest.Server
-	TLSDrop net.Listener
-	UDPEcho net.PacketConn
-	UDPSink net.PacketConn
+	HTTP403    *httptest.Server
+	TLSDrop    net.Listener
+	UDPEcho    net.PacketConn
+	UDPSink    net.PacketConn
+	DNSManager *DNSManager
+}
+
+type DNSManager struct {
+	Poisoned bool
+	Mux      sync.RWMutex
+}
+
+func (m *DNSManager) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	m.Mux.RLock()
+	defer m.Mux.RUnlock()
+	if m.Poisoned {
+		return []net.IPAddr{{IP: net.ParseIP("10.10.34.34")}}, nil
+	}
+	return net.DefaultResolver.LookupIPAddr(ctx, host)
 }
 
 func StartHTTP403Injector() *httptest.Server {
