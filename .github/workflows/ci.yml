@@ -106,6 +106,8 @@ jobs:
           echo "NEXT_PUBLIC_GIT_AUTHOR=$(git log -1 --pretty=format:%an)" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_GIT_COMMIT_TIMESTAMP=$(git log -1 --pretty=format:%cI)" >> "$GITHUB_ENV"
       - name: Build static export
+        env:
+          SUNLIONET_STATIC_EXPORT: "1"
         run: npm run build
 
   heavy-sim-perf:
