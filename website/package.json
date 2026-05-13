@@ -18,7 +18,7 @@
     "next": "^15.1.0",
     "prop-types": "^15.8.1",
     "qrcode.react": "^4.2.0",
-    "react": "^19.0.0",
+    "react": "^19.2.6",
     "react-dom": "^19.0.0",
     "react-simple-maps": "^3.0.0",
     "world-atlas": "^2.0.2"
@@ -28,7 +28,7 @@
     "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^22.10.0",
-    "@types/react": "^19.0.0",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.15.0",
     "eslint-config-next": "^15.1.0",
