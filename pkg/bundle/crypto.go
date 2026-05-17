@@ -3,6 +3,7 @@ package bundle
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -22,12 +23,23 @@ var (
 	ErrUnknownCipher    = errors.New("unknown cipher")
 )
 
+const (
+	BundleSignatureDomain = "SUNLIONET-BUNDLE-V2\x00"
+	BundleNonceSize       = 24
+	MaxBundleBytes        = 2 << 20
+	MaxPayloadBytes       = 1 << 20
+	MaxCiphertextBytes    = 2 << 20
+	MaxBundleTTLSeconds   = 14 * 24 * 3600
+	MaxClockSkewSeconds   = 10 * 60
+)
+
 type GenerateOptions struct {
 	RecipientPublicKey string
 	AllowPlaintext     bool
 	SignerKeyID        string
 	BundleID           string
 	Seq                uint64
+	Nonce              string
 	CreatedAt          int64
 	ExpiresAt          int64
 }
@@ -69,6 +81,16 @@ func GenerateBundleWithOptions(payload *BundlePayload, signerPrivateKey ed25519.
 	if opts.ExpiresAt == 0 {
 		opts.ExpiresAt = opts.CreatedAt + (7 * 24 * 3600)
 	}
+	if opts.Nonce == "" {
+		nonce := make([]byte, BundleNonceSize)
+		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+			return nil, fmt.Errorf("failed to generate bundle nonce: %w", err)
+		}
+		opts.Nonce = base64.RawURLEncoding.EncodeToString(nonce)
+	}
+	if err := validateSigningKey(signerPrivateKey, opts.SignerKeyID); err != nil {
+		return nil, err
+	}
 
 	var ciphertext []byte
 	var cipher string
@@ -108,6 +130,7 @@ func GenerateBundleWithOptions(payload *BundlePayload, signerPrivateKey ed25519.
 		PublisherKeyID: opts.SignerKeyID,
 		RecipientKeyID: recipientKeyID,
 		Seq:            opts.Seq,
+		Nonce:          opts.Nonce,
 		CreatedAt:      opts.CreatedAt,
 		ExpiresAt:      opts.ExpiresAt,
 		Cipher:         cipher,
@@ -118,11 +141,7 @@ func GenerateBundleWithOptions(payload *BundlePayload, signerPrivateKey ed25519.
 		return nil, fmt.Errorf("failed to serialize header: %w", err)
 	}
 
-	var sigInput bytes.Buffer
-	sigInput.Write(headerBytes)
-	sigInput.Write(ciphertext)
-
-	signature := ed25519.Sign(signerPrivateKey, sigInput.Bytes())
+	signature := ed25519.Sign(signerPrivateKey, signatureInput(headerBytes, ciphertext))
 	header.Signature = base64.RawURLEncoding.EncodeToString(signature)
 
 	wrapper := struct {
@@ -136,12 +155,42 @@ func GenerateBundleWithOptions(payload *BundlePayload, signerPrivateKey ed25519.
 	return json.Marshal(wrapper)
 }
 
+func validateSigningKey(priv ed25519.PrivateKey, signerKeyID string) error {
+	if len(priv) != ed25519.PrivateKeySize {
+		return fmt.Errorf("invalid signer private key size: %d", len(priv))
+	}
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok || len(pub) != ed25519.PublicKeySize {
+		return fmt.Errorf("invalid signer public key")
+	}
+	if strings.TrimSpace(signerKeyID) == "" {
+		return fmt.Errorf("missing signer key id")
+	}
+	if signerKeyID != Ed25519KeyID(pub) {
+		return fmt.Errorf("signer key id does not match private key")
+	}
+	return nil
+}
+
+func signatureInput(headerBytes, ciphertext []byte) []byte {
+	var sigInput bytes.Buffer
+	sigInput.Grow(len(BundleSignatureDomain) + len(headerBytes) + 1 + len(ciphertext))
+	sigInput.WriteString(BundleSignatureDomain)
+	sigInput.Write(headerBytes)
+	sigInput.WriteByte(0)
+	sigInput.Write(ciphertext)
+	return sigInput.Bytes()
+}
+
 // VerifyAndDecrypt parses, verifies signature, and decrypts the bundle.
 func VerifyAndDecrypt(bundleBytes []byte, trustedSigner ed25519.PublicKey, ageIdentity *age.X25519Identity) (*BundlePayload, error) {
 	// 1. Parse wrapper
 	var wrapper struct {
 		Header     BundleHeader `json:"header"`
 		Ciphertext string       `json:"ciphertext"`
+	}
+	if len(bundleBytes) > MaxBundleBytes {
+		return nil, fmt.Errorf("bundle too large")
 	}
 	if err := json.Unmarshal(bundleBytes, &wrapper); err != nil {
 		return nil, fmt.Errorf("failed to parse wrapper: %w", err)
@@ -151,6 +200,10 @@ func VerifyAndDecrypt(bundleBytes []byte, trustedSigner ed25519.PublicKey, ageId
 		return nil, ErrUnknownCipher
 	}
 
+	now := time.Now().Unix()
+	if err := validateHeaderBasics(wrapper.Header, now, Ed25519KeyID(trustedSigner)); err != nil {
+		return nil, err
+	}
 	if time.Now().Unix() > wrapper.Header.ExpiresAt {
 		return nil, ErrExpired
 	}
@@ -159,11 +212,17 @@ func VerifyAndDecrypt(bundleBytes []byte, trustedSigner ed25519.PublicKey, ageId
 	if err != nil {
 		return nil, fmt.Errorf("invalid ciphertext base64: %w", err)
 	}
+	if len(ciphertext) > MaxCiphertextBytes {
+		return nil, fmt.Errorf("ciphertext too large")
+	}
 
 	// 2. Verify Signature
 	sigBytes, err := base64.RawURLEncoding.DecodeString(wrapper.Header.Signature)
 	if err != nil {
 		return nil, fmt.Errorf("invalid signature base64: %w", err)
+	}
+	if len(trustedSigner) != ed25519.PublicKeySize || len(sigBytes) != ed25519.SignatureSize {
+		return nil, ErrInvalidSignature
 	}
 
 	// Reconstruct header without signature for verification
@@ -174,11 +233,7 @@ func VerifyAndDecrypt(bundleBytes []byte, trustedSigner ed25519.PublicKey, ageId
 		return nil, fmt.Errorf("failed to serialize header for verification: %w", err)
 	}
 
-	var sigInput bytes.Buffer
-	sigInput.Write(headerBytes)
-	sigInput.Write(ciphertext)
-
-	if !ed25519.Verify(trustedSigner, sigInput.Bytes(), sigBytes) {
+	if !ed25519.Verify(trustedSigner, signatureInput(headerBytes, ciphertext), sigBytes) {
 		return nil, ErrInvalidSignature
 	}
 
@@ -192,9 +247,12 @@ func VerifyAndDecrypt(bundleBytes []byte, trustedSigner ed25519.PublicKey, ageId
 			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 		}
 
-		payloadBytes, err = io.ReadAll(decReader)
+		payloadBytes, err = io.ReadAll(io.LimitReader(decReader, MaxPayloadBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read decrypted payload: %w", err)
+		}
+		if len(payloadBytes) > MaxPayloadBytes {
+			return nil, fmt.Errorf("decrypted payload too large")
 		}
 	} else {
 		payloadBytes = ciphertext
@@ -214,15 +272,15 @@ func VerifyHeader(bundleBytes []byte, trustedSigner ed25519.PublicKey) (*BundleH
 		Header     BundleHeader `json:"header"`
 		Ciphertext string       `json:"ciphertext"`
 	}
+	if len(bundleBytes) > MaxBundleBytes {
+		return nil, fmt.Errorf("bundle too large")
+	}
 	if err := json.Unmarshal(bundleBytes, &wrapper); err != nil {
 		return nil, fmt.Errorf("failed to parse wrapper: %w", err)
 	}
 
-	if wrapper.Header.Cipher != "age-x25519" && wrapper.Header.Cipher != "none" {
-		return nil, ErrUnknownCipher
-	}
-	if time.Now().Unix() > wrapper.Header.ExpiresAt {
-		return nil, ErrExpired
+	if err := validateHeaderBasics(wrapper.Header, time.Now().Unix(), Ed25519KeyID(trustedSigner)); err != nil {
+		return nil, err
 	}
 
 	ciphertext, err := base64.RawURLEncoding.DecodeString(wrapper.Ciphertext)
@@ -234,6 +292,9 @@ func VerifyHeader(bundleBytes []byte, trustedSigner ed25519.PublicKey) (*BundleH
 	if err != nil {
 		return nil, fmt.Errorf("invalid signature base64: %w", err)
 	}
+	if len(trustedSigner) != ed25519.PublicKeySize || len(sigBytes) != ed25519.SignatureSize {
+		return nil, ErrInvalidSignature
+	}
 
 	headerCopy := wrapper.Header
 	headerCopy.Signature = ""
@@ -242,14 +303,50 @@ func VerifyHeader(bundleBytes []byte, trustedSigner ed25519.PublicKey) (*BundleH
 		return nil, fmt.Errorf("failed to serialize header for verification: %w", err)
 	}
 
-	var sigInput bytes.Buffer
-	sigInput.Write(headerBytes)
-	sigInput.Write(ciphertext)
-	if !ed25519.Verify(trustedSigner, sigInput.Bytes(), sigBytes) {
+	if !ed25519.Verify(trustedSigner, signatureInput(headerBytes, ciphertext), sigBytes) {
 		return nil, ErrInvalidSignature
 	}
 
 	return &wrapper.Header, nil
+}
+
+func validateHeaderBasics(header BundleHeader, now int64, expectedSignerKeyID string) error {
+	if header.Cipher != "age-x25519" && header.Cipher != "none" {
+		return ErrUnknownCipher
+	}
+	if strings.TrimSpace(header.PublisherKeyID) == "" || header.PublisherKeyID != expectedSignerKeyID {
+		return ErrInvalidSignature
+	}
+	if header.CreatedAt <= 0 || header.ExpiresAt <= 0 || header.ExpiresAt < header.CreatedAt {
+		return fmt.Errorf("invalid bundle time window")
+	}
+	if header.ExpiresAt-header.CreatedAt > MaxBundleTTLSeconds {
+		return fmt.Errorf("bundle ttl too large")
+	}
+	if header.CreatedAt > now+MaxClockSkewSeconds {
+		return fmt.Errorf("bundle created_at too far in the future")
+	}
+	if now > header.ExpiresAt {
+		return ErrExpired
+	}
+	if _, err := decodeBundleNonce(header.Nonce); err != nil {
+		return err
+	}
+	return nil
+}
+
+func decodeBundleNonce(s string) ([]byte, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, fmt.Errorf("missing bundle nonce")
+	}
+	nonce, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid bundle nonce")
+	}
+	if len(nonce) != BundleNonceSize {
+		return nil, fmt.Errorf("invalid bundle nonce size")
+	}
+	return nonce, nil
 }
 
 func fingerprint16(s string) string {

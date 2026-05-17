@@ -3,6 +3,8 @@ package com.sunlionet.agent.proximity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 object ProximityProtocol {
     private const val MAGIC0: Byte = 'S'.code.toByte()
@@ -13,6 +15,8 @@ object ProximityProtocol {
     private const val MSG_ID_LEN = 16
     private const val SENDER_ID_LEN = 8
     private const val HEADER_LEN = 2 + 1 + 1 + MSG_ID_LEN + SENDER_ID_LEN + 4 + 2 + 1 + 2 + 2
+    private const val ADV_MAGIC0: Byte = 'S'.code.toByte()
+    private const val ADV_MAGIC1: Byte = 'M'.code.toByte()
 
     data class Message(
         val msgId: ByteArray,
@@ -32,6 +36,12 @@ object ProximityProtocol {
         val chunkIndex: Int,
         val chunkCount: Int,
         val data: ByteArray,
+    )
+
+    data class AdvertSignal(
+        val epoch: Long,
+        val ephemeralNodeId: ByteArray,
+        val configVersionHash: ByteArray,
     )
 
     fun computeMsgId(senderId: ByteArray, timestampSec: Long, ttlSec: Int, payload: ByteArray): ByteArray {
@@ -136,5 +146,42 @@ object ProximityProtocol {
     fun expiresAtMs(timestampSec: Long, ttlSec: Int): Long {
         return (timestampSec + ttlSec.toLong()) * 1000L
     }
-}
 
+    fun buildAdvertSignal(secret: ByteArray, nodeId: ByteArray, configVersion: ByteArray, nowMs: Long): ByteArray {
+        require(secret.isNotEmpty())
+        require(nodeId.isNotEmpty())
+        require(configVersion.isNotEmpty())
+        val epoch = nowMs / 90_000L
+        val epochBytes = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(epoch.toInt()).array()
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret, "HmacSHA256"))
+        mac.update(nodeId)
+        mac.update(epochBytes)
+        val eph = mac.doFinal()
+        val version = MessageDigest.getInstance("SHA-256").digest(configVersion)
+        val out = ByteBuffer.allocate(ProximityConstants.ADV_PAYLOAD_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        out.put(ADV_MAGIC0)
+        out.put(ADV_MAGIC1)
+        out.put(1)
+        out.put(0)
+        out.putInt(epoch.toInt())
+        out.put(eph.copyOfRange(0, 8))
+        out.put(version.copyOfRange(0, 6))
+        return out.array()
+    }
+
+    fun parseAdvertSignal(raw: ByteArray): AdvertSignal? {
+        if (raw.size != ProximityConstants.ADV_PAYLOAD_LEN) return null
+        val bb = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+        if (bb.get() != ADV_MAGIC0) return null
+        if (bb.get() != ADV_MAGIC1) return null
+        if (bb.get() != 1.toByte()) return null
+        bb.get()
+        val epoch = bb.int.toLong() and 0xffffffffL
+        val node = ByteArray(8)
+        bb.get(node)
+        val hash = ByteArray(6)
+        bb.get(hash)
+        return AdvertSignal(epoch, node, hash)
+    }
+}

@@ -3,6 +3,7 @@ package importctl
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -114,8 +115,7 @@ func TestParseURI_ValidBundle(t *testing.T) {
 }
 
 func TestParseURI_InvalidSignature(t *testing.T) {
-	trustedPubKey, _, _ := ed25519.GenerateKey(nil)
-	_, untrustedPrivKey, _ := ed25519.GenerateKey(nil)
+	trustedPubKey, trustedPrivKey, _ := ed25519.GenerateKey(nil)
 	ageIdentity, _ := age.GenerateX25519Identity()
 
 	store, _ := profile.NewStore("dummy.enc", []byte("0123456789abcdef0123456789abcdef"))
@@ -131,7 +131,7 @@ func TestParseURI_InvalidSignature(t *testing.T) {
 			"issuer_key_id": bundle.Ed25519KeyID(trustedPubKey),
 		},
 	}
-	bundleBytes, _ := bundle.GenerateBundleWithOptions(&payload, untrustedPrivKey, bundle.GenerateOptions{
+	bundleBytes, _ := bundle.GenerateBundleWithOptions(&payload, trustedPrivKey, bundle.GenerateOptions{
 		RecipientPublicKey: ageIdentity.Recipient().String(),
 		AllowPlaintext:     false,
 		SignerKeyID:        bundle.Ed25519KeyID(trustedPubKey),
@@ -140,6 +140,19 @@ func TestParseURI_InvalidSignature(t *testing.T) {
 		CreatedAt:          now,
 		ExpiresAt:          now + 3600,
 	})
+	var wrapper struct {
+		Header     bundle.BundleHeader `json:"header"`
+		Ciphertext string              `json:"ciphertext"`
+	}
+	if err := json.Unmarshal(bundleBytes, &wrapper); err != nil {
+		t.Fatalf("unmarshal bundle: %v", err)
+	}
+	if wrapper.Header.Signature[0] == 'A' {
+		wrapper.Header.Signature = "B" + wrapper.Header.Signature[1:]
+	} else {
+		wrapper.Header.Signature = "A" + wrapper.Header.Signature[1:]
+	}
+	bundleBytes, _ = json.Marshal(wrapper)
 	uri := "snb://v2:" + base64.RawURLEncoding.EncodeToString(bundleBytes)
 
 	_, err := importer.ParseURI(uri)

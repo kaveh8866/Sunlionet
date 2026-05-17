@@ -8,5 +8,5 @@ object ProximityConstants {
     val TX_UUID: UUID = UUID.fromString("2c3a2bb2-3d43-4b1f-9b9b-ffac3b4bcf18")
     const val ADV_SERVICE_DATA_ID = 0x16
     const val ADV_NODE_ID_LEN = 8
+    const val ADV_PAYLOAD_LEN = 22
 }
-

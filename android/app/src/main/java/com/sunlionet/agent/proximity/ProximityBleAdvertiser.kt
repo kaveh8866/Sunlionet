@@ -20,7 +20,7 @@ class ProximityBleAdvertiser(
 
     private var callback: AdvertiseCallback? = null
 
-    fun start(identity: ProximityIdentityManager.Identity) {
+    fun start(serviceData: ByteArray) {
         val adv = advertiser ?: return
         stop()
         val settings = AdvertiseSettings.Builder()
@@ -32,7 +32,7 @@ class ProximityBleAdvertiser(
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(ProximityConstants.SERVICE_UUID))
-            .addServiceData(ParcelUuid(ProximityConstants.SERVICE_UUID), identity.nodeId.copyOf())
+            .addServiceData(ParcelUuid(ProximityConstants.SERVICE_UUID), serviceData.copyOf())
             .build()
 
         val cb = object : AdvertiseCallback() {}

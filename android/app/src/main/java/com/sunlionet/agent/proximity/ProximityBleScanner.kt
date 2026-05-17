@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class ProximityBleScanner(
     context: Context,
-    private val onSeen: (deviceAddress: String, nodeId: ByteArray, rssi: Int) -> Unit,
+    private val onSeen: (deviceAddress: String, signal: ProximityProtocol.AdvertSignal, rssi: Int) -> Unit,
 ) {
     private val adapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -28,10 +28,9 @@ class ProximityBleScanner(
                 if (result == null) return
                 val record = result.scanRecord ?: return
                 val svc = record.getServiceData(ParcelUuid(ProximityConstants.SERVICE_UUID)) ?: return
-                if (svc.size < ProximityConstants.ADV_NODE_ID_LEN) return
-                val nodeId = svc.copyOfRange(0, ProximityConstants.ADV_NODE_ID_LEN)
+                val signal = ProximityProtocol.parseAdvertSignal(svc) ?: return
                 val addr = result.device?.address ?: return
-                onSeen(addr, nodeId, result.rssi)
+                onSeen(addr, signal, result.rssi)
             }
 
             override fun onBatchScanResults(results: MutableList<ScanResult>?) {

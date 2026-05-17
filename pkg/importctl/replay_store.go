@@ -1,6 +1,7 @@
 package importctl
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -13,6 +14,20 @@ import (
 
 	"github.com/kaveh/sunlionet-agent/pkg/profile"
 )
+
+const ReplayStateVersion = 2
+
+type ReplayState struct {
+	Version   int                          `json:"version"`
+	BundleIDs map[string]struct{}          `json:"bundle_ids"`
+	Signers   map[string]SignerReplayState `json:"signers"`
+}
+
+type SignerReplayState struct {
+	MaxSeq        uint64          `json:"max_seq"`
+	LastCreatedAt int64           `json:"last_created_at"`
+	Nonces        map[string]bool `json:"nonces"`
+}
 
 // ReplayStore persists seen bundle IDs to prevent replay attacks across restarts.
 // It uses the same master key as other stores for consistency.
@@ -36,15 +51,33 @@ func NewReplayStore(dbPath string, masterKey []byte) (*ReplayStore, error) {
 }
 
 func (s *ReplayStore) Save(seen map[string]struct{}) error {
+	state := ReplayState{
+		Version:   ReplayStateVersion,
+		BundleIDs: seen,
+		Signers:   map[string]SignerReplayState{},
+	}
+	return s.SaveState(state)
+}
+
+func (s *ReplayStore) SaveState(state ReplayState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
+	if state.BundleIDs == nil {
+		state.BundleIDs = map[string]struct{}{}
+	}
+	if state.Signers == nil {
+		state.Signers = map[string]SignerReplayState{}
+	}
+	state.Version = ReplayStateVersion
+	for signer, rec := range state.Signers {
+		if rec.Nonces == nil {
+			rec.Nonces = map[string]bool{}
+			state.Signers[signer] = rec
+		}
 	}
 
-	plaintext, err := json.Marshal(ids)
+	plaintext, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
@@ -65,49 +98,83 @@ func (s *ReplayStore) Save(seen map[string]struct{}) error {
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	return os.WriteFile(s.dbPath, ciphertext, 0600)
+	tmp := s.dbPath + ".tmp"
+	if err := os.WriteFile(tmp, ciphertext, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.dbPath)
 }
 
 func (s *ReplayStore) Load() (map[string]struct{}, error) {
+	state, err := s.LoadState()
+	if err != nil {
+		return nil, err
+	}
+	return state.BundleIDs, nil
+}
+
+func (s *ReplayStore) LoadState() (ReplayState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	ciphertext, err := os.ReadFile(s.dbPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]struct{}), nil
+			return ReplayState{Version: ReplayStateVersion, BundleIDs: map[string]struct{}{}, Signers: map[string]SignerReplayState{}}, nil
 		}
-		return nil, err
+		return ReplayState{}, err
 	}
 
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
-		return nil, err
+		return ReplayState{}, err
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return ReplayState{}, err
 	}
 
 	if len(ciphertext) < gcm.NonceSize() {
-		return nil, fmt.Errorf("%w: malformed replay store", profile.ErrCorruptStore)
+		return ReplayState{}, fmt.Errorf("%w: malformed replay store", profile.ErrCorruptStore)
 	}
 
 	nonce, body := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", profile.ErrDecryptionFailed, err)
+		return ReplayState{}, fmt.Errorf("%w: %v", profile.ErrDecryptionFailed, err)
+	}
+
+	trimmed := bytes.TrimSpace(plaintext)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		var state ReplayState
+		if err := json.Unmarshal(plaintext, &state); err != nil {
+			return ReplayState{}, err
+		}
+		if state.BundleIDs == nil {
+			state.BundleIDs = map[string]struct{}{}
+		}
+		if state.Signers == nil {
+			state.Signers = map[string]SignerReplayState{}
+		}
+		state.Version = ReplayStateVersion
+		for signer, rec := range state.Signers {
+			if rec.Nonces == nil {
+				rec.Nonces = map[string]bool{}
+				state.Signers[signer] = rec
+			}
+		}
+		return state, nil
 	}
 
 	var ids []string
 	if err := json.Unmarshal(plaintext, &ids); err != nil {
-		return nil, err
+		return ReplayState{}, err
 	}
 
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		seen[id] = struct{}{}
 	}
-	return seen, nil
+	return ReplayState{Version: ReplayStateVersion, BundleIDs: seen, Signers: map[string]SignerReplayState{}}, nil
 }

@@ -41,6 +41,11 @@ jobs:
         run: go build ./...
       - name: go test
         run: go test ./...
+      - name: chaos tests
+        run: go test ./tests/chaos -count=1 -v
+      - name: chaos race tests
+        if: runner.os == 'Linux'
+        run: go test -race ./tests/chaos -count=1 -v
       - name: go test (outside tag)
         run: go test -tags outside ./...
       - name: go vet
@@ -130,6 +135,8 @@ jobs:
         run: go test ./tests/simulation -run TestCensorshipSimulationScenarioMatrix_64Scenarios -count=1
       - name: Run latency and stability gates
         run: go test -tags perf ./tests/performance -run "TestDecisionLatencyP95_Under5s|TestRotationStability_1000Switches_NoPanic" -count=1
+      - name: Run chaos reconnect storm
+        run: go test ./tests/chaos -run TestChaosMemoryStableAcrossReconnectStorm -count=1 -v
 
   android-checks:
     runs-on: ubuntu-latest

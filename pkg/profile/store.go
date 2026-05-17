@@ -21,6 +21,8 @@ var (
 	ErrDecryptionFailed = errors.New("profile: decryption failed")
 )
 
+const MaxStoreCiphertextBytes = 2 << 20
+
 // Store represents an encrypted local store for seed configs and recent events.
 // Real implementations would use SQLCipher (SQLite) or `age`.
 // This mock uses AES-GCM for encrypted JSON storage on disk.
@@ -140,7 +142,11 @@ func (s *Store) Save(profiles []Profile) error {
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
 	// Write encrypted bundle to disk (no plaintext stored)
-	return os.WriteFile(s.dbPath, ciphertext, 0600)
+	tmp := s.dbPath + ".tmp"
+	if err := os.WriteFile(tmp, ciphertext, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.dbPath)
 }
 
 // Load reads and decrypts the stored profiles
@@ -154,6 +160,9 @@ func (s *Store) Load() ([]Profile, error) {
 			return []Profile{}, nil // Empty store
 		}
 		return nil, err
+	}
+	if len(ciphertext) > MaxStoreCiphertextBytes {
+		return nil, fmt.Errorf("%w: ciphertext too large", ErrCorruptStore)
 	}
 
 	block, err := aes.NewCipher(s.key)
@@ -173,7 +182,7 @@ func (s *Store) Load() ([]Profile, error) {
 	nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
+		return nil, ErrDecryptionFailed
 	}
 
 	var profiles []Profile

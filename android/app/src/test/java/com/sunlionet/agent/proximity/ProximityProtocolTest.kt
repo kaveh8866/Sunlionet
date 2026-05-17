@@ -2,6 +2,7 @@ package com.sunlionet.agent.proximity
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Random
 
@@ -30,5 +31,21 @@ class ProximityProtocolTest {
         assertArrayEquals(msg.senderId, finalMsg.senderId)
         assertArrayEquals(msg.payload, finalMsg.payload)
     }
-}
 
+    @Test
+    fun advert_signal_is_legacy_ble_sized_and_obfuscated() {
+        val secret = "secret".toByteArray()
+        val node = ByteArray(8) { it.toByte() }
+        val version = "bundle-version".toByteArray()
+        val adv = ProximityProtocol.buildAdvertSignal(secret, node, version, 1_700_000_000_000L)
+
+        assertEquals(ProximityConstants.ADV_PAYLOAD_LEN, adv.size)
+        val parsed = ProximityProtocol.parseAdvertSignal(adv)
+        assertNotNull(parsed)
+        assertEquals(8, parsed!!.ephemeralNodeId.size)
+        assertEquals(6, parsed.configVersionHash.size)
+        if (node.contentEquals(parsed.ephemeralNodeId)) {
+            throw AssertionError("advertisement leaked stable node id")
+        }
+    }
+}

@@ -9,6 +9,7 @@ type BundleHeader struct {
 	PublisherKeyID string `json:"publisher_key_id"`
 	RecipientKeyID string `json:"recipient_key_id"`
 	Seq            uint64 `json:"seq"`
+	Nonce          string `json:"nonce"`
 	CreatedAt      int64  `json:"created_at"`
 	ExpiresAt      int64  `json:"expires_at"`
 	Cipher         string `json:"cipher"` // e.g. "x25519+chacha20poly1305"

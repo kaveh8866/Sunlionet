@@ -271,6 +271,7 @@ func TestVerifyBundle_RejectsNonCanonicalPayload(t *testing.T) {
 		PublisherKeyID: signerKeyID,
 		RecipientKeyID: "none",
 		Seq:            1,
+		Nonce:          base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, BundleNonceSize)),
 		CreatedAt:      now,
 		ExpiresAt:      now + 3600,
 		Cipher:         "none",
@@ -278,10 +279,7 @@ func TestVerifyBundle_RejectsNonCanonicalPayload(t *testing.T) {
 	}
 	headerBytes, _ := json.Marshal(header)
 
-	var sigInput bytes.Buffer
-	sigInput.Write(headerBytes)
-	sigInput.Write(pretty)
-	sig := ed25519.Sign(priv, sigInput.Bytes())
+	sig := ed25519.Sign(priv, signatureInput(headerBytes, pretty))
 	header.Signature = base64.RawURLEncoding.EncodeToString(sig)
 
 	wrapper := struct {

@@ -34,6 +34,7 @@ import (
 	"github.com/kaveh/sunlionet-agent/pkg/orchestrator"
 	"github.com/kaveh/sunlionet-agent/pkg/policy"
 	"github.com/kaveh/sunlionet-agent/pkg/profile"
+	"github.com/kaveh/sunlionet-agent/pkg/proxycore"
 	"github.com/kaveh/sunlionet-agent/pkg/report"
 	"github.com/kaveh/sunlionet-agent/pkg/runtimecfg"
 	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
@@ -412,7 +413,13 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		if err != nil {
 			return userError{Message: "Missing or invalid trusted signer keys (required to verify bundles)", Err: err}
 		}
-		importer := importctl.NewImporterWithTemplates(store, templateStore, trustedKeys, ageIdentity)
+		var trustState *importctl.TrustState
+		if trustStore, err := importctl.NewTrustStore(filepath.Join(opts.StateDir, "trust.enc"), masterKey); err == nil {
+			if loadedTrust, err := trustStore.Load(); err == nil && loadedTrust.StateHash != "" {
+				trustState = &loadedTrust
+			}
+		}
+		importer := importctl.NewImporterWithTrust(store, templateStore, nil, trustedKeys, ageIdentity, trustState)
 		payload, err := importer.ImportFile(opts.ImportPath)
 		if err != nil {
 			return userError{Message: "Bundle import failed (signature/decryption/format)", Err: err}
@@ -575,6 +582,10 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 	})
 
 	ctrl := sbctl.NewController(runtimeDir, opts.SingBoxBin)
+	core := proxycore.NewSingBoxCore(ctrl)
+	failover := proxycore.NewEngine(proxycore.DefaultFailoverPolicy(), &proxycore.NoopKillSwitch{}, func(event string, fields map[string]any) {
+		rts.addEvent(event, event, fields)
+	})
 
 	probeEnabled := strings.TrimSpace(opts.ProbeURL) != ""
 	probeProxyURL := opts.ProbeProxyAddr
@@ -702,7 +713,17 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 		log.Printf("[sing-box] starting attempt=%d profile=%s", i+1, p.ID)
 		uiPrintf("[Connection] Starting...\n")
 		rts.addEvent("SINGBOX_START", "Starting sing-box", map[string]any{"profile": p.ID, "attempt": i + 1})
-		if err := ctrl.ApplyAndReload(string(rendered.ConfigBytes)); err != nil {
+		switchResult := failover.Switch(context.Background(), []proxycore.Candidate{{
+			Config: proxycore.CoreConfig{
+				ID:          p.ID,
+				Protocol:    string(p.Family),
+				ConfigPath:  rendered.ConfigPath,
+				ConfigBytes: rendered.ConfigBytes,
+			},
+			Core:     core,
+			Priority: i,
+		}})
+		if err := switchResult.Err; err != nil {
 			if errors.Is(err, sbctl.ErrBinaryNotFound) {
 				st := agentState{
 					StateDir:           opts.StateDir,
@@ -747,7 +768,7 @@ func runWithResolved(opts options, masterKey []byte, mode runtimecfg.RuntimeMode
 			rts.addEvent("SINGBOX_START_FAILED", "sing-box start failed: "+string(reason), map[string]any{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
 			rts.addEvent("CONNECTION_FAIL", "sing-box start failed", map[string]any{"profile": p.ID, "reason": string(reason), "attempt": i + 1})
 			adaptiveState.RecordAttempt(p.ID, signalForFailure(0, reason), string(reason), time.Now())
-			_ = ctrl.Stop()
+			_ = core.Stop(context.Background())
 			lastState = agentState{
 				StateDir:           opts.StateDir,
 				ProfilesLoaded:     len(allProfiles),

@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "sequential_thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "SUNLIONET_PURPOSE": "core-logic-verification-deep-refactoring"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\Kaveh\\Desktop\\Iran-Agent-Vpn"
+      ]
+    }
+  }
+}

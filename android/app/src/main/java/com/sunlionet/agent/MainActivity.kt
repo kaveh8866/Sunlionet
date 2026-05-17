@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonReportIssue: Button
 
     private var pendingAfterNotificationPermission: (() -> Unit)? = null
+    private var lastHandledDeepLink: String = ""
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -219,6 +220,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         render(repo.load())
+        handleIncomingIntent(intent)
 
         lifecycleScope.launch {
             while (isActive) {
@@ -228,6 +230,12 @@ class MainActivity : AppCompatActivity() {
                 delay(d)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
     }
 
     private fun showSecureStoreErrorDialog() {
@@ -379,9 +387,38 @@ class MainActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    private fun requestImportOnboarding(uri: String) {
+        val normalized = OnboardingDeepLink.normalize(uri)
+        if (normalized == null) {
+            showInvalidImportDialog("deep link")
+            return
+        }
+        val intent = Intent(this, AgentService::class.java).apply {
+            action = AgentService.ACTION_IMPORT_ONBOARDING
+            putExtra(AgentService.EXTRA_ONBOARDING_URI, normalized)
+        }
+        startService(intent)
+        Logs.add("[ui] onboarding import requested")
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) {
+            return
+        }
+        val uri = intent.data?.toString().orEmpty()
+        if (uri.isBlank()) {
+            return
+        }
+        if (uri == lastHandledDeepLink) {
+            return
+        }
+        lastHandledDeepLink = uri
+        requestImportOnboarding(uri)
+    }
+
     private fun pasteLinkDialog() {
         val input = EditText(this).apply {
-            hint = "snb://v2:…"
+            hint = "sunlionet://config/… or snb://v2:…"
             setSingleLine(false)
             minLines = 3
         }
@@ -425,13 +462,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun importFromText(text: String, source: String) {
         val normalized = text.trim()
+        if (OnboardingDeepLink.isOnboarding(normalized)) {
+            requestImportOnboarding(normalized)
+            Logs.add("[ui] onboarding import requested: $source")
+            return
+        }
         if (!normalized.startsWith("snb://v2:")) {
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.import_configuration))
-                .setMessage(getString(R.string.error_config_invalid))
-                .setPositiveButton(getString(R.string.details_close), null)
-                .show()
-            Logs.add("[ui] import failed: invalid uri source=$source")
+            showInvalidImportDialog(source)
             return
         }
 
@@ -455,6 +492,15 @@ class MainActivity : AppCompatActivity() {
                 .show()
             Logs.add("[ui] import failed source=$source err=${it.message}")
         }
+    }
+
+    private fun showInvalidImportDialog(source: String) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.import_configuration))
+            .setMessage(getString(R.string.error_config_invalid))
+            .setPositiveButton(getString(R.string.details_close), null)
+            .show()
+        Logs.add("[ui] import failed: invalid uri source=$source")
     }
 
     private fun exportLogs() {

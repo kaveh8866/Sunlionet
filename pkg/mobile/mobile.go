@@ -42,6 +42,14 @@ func ImportBundle(path string) error {
 	return mobilebridge.ImportBundle(path)
 }
 
+func ImportOnboardingURI(uri string) error {
+	return mobilebridge.ImportOnboardingURI(uri)
+}
+
+func ImportOnboardingURIWithConfig(uri string, config string) error {
+	return mobilebridge.ImportOnboardingURIWithConfig(uri, config)
+}
+
 func GetStatus() string {
 	return mobilebridge.GetStatus()
 }

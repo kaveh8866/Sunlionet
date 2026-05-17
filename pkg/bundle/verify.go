@@ -69,6 +69,12 @@ func VerifyBundle(bundleBytes []byte, trustedSigner ed25519.PublicKey, opts Veri
 	if now == 0 {
 		now = time.Now().Unix()
 	}
+	if len(bundleBytes) == 0 || len(bundleBytes) > MaxBundleBytes {
+		return nil, &VerifyError{Issues: []VerifyIssue{{Code: "wrapper_size", Message: "bundle size is invalid"}}}
+	}
+	if len(trustedSigner) != ed25519.PublicKeySize {
+		return nil, ErrInvalidSignature
+	}
 
 	sum := sha256.Sum256(bundleBytes)
 	res := &VerifyResult{
@@ -100,6 +106,9 @@ func VerifyBundle(bundleBytes []byte, trustedSigner ed25519.PublicKey, opts Veri
 	if wrapper.Header.Seq == 0 {
 		verr.add("header_seq", "seq must be > 0")
 	}
+	if _, err := decodeBundleNonce(wrapper.Header.Nonce); err != nil {
+		verr.add("header_nonce", err.Error())
+	}
 	if wrapper.Header.CreatedAt <= 0 {
 		verr.add("header_created_at", "created_at must be > 0")
 	}
@@ -109,8 +118,11 @@ func VerifyBundle(bundleBytes []byte, trustedSigner ed25519.PublicKey, opts Veri
 	if wrapper.Header.CreatedAt > 0 && wrapper.Header.ExpiresAt > 0 && wrapper.Header.ExpiresAt < wrapper.Header.CreatedAt {
 		verr.add("header_time_order", "expires_at must be >= created_at")
 	}
-	if wrapper.Header.CreatedAt > now+600 {
+	if wrapper.Header.CreatedAt > now+MaxClockSkewSeconds {
 		verr.add("header_future", "created_at is too far in the future (clock skew)")
+	}
+	if wrapper.Header.ExpiresAt > 0 && wrapper.Header.CreatedAt > 0 && wrapper.Header.ExpiresAt-wrapper.Header.CreatedAt > MaxBundleTTLSeconds {
+		verr.add("header_ttl", "bundle ttl exceeds maximum")
 	}
 	if now > wrapper.Header.ExpiresAt {
 		verr.add("expired", "bundle expired")
@@ -132,10 +144,14 @@ func VerifyBundle(bundleBytes []byte, trustedSigner ed25519.PublicKey, opts Veri
 	ciphertext, err := base64.RawURLEncoding.DecodeString(wrapper.Ciphertext)
 	if err != nil {
 		verr.add("ciphertext_b64", "invalid ciphertext base64url")
+	} else if len(ciphertext) == 0 || len(ciphertext) > MaxCiphertextBytes {
+		verr.add("ciphertext_size", "ciphertext size is invalid")
 	}
 	sigBytes, err := base64.RawURLEncoding.DecodeString(wrapper.Header.Signature)
 	if err != nil {
 		verr.add("signature_b64", "invalid signature base64url")
+	} else if len(sigBytes) != ed25519.SignatureSize {
+		verr.add("signature_size", "invalid signature size")
 	}
 
 	if len(verr.Issues) > 0 {
@@ -148,10 +164,7 @@ func VerifyBundle(bundleBytes []byte, trustedSigner ed25519.PublicKey, opts Veri
 	if err != nil {
 		return res, &VerifyError{Issues: []VerifyIssue{{Code: "header_marshal", Message: err.Error()}}}
 	}
-	var sigInput bytes.Buffer
-	sigInput.Write(headerBytes)
-	sigInput.Write(ciphertext)
-	if !ed25519.Verify(trustedSigner, sigInput.Bytes(), sigBytes) {
+	if !ed25519.Verify(trustedSigner, signatureInput(headerBytes, ciphertext), sigBytes) {
 		return res, ErrInvalidSignature
 	}
 
@@ -206,9 +219,12 @@ func decryptPayloadBytes(header BundleHeader, ciphertext []byte, id *age.X25519I
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 		}
-		b, err := io.ReadAll(decReader)
+		b, err := io.ReadAll(io.LimitReader(decReader, MaxPayloadBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("read decrypted payload: %w", err)
+		}
+		if len(b) > MaxPayloadBytes {
+			return nil, fmt.Errorf("decrypted payload too large")
 		}
 		return b, nil
 	default:

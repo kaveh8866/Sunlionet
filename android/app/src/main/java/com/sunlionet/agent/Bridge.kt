@@ -3,12 +3,15 @@ package com.sunlionet.agent
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
+import java.lang.reflect.Method
+import java.nio.charset.StandardCharsets
 
 object Bridge {
     private val mobileClassNames = listOf(
         "com.sunlionet.mobile.Mobile",
         "com.sunlionet.mobile.mobile.Mobile",
     )
+    private val methodCache = mutableMapOf<String, Method>()
 
     private fun mobileClass(): Class<*> {
         var last: Throwable? = null
@@ -23,44 +26,27 @@ object Bridge {
     }
 
     private fun callMobile(methodName: String, argTypes: Array<Class<*>>, args: Array<Any?>) {
-        val cls = mobileClass()
-        val candidates = listOf(
-            methodName,
-            methodName.replaceFirstChar { it.lowercase() },
-        ).distinct()
-        var last: Throwable? = null
-        for (name in candidates) {
-            try {
-                val method = cls.getMethod(name, *argTypes)
-                method.invoke(null, *args)
-                return
-            } catch (t: Throwable) {
-                last = t
-            }
-        }
-        throw last ?: NoSuchMethodException("${cls.name}.$methodName")
+        cachedMethod(methodName, argTypes).invoke(null, *args)
     }
 
     private fun callMobileString(methodName: String): String {
-        val cls = mobileClass()
-        val candidates = listOf(
-            methodName,
-            methodName.replaceFirstChar { it.lowercase() },
-        ).distinct()
-        var last: Throwable? = null
-        for (name in candidates) {
-            try {
-                val method = cls.getMethod(name)
-                val out = method.invoke(null)
-                return out as? String ?: ""
-            } catch (t: Throwable) {
-                last = t
-            }
-        }
-        throw last ?: NoSuchMethodException("${cls.name}.$methodName")
+        val out = cachedMethod(methodName, emptyArray()).invoke(null)
+        return out as? String ?: ""
     }
 
     private fun callMobileString(methodName: String, argTypes: Array<Class<*>>, args: Array<Any?>): String {
+        val out = cachedMethod(methodName, argTypes).invoke(null, *args)
+        return out as? String ?: ""
+    }
+
+    private fun callMobileBytes(methodName: String): ByteArray {
+        val out = cachedMethod(methodName, emptyArray()).invoke(null)
+        return out as? ByteArray ?: ByteArray(0)
+    }
+
+    private fun cachedMethod(methodName: String, argTypes: Array<Class<*>>): Method {
+        val key = methodName + ":" + argTypes.joinToString(",") { it.name }
+        methodCache[key]?.let { return it }
         val cls = mobileClass()
         val candidates = listOf(
             methodName,
@@ -70,8 +56,8 @@ object Bridge {
         for (name in candidates) {
             try {
                 val method = cls.getMethod(name, *argTypes)
-                val out = method.invoke(null, *args)
-                return out as? String ?: ""
+                methodCache[key] = method
+                return method
             } catch (t: Throwable) {
                 last = t
             }
@@ -87,9 +73,9 @@ object Bridge {
 
     private fun ageRecipient(context: Context): String = SecureStore(context).getOrCreateAgeRecipient()
 
-    fun startAgent(context: Context, usePi: Boolean = false): Result<Unit> = runCatching {
+    private fun agentConfigJSON(context: Context, usePi: Boolean = false): String {
         val secure = SecureStore(context)
-        val cfg = JSONObject().apply {
+        return JSONObject().apply {
             put("state_dir", File(context.filesDir, "state").absolutePath)
             put("master_key", secure.getOrCreateMasterKeyB64Url())
             put("templates_dir", File(context.filesDir, "templates").absolutePath)
@@ -100,8 +86,15 @@ object Bridge {
             put("pi_command", "pi")
             put("trusted_signer_pub_b64url", secure.getTrustedSignerKeysCSV())
             put("age_identity", secure.getOrCreateAgeIdentity())
+            put("telemetry_enabled", DiagnosticsStore(context).isDiagnosticsEnabled())
+            put("telemetry_transport", "onion")
         }.toString()
-        callMobile("StartAgent", arrayOf(String::class.java), arrayOf(cfg))
+    }
+
+    fun startAgent(context: Context, usePi: Boolean = false): Result<Unit> = runCatching {
+        configureRuntime()
+        val cfg = agentConfigJSON(context, usePi).toByteArray(StandardCharsets.UTF_8)
+        callMobile("StartAgentBytes", arrayOf(ByteArray::class.java), arrayOf(cfg))
         Logs.i("bridge", "agent started")
     }
 
@@ -117,11 +110,40 @@ object Bridge {
         }
     }
 
+    fun importOnboardingUri(context: Context, uri: String): Result<Unit> {
+        return runCatching {
+            callMobile(
+                "ImportOnboardingURIWithConfigBytes",
+                arrayOf(ByteArray::class.java, ByteArray::class.java),
+                arrayOf(
+                    uri.toByteArray(StandardCharsets.UTF_8),
+                    agentConfigJSON(context, usePi = false).toByteArray(StandardCharsets.UTF_8),
+                ),
+            )
+            Logs.i("bridge", "import onboarding uri")
+        }
+    }
+
     fun getStatus(): String {
         return try {
-            callMobileString("GetStatus")
+            val bytes = callMobileBytes("GetStatusBytes")
+            String(bytes, StandardCharsets.UTF_8)
         } catch (e: Throwable) {
             """{"running":false,"last_error":"${e.message ?: "bridge unavailable"}"}"""
+        }
+    }
+
+    private fun configureRuntime() {
+        runCatching {
+            callMobile(
+                "ConfigureAndroidRuntime",
+                arrayOf(
+                    Int::class.javaPrimitiveType!!,
+                    Int::class.javaPrimitiveType!!,
+                    Long::class.javaPrimitiveType!!,
+                ),
+                arrayOf(75, 2, 96L * 1024L * 1024L),
+            )
         }
     }
 

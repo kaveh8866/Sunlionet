@@ -20,21 +20,26 @@ import (
 	"github.com/kaveh/sunlionet-agent/pkg/policy"
 	"github.com/kaveh/sunlionet-agent/pkg/profile"
 	"github.com/kaveh/sunlionet-agent/pkg/sbctl"
+	"github.com/kaveh/sunlionet-agent/pkg/telemetry"
 )
 
 type AgentConfig struct {
-	StateDir             string `json:"state_dir"`
-	MasterKey            string `json:"master_key"`
-	TemplatesDir         string `json:"templates_dir"`
-	TrustedSignerPubsB64 string `json:"trusted_signer_pub_b64url"`
-	AgeIdentity          string `json:"age_identity"`
-	PollIntervalSec      int    `json:"poll_interval_sec"`
-	ConfigPath           string `json:"config_path"`
-	UsePi                bool   `json:"use_pi"`
-	PiEndpoint           string `json:"pi_endpoint"`
-	PiCommand            string `json:"pi_command"`
-	PiTimeoutMS          int    `json:"pi_timeout_ms"`
-	AdaptiveMode         bool   `json:"adaptive_mode"`
+	StateDir              string `json:"state_dir"`
+	MasterKey             string `json:"master_key"`
+	TemplatesDir          string `json:"templates_dir"`
+	TrustedSignerPubsB64  string `json:"trusted_signer_pub_b64url"`
+	AgeIdentity           string `json:"age_identity"`
+	PollIntervalSec       int    `json:"poll_interval_sec"`
+	ConfigPath            string `json:"config_path"`
+	UsePi                 bool   `json:"use_pi"`
+	PiEndpoint            string `json:"pi_endpoint"`
+	PiCommand             string `json:"pi_command"`
+	PiTimeoutMS           int    `json:"pi_timeout_ms"`
+	AdaptiveMode          bool   `json:"adaptive_mode"`
+	TelemetryEnabled      bool   `json:"telemetry_enabled"`
+	TelemetryCollectorKey string `json:"telemetry_collector_pub_b64url"`
+	TelemetryEndpoint     string `json:"telemetry_endpoint"`
+	TelemetryTransport    string `json:"telemetry_transport"`
 }
 
 type AgentStatus struct {
@@ -149,6 +154,7 @@ func ImportBundle(path string) error {
 	storePath := filepath.Join(cfg.StateDir, "profiles.enc")
 	templatesPath := filepath.Join(cfg.StateDir, "templates.enc")
 	replayPath := filepath.Join(cfg.StateDir, "replay.enc")
+	trustPath := filepath.Join(cfg.StateDir, "trust.enc")
 	store, err := profile.NewStore(storePath, masterKey)
 	if err != nil {
 		return err
@@ -161,6 +167,14 @@ func ImportBundle(path string) error {
 	if err != nil {
 		return err
 	}
+	var trustState *importctl.TrustState
+	trustStore, err := importctl.NewTrustStore(trustPath, masterKey)
+	if err != nil {
+		return err
+	}
+	if loadedTrust, err := trustStore.Load(); err == nil && loadedTrust.StateHash != "" {
+		trustState = &loadedTrust
+	}
 	trustedKeys, err := parseTrustedSignerKeys(cfg.TrustedSignerPubsB64)
 	if err != nil {
 		return err
@@ -170,12 +184,17 @@ func ImportBundle(path string) error {
 		return fmt.Errorf("invalid age identity: %w", err)
 	}
 
-	importer := importctl.NewImporterWithAll(store, templateStore, replayStore, trustedKeys, ageIdentity)
+	importer := importctl.NewImporterWithTrust(store, templateStore, replayStore, trustedKeys, ageIdentity, trustState)
 	payload, err := importer.ImportFile(path)
 	if err != nil {
+		recordTelemetry(cfg, telemetryCodeForImportError(err))
 		return err
 	}
-	return importer.ProcessAndStore(payload)
+	if err := importer.ProcessAndStore(payload); err != nil {
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
+		return err
+	}
+	return nil
 }
 
 func ResetLearning() error {
@@ -223,6 +242,7 @@ func runLoop(cfg AgentConfig, stopCh <-chan struct{}, doneCh chan<- struct{}) {
 			state.mu.Unlock()
 		} else {
 			updateError(fmt.Sprintf("orchestrator unavailable: %v", err))
+			recordTelemetry(cfg, telemetry.EventCoreStartFailure)
 		}
 	}
 
@@ -238,6 +258,7 @@ func runLoop(cfg AgentConfig, stopCh <-chan struct{}, doneCh chan<- struct{}) {
 		case <-stopCh:
 			return
 		case <-ticker.C:
+			flushTelemetry(cfg)
 			if err := runOnce(cfg); err != nil && isFatalRuntimeError(err) {
 				return
 			}
@@ -249,6 +270,7 @@ func runOnce(cfg AgentConfig) error {
 	masterKey, err := profile.ParseMasterKey(cfg.MasterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("invalid master_key: %v", err))
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return err
 	}
 	storePath := filepath.Join(cfg.StateDir, "profiles.enc")
@@ -256,11 +278,13 @@ func runOnce(cfg AgentConfig) error {
 	store, err := profile.NewStore(storePath, masterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("store error: %v", err))
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return err
 	}
 	templateStore, err := profile.NewTemplateStore(templatesPath, masterKey)
 	if err != nil {
 		updateError(fmt.Sprintf("template store error: %v", err))
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return err
 	}
 	profiles, err := store.Load()
@@ -281,6 +305,7 @@ func runOnce(cfg AgentConfig) error {
 	}
 	if len(candidates) == 0 {
 		updateError("no profiles available")
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return errors.New("no profiles available")
 	}
 
@@ -299,6 +324,7 @@ func runOnce(cfg AgentConfig) error {
 			_ = adaptiveStore.Save(adaptiveState)
 		} else {
 			updateError(fmt.Sprintf("adaptive state: %v", err))
+			recordTelemetry(cfg, telemetry.EventConfigInvalid)
 			return err
 		}
 	}
@@ -307,6 +333,7 @@ func runOnce(cfg AgentConfig) error {
 	selected, decision, ranked := engine.SelectProfile(candidates)
 	if len(ranked) == 0 {
 		updateError("no viable profiles after cooldown filters")
+		recordTelemetry(cfg, telemetry.EventProxyHandshakeTimeout)
 		return errors.New("no viable profiles after cooldown filters")
 	}
 	reason := decision.Reason
@@ -357,6 +384,7 @@ func runOnce(cfg AgentConfig) error {
 		updateError(fmt.Sprintf("action rejected: %v", err))
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "UNKNOWN", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
+		recordTelemetry(cfg, telemetry.EventUnknown)
 		return err
 	}
 
@@ -365,6 +393,7 @@ func runOnce(cfg AgentConfig) error {
 		updateError(err.Error())
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return err
 	}
 
@@ -376,6 +405,7 @@ func runOnce(cfg AgentConfig) error {
 		updateError(fmt.Sprintf("render config: %v", err))
 		adaptiveState.RecordAttempt(selected.ID, policy.AttemptSignal{ConnectOK: false, DNSOK: true, TCPHandshake: false, TLSSuccess: false}, "CONFIG_ERROR", time.Now())
 		_ = adaptiveStore.Save(adaptiveState)
+		recordTelemetry(cfg, telemetry.EventConfigInvalid)
 		return err
 	}
 	adaptiveState.RecordSelection(selected.ID)
@@ -529,4 +559,79 @@ func isFatalRuntimeError(err error) bool {
 		errors.Is(err, profile.ErrCorruptStore) ||
 		errors.Is(err, policy.ErrDecryptionFailedAdaptive) ||
 		errors.Is(err, policy.ErrCorruptAdaptiveStore)
+}
+
+func recordTelemetry(cfg AgentConfig, code telemetry.EventCode) {
+	engine, err := newTelemetryEngine(cfg)
+	if err != nil || !engine.Enabled() {
+		return
+	}
+	_ = engine.Record(telemetry.DiagnosticEvent{
+		Code:        code,
+		CoreVersion: telemetry.CoreVersionSunLionetV1,
+		Carrier:     telemetry.CarrierUnknown,
+	})
+}
+
+func flushTelemetry(cfg AgentConfig) {
+	engine, err := newTelemetryEngine(cfg)
+	if err != nil || !engine.Enabled() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, _ = engine.FlushDue(ctx)
+}
+
+func newTelemetryEngine(cfg AgentConfig) (*telemetry.Engine, error) {
+	if !cfg.TelemetryEnabled {
+		return telemetry.NewEngine(telemetry.Config{Enabled: false}, nil)
+	}
+	tcfg := telemetry.Config{
+		Enabled:                  true,
+		QueuePath:                filepath.Join(cfg.StateDir, "telemetry.queue"),
+		CollectorPublicKeyB64URL: strings.TrimSpace(cfg.TelemetryCollectorKey),
+		Transport:                parseTelemetryTransport(cfg.TelemetryTransport),
+		EndpointURL:              strings.TrimSpace(cfg.TelemetryEndpoint),
+	}
+	var sender telemetry.Sender
+	if tcfg.EndpointURL != "" {
+		sender = telemetry.HTTPSender{Endpoint: tcfg.EndpointURL}
+	}
+	return telemetry.NewEngine(tcfg, sender)
+}
+
+func parseTelemetryTransport(s string) telemetry.TransportKind {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "onion", "tor":
+		return telemetry.TransportOnion
+	case "i2p":
+		return telemetry.TransportI2P
+	case "mixnet", "mix":
+		return telemetry.TransportMixnet
+	case "domain_fronted", "fronted":
+		return telemetry.TransportDomainFronted
+	default:
+		return telemetry.TransportUnknown
+	}
+}
+
+func telemetryCodeForImportError(err error) telemetry.EventCode {
+	if err == nil {
+		return telemetry.EventUnknown
+	}
+	var importErr *importctl.ImportError
+	if errors.As(err, &importErr) {
+		switch importErr.Code {
+		case importctl.CodeInvalidSignature:
+			return telemetry.EventImportSignatureInvalid
+		case importctl.CodeReplayDetected:
+			return telemetry.EventImportReplayDetected
+		case importctl.CodeMalformedBundle, importctl.CodeInvalidPayload, importctl.CodeCipherNotAllowed:
+			return telemetry.EventConfigInvalid
+		default:
+			return telemetry.EventUnknown
+		}
+	}
+	return telemetry.EventUnknown
 }

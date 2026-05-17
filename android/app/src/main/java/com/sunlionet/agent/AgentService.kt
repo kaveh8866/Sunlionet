@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.sunlionet.agent.proximity.ProximityController
+import com.sunlionet.agent.proximity.ProximityMeshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +28,7 @@ class AgentService : Service() {
     private lateinit var repo: StateRepository
     private lateinit var secure: SecureStore
     private var proximity: ProximityController? = null
+    private var proximityScheduler: ProximityMeshScheduler? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     private var restartAttempts = 0
     private var probeFailureCount = 0
@@ -42,6 +44,7 @@ class AgentService : Service() {
         repo = StateRepository(this)
         secure = SecureStore(this)
         proximity = ProximityController(this)
+        proximityScheduler = ProximityMeshScheduler(this)
         secure.ensureDefaultTrustAnchors()
         registerNetworkSwitchMonitor()
     }
@@ -54,6 +57,13 @@ class AgentService : Service() {
             ACTION_IMPORT -> {
                 val path = intent.getStringExtra(EXTRA_BUNDLE_PATH).orEmpty()
                 importBundle(path)
+            }
+            ACTION_IMPORT_ONBOARDING -> {
+                val uri = intent.getStringExtra(EXTRA_ONBOARDING_URI).orEmpty()
+                importOnboardingUri(uri)
+            }
+            ACTION_PROXIMITY_WINDOW -> {
+                proximity?.let { proximityScheduler?.runWindow(it) }
             }
             else -> {
                 if (secure.isDesiredConnected()) {
@@ -79,7 +89,7 @@ class AgentService : Service() {
             val msg = it.message ?: "start failed"
             Logs.e("agent", msg)
             val mapped = mapBridgeErrorToUi(msg)
-            secure.setDesiredConnected(false)
+            holdVpnService("go bridge start failed")
             repo.save(
                 UiState(
                     status = "Error",
@@ -87,12 +97,12 @@ class AgentService : Service() {
                     lastErrorDetails = mapped.second,
                 ),
             )
-            stopVpnService()
             stopAgent(clearUi = false)
             return
         }
         Logs.i("agent", "started")
-        proximity?.start()
+        proximityScheduler?.schedule()
+        proximity?.let { proximityScheduler?.runWindow(it) }
         monitorJob?.cancel()
         monitorJob = scope.launch {
             while (isActive) {
@@ -126,7 +136,7 @@ class AgentService : Service() {
                         controller.start(configPath).onFailure {
                             val msg = it.message ?: "sing-box start failed"
                             Logs.e("agent", "sing-box start failed: $msg")
-                            secure.setDesiredConnected(false)
+                            holdVpnService("proxy core start failed")
                             repo.save(
                                 merged.copy(
                                     status = "Error",
@@ -135,7 +145,6 @@ class AgentService : Service() {
                                     lastErrorDetails = msg,
                                 ),
                             )
-                            stopVpnService()
                             stopAgent(clearUi = false)
                         }
                     } else {
@@ -204,6 +213,7 @@ class AgentService : Service() {
         monitorJob?.cancel()
         monitorJob = null
         proximity?.stop()
+        proximityScheduler?.cancel()
         Bridge.stopAgent()
         controller.stop()
         if (clearUi) {
@@ -217,6 +227,15 @@ class AgentService : Service() {
     private fun stopVpnService() {
         runCatching {
             startService(Intent(this, SunlionetVpnService::class.java).apply { action = SunlionetVpnService.ACTION_STOP })
+        }
+    }
+
+    private fun holdVpnService(reason: String) {
+        runCatching {
+            startService(Intent(this, SunlionetVpnService::class.java).apply {
+                action = SunlionetVpnService.ACTION_HOLD
+                putExtra(SunlionetVpnService.EXTRA_HOLD_REASON, reason)
+            })
         }
     }
 
@@ -241,6 +260,50 @@ class AgentService : Service() {
             )
         }.onSuccess {
             Logs.i("agent", "import success")
+            repo.save(
+                UiState(
+                    status = "Disconnected",
+                    currentProfile = "-",
+                    lastAction = "Ready to connect",
+                    lastError = "",
+                    lastErrorDetails = "",
+                ),
+            )
+        }
+    }
+
+    private fun importOnboardingUri(uri: String) {
+        val normalized = OnboardingDeepLink.normalize(uri)
+        if (normalized == null) {
+            Logs.w("agent", "onboarding import failed: invalid link")
+            repo.save(
+                UiState(
+                    status = "Error",
+                    currentProfile = "-",
+                    lastAction = "Import failed",
+                    lastError = getString(R.string.error_config_invalid),
+                    lastErrorDetails = "Invalid onboarding link",
+                ),
+            )
+            return
+        }
+        prepareDirs()
+        repo.save(UiState(status = "Disconnected", currentProfile = "-", lastAction = "Importing configuration…"))
+        Bridge.importOnboardingUri(this, normalized).onFailure {
+            val msg = it.message ?: "onboarding import failed"
+            Logs.e("agent", "onboarding import failed: $msg")
+            val mapped = mapBridgeErrorToUi(msg)
+            repo.save(
+                UiState(
+                    status = "Error",
+                    currentProfile = "-",
+                    lastAction = "Import failed",
+                    lastError = mapped.first,
+                    lastErrorDetails = mapped.second,
+                ),
+            )
+        }.onSuccess {
+            Logs.i("agent", "onboarding import success")
             repo.save(
                 UiState(
                     status = "Disconnected",
@@ -461,7 +524,10 @@ class AgentService : Service() {
         const val ACTION_START = "com.sunlionet.agent.agent.START"
         const val ACTION_STOP = "com.sunlionet.agent.agent.STOP"
         const val ACTION_IMPORT = "com.sunlionet.agent.agent.IMPORT"
+        const val ACTION_IMPORT_ONBOARDING = "com.sunlionet.agent.agent.IMPORT_ONBOARDING"
+        const val ACTION_PROXIMITY_WINDOW = "com.sunlionet.agent.agent.PROXIMITY_WINDOW"
         const val EXTRA_BUNDLE_PATH = "bundle_path"
+        const val EXTRA_ONBOARDING_URI = "onboarding_uri"
         private const val CHANNEL_ID = "SUNLIONET_agent"
         private const val NOTIF_ID = 1102
     }

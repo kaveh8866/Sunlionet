@@ -46,16 +46,29 @@ class ProximityController(
         }
 
     private val scanner =
-        ProximityBleScanner(appContext) { deviceAddress, nodeId, rssi ->
-            onSeen(deviceAddress, nodeId, rssi, System.currentTimeMillis())
+        ProximityBleScanner(appContext) { deviceAddress, signal, rssi ->
+            onSeen(deviceAddress, signal, rssi, System.currentTimeMillis())
         }
+
+    @Volatile
+    private var state: MeshState = MeshState.IDLE
 
     private data class Peer(
         val address: String,
         val nodeId: ByteArray,
+        val versionHash: ByteArray,
         var lastSeenAtMs: Long,
         var rssi: Int,
     )
+
+    enum class MeshState {
+        IDLE,
+        ADVERTISING_VERSION,
+        DISCOVERING,
+        CONNECTING_GATT,
+        CHUNK_TRANSFER,
+        SUSPENDED,
+    }
 
     fun start() {
         if (!BuildConfig.DEBUG && !BuildConfig.TESTER_MODE) return
@@ -77,11 +90,16 @@ class ProximityController(
                 while (isActive) {
                     val nowMs = System.currentTimeMillis()
                     val id = identity.current(nowMs)
-                    advertiser.start(id)
+                    state = MeshState.ADVERTISING_VERSION
+                    advertiser.start(advertPayload(id, nowMs))
+                    delay(2_500L)
+                    state = MeshState.DISCOVERING
                     scanCycle()
+                    state = MeshState.SUSPENDED
                     reasm.sweep(nowMs)
                     cache.sweep(nowMs)
                     evictPeers(nowMs)
+                    delay(18_000L)
                 }
             }
         Logs.i("proximity", "started")
@@ -97,6 +115,7 @@ class ProximityController(
         clients.values.forEach { runCatching { it.disconnect() } }
         clients.clear()
         peers.clear()
+        state = MeshState.IDLE
         Logs.i("proximity", "stopped")
     }
 
@@ -123,20 +142,19 @@ class ProximityController(
 
     private suspend fun scanCycle() {
         val havePeers = clients.isNotEmpty()
-        val onMs = if (havePeers) 3_000L else 6_000L
-        val offMs = if (havePeers) 12_000L else 8_000L
+        val onMs = if (havePeers) 2_500L else 4_500L
         runCatching { scanner.startLowPower() }
         delay(onMs)
         runCatching { scanner.stop() }
-        delay(offMs)
     }
 
-    private fun onSeen(address: String, nodeId: ByteArray, rssi: Int, nowMs: Long) {
+    private fun onSeen(address: String, signal: ProximityProtocol.AdvertSignal, rssi: Int, nowMs: Long) {
+        val nodeId = signal.ephemeralNodeId
         val ours = identity.current(nowMs).nodeId
         if (Arrays.equals(ours, nodeId)) return
         val p = peers.compute(address) { _, existing ->
             if (existing == null) {
-                Peer(address = address, nodeId = nodeId.copyOf(), lastSeenAtMs = nowMs, rssi = rssi)
+                Peer(address = address, nodeId = nodeId.copyOf(), versionHash = signal.configVersionHash.copyOf(), lastSeenAtMs = nowMs, rssi = rssi)
             } else {
                 existing.lastSeenAtMs = nowMs
                 existing.rssi = rssi
@@ -150,6 +168,7 @@ class ProximityController(
         }
         val client = clients[address]
         if (client != null) return
+        state = MeshState.CONNECTING_GATT
         val device = btAdapter?.getRemoteDevice(address) ?: return
         val c =
             ProximityGattClient(
@@ -164,6 +183,7 @@ class ProximityController(
 
     private fun onPeerReady(address: String) {
         val client = clients[address] ?: return
+        state = MeshState.CHUNK_TRANSFER
         val nowMs = System.currentTimeMillis()
         cache.list(nowMs, limit = 8).forEach { e ->
             val msg =
@@ -179,6 +199,17 @@ class ProximityController(
             frames.forEach { client.enqueueWrite(it) }
         }
         Logs.i("proximity", "peer ready addr=$address")
+    }
+
+    private fun advertPayload(id: ProximityIdentityManager.Identity, nowMs: Long): ByteArray {
+        val version = latestConfigVersion()
+        return ProximityProtocol.buildAdvertSignal(id.pubKeyEncoded, id.nodeId, version, nowMs)
+    }
+
+    private fun latestConfigVersion(): ByteArray {
+        val f = java.io.File(appContext.filesDir, "state/profiles.enc")
+        val stamp = if (f.exists()) "${f.length()}:${f.lastModified()}" else "empty"
+        return stamp.toByteArray(Charsets.UTF_8)
     }
 
     private fun handleIncoming(frame: ByteArray, nowMs: Long) {
