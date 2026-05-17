@@ -1,5 +1,6 @@
 package com.sunlionet.agent.proximity
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
@@ -7,13 +8,13 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
-import android.os.Build
 import android.os.ParcelUuid
 import com.sunlionet.agent.Logs
 
 class ProximityBleAdvertiser(
     context: Context,
 ) {
+    private val appContext = context.applicationContext
     private val adapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     private val advertiser: BluetoothLeAdvertiser? = adapter?.bluetoothLeAdvertiser
@@ -21,6 +22,10 @@ class ProximityBleAdvertiser(
     private var callback: AdvertiseCallback? = null
 
     fun start(serviceData: ByteArray) {
+        if (!ProximityBluetoothPermissions.canAdvertise(appContext)) {
+            Logs.w("proximity", "advertising skipped: bluetooth advertise permission missing")
+            return
+        }
         val adv = advertiser ?: return
         stop()
         val settings = AdvertiseSettings.Builder()
@@ -37,19 +42,30 @@ class ProximityBleAdvertiser(
 
         val cb = object : AdvertiseCallback() {}
         callback = cb
-        if (Build.VERSION.SDK_INT >= 31) {
-            runCatching { adv.startAdvertising(settings, data, cb) }
-                .onFailure { Logs.w("proximity", "adv start failed ${it.message.orEmpty()}") }
-            return
-        }
+        startAdvertising(adv, settings, data, cb)
+    }
+
+    fun stop() {
+        if (!ProximityBluetoothPermissions.canAdvertise(appContext)) return
+        val adv = advertiser ?: return
+        val cb = callback ?: return
+        callback = null
+        stopAdvertising(adv, cb)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startAdvertising(
+        adv: BluetoothLeAdvertiser,
+        settings: AdvertiseSettings,
+        data: AdvertiseData,
+        cb: AdvertiseCallback,
+    ) {
         runCatching { adv.startAdvertising(settings, data, cb) }
             .onFailure { Logs.w("proximity", "adv start failed ${it.message.orEmpty()}") }
     }
 
-    fun stop() {
-        val adv = advertiser ?: return
-        val cb = callback ?: return
-        callback = null
+    @SuppressLint("MissingPermission")
+    private fun stopAdvertising(adv: BluetoothLeAdvertiser, cb: AdvertiseCallback) {
         runCatching { adv.stopAdvertising(cb) }
     }
 }

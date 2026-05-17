@@ -1,6 +1,5 @@
 import path from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { cache as reactCache } from "react";
 
 export type ReleaseArtifactKind = "tar.gz" | "zip" | "bin";
@@ -81,18 +80,12 @@ function parseSha256FileContents(contents: string) {
 }
 
 async function resolveDownloadsDir() {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.join(here, "../../../public/downloads"),
-    path.join(here, "../../../../public/downloads"),
-  ];
-  for (const candidate of candidates) {
-    try {
-      const s = await stat(candidate);
-      if (s.isDirectory()) return candidate;
-    } catch {
-      continue;
-    }
+  const candidate = path.join(process.cwd(), "public", "downloads");
+  try {
+    const s = await stat(candidate);
+    if (s.isDirectory()) return candidate;
+  } catch {
+    return null;
   }
   return null;
 }

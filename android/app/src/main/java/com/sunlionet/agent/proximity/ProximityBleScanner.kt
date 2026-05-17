@@ -1,5 +1,6 @@
 package com.sunlionet.agent.proximity
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
@@ -17,6 +18,7 @@ class ProximityBleScanner(
     context: Context,
     private val onSeen: (deviceAddress: String, signal: ProximityProtocol.AdvertSignal, rssi: Int) -> Unit,
 ) {
+    private val appContext = context.applicationContext
     private val adapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     private val scanner: BluetoothLeScanner? = adapter?.bluetoothLeScanner
@@ -40,6 +42,10 @@ class ProximityBleScanner(
         }
 
     fun startLowPower() {
+        if (!ProximityBluetoothPermissions.canScan(appContext)) {
+            Logs.w("proximity", "scan skipped: bluetooth scan permission missing")
+            return
+        }
         val s = scanner ?: return
         if (!running.compareAndSet(false, true)) return
         val filter =
@@ -55,13 +61,24 @@ class ProximityBleScanner(
                     }
                 }
                 .build()
+        startScan(s, filter, settings)
+    }
+
+    fun stop() {
+        if (!ProximityBluetoothPermissions.canScan(appContext)) return
+        val s = scanner ?: return
+        if (!running.compareAndSet(true, false)) return
+        stopScan(s)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startScan(s: BluetoothLeScanner, filter: ScanFilter, settings: ScanSettings) {
         runCatching { s.startScan(listOf(filter), settings, cb) }
             .onFailure { Logs.w("proximity", "scan start failed ${it.message.orEmpty()}") }
     }
 
-    fun stop() {
-        val s = scanner ?: return
-        if (!running.compareAndSet(true, false)) return
+    @SuppressLint("MissingPermission")
+    private fun stopScan(s: BluetoothLeScanner) {
         runCatching { s.stopScan(cb) }
             .onFailure { Logs.w("proximity", "scan stop failed ${it.message.orEmpty()}") }
     }

@@ -1,5 +1,6 @@
 package com.sunlionet.agent.proximity
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -53,7 +54,7 @@ class ProximityGattServer(
                     }
                 }
                 if (responseNeeded) {
-                    runCatching { serverRef.get()?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null) }
+                    sendSuccess(device, requestId)
                 }
             }
 
@@ -67,14 +68,18 @@ class ProximityGattServer(
                 value: ByteArray?,
             ) {
                 if (responseNeeded) {
-                    runCatching { serverRef.get()?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null) }
+                    sendSuccess(device, requestId)
                 }
             }
         }
 
     fun start(): Boolean {
         if (serverRef.get() != null) return true
-        val server = btManager.openGattServer(appContext, callback) ?: return false
+        if (!ProximityBluetoothPermissions.canConnect(appContext)) {
+            Logs.w("proximity", "gatt server skipped: bluetooth connect permission missing")
+            return false
+        }
+        val server = openGattServer() ?: return false
         val svc = BluetoothGattService(ProximityConstants.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
         val rx =
@@ -98,7 +103,7 @@ class ProximityGattServer(
 
         svc.addCharacteristic(rx)
         svc.addCharacteristic(tx)
-        server.addService(svc)
+        addService(server, svc)
 
         txCharRef.set(tx)
         serverRef.set(server)
@@ -110,15 +115,45 @@ class ProximityGattServer(
         val server = serverRef.getAndSet(null) ?: return
         connections.clear()
         txCharRef.set(null)
-        runCatching { server.close() }
+        closeServer(server)
     }
 
     fun notifyAll(frame: ByteArray) {
         val server = serverRef.get() ?: return
         val tx = txCharRef.get() ?: return
+        if (!ProximityBluetoothPermissions.canConnect(appContext)) return
         tx.value = frame
         connections.forEach { d ->
-            runCatching { server.notifyCharacteristicChanged(d, tx, false) }
+            notifyChanged(server, d, tx)
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun openGattServer(): BluetoothGattServer? {
+        return btManager.openGattServer(appContext, callback)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun addService(server: BluetoothGattServer, service: BluetoothGattService) {
+        server.addService(service)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun sendSuccess(device: BluetoothDevice, requestId: Int) {
+        runCatching { serverRef.get()?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun closeServer(server: BluetoothGattServer) {
+        runCatching { server.close() }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun notifyChanged(
+        server: BluetoothGattServer,
+        device: BluetoothDevice,
+        tx: BluetoothGattCharacteristic,
+    ) {
+        runCatching { server.notifyCharacteristicChanged(device, tx, false) }
     }
 }

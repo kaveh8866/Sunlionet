@@ -14,3 +14,17 @@ id = "vercel-refresh-token"
 description = "Vercel refresh token"
 regex = '''\bvcr_[A-Za-z0-9]{10,}\b'''
 keywords = ["vcr_"]
+
+[[allowlists]]
+description = "Generated Go coverage profile; never contains production secrets."
+paths = ['''^coverage$''']
+
+[[allowlists]]
+description = "Deterministic non-secret test and documentation fixtures."
+regexes = [
+  '''0123456789abcdef0123456789abcdef''',
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''simplex://invitation-very-secret''',
+  '''AGE-SECRET-KEY-1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq''',
+  '''age-secret-key-abcdef''',
+]

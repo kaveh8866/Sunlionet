@@ -5,13 +5,14 @@ import org.json.JSONObject
 import java.io.File
 import java.lang.reflect.Method
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
 
 object Bridge {
     private val mobileClassNames = listOf(
         "com.sunlionet.mobile.Mobile",
         "com.sunlionet.mobile.mobile.Mobile",
     )
-    private val methodCache = mutableMapOf<String, Method>()
+    private val methodCache = ConcurrentHashMap<String, Method>()
 
     private fun mobileClass(): Class<*> {
         var last: Throwable? = null
@@ -56,13 +57,17 @@ object Bridge {
         for (name in candidates) {
             try {
                 val method = cls.getMethod(name, *argTypes)
-                methodCache[key] = method
+                methodCache.putIfAbsent(key, method)
                 return method
             } catch (t: Throwable) {
                 last = t
             }
         }
         throw last ?: NoSuchMethodException("${cls.name}.$methodName")
+    }
+
+    private fun isMissingMobileMethod(t: Throwable): Boolean {
+        return t is NoSuchMethodException || t.cause is NoSuchMethodException
     }
 
     private fun stateDir(context: Context): String = File(context.filesDir, "state").absolutePath
@@ -93,8 +98,13 @@ object Bridge {
 
     fun startAgent(context: Context, usePi: Boolean = false): Result<Unit> = runCatching {
         configureRuntime()
-        val cfg = agentConfigJSON(context, usePi).toByteArray(StandardCharsets.UTF_8)
-        callMobile("StartAgentBytes", arrayOf(ByteArray::class.java), arrayOf(cfg))
+        val cfg = agentConfigJSON(context, usePi)
+        runCatching {
+            callMobile("StartAgentBytes", arrayOf(ByteArray::class.java), arrayOf(cfg.toByteArray(StandardCharsets.UTF_8)))
+        }.getOrElse {
+            if (!isMissingMobileMethod(it)) throw it
+            callMobile("StartAgent", arrayOf(String::class.java), arrayOf(cfg))
+        }
         Logs.i("bridge", "agent started")
     }
 
@@ -112,22 +122,36 @@ object Bridge {
 
     fun importOnboardingUri(context: Context, uri: String): Result<Unit> {
         return runCatching {
-            callMobile(
-                "ImportOnboardingURIWithConfigBytes",
-                arrayOf(ByteArray::class.java, ByteArray::class.java),
-                arrayOf(
-                    uri.toByteArray(StandardCharsets.UTF_8),
-                    agentConfigJSON(context, usePi = false).toByteArray(StandardCharsets.UTF_8),
-                ),
-            )
+            val cfg = agentConfigJSON(context, usePi = false)
+            runCatching {
+                callMobile(
+                    "ImportOnboardingURIWithConfigBytes",
+                    arrayOf(ByteArray::class.java, ByteArray::class.java),
+                    arrayOf(
+                        uri.toByteArray(StandardCharsets.UTF_8),
+                        cfg.toByteArray(StandardCharsets.UTF_8),
+                    ),
+                )
+            }.getOrElse {
+                if (!isMissingMobileMethod(it)) throw it
+                callMobile(
+                    "ImportOnboardingURIWithConfig",
+                    arrayOf(String::class.java, String::class.java),
+                    arrayOf(uri, cfg),
+                )
+            }
             Logs.i("bridge", "import onboarding uri")
         }
     }
 
     fun getStatus(): String {
         return try {
-            val bytes = callMobileBytes("GetStatusBytes")
-            String(bytes, StandardCharsets.UTF_8)
+            runCatching {
+                String(callMobileBytes("GetStatusBytes"), StandardCharsets.UTF_8)
+            }.getOrElse {
+                if (!isMissingMobileMethod(it)) throw it
+                callMobileString("GetStatus")
+            }
         } catch (e: Throwable) {
             """{"running":false,"last_error":"${e.message ?: "bridge unavailable"}"}"""
         }

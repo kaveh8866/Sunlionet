@@ -23,6 +23,9 @@ const nextConfig: NextConfig = {
   experimental: {
     externalDir: true,
   },
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     unoptimized: true,
   },

@@ -1,5 +1,6 @@
 package com.sunlionet.agent.proximity
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -30,18 +31,19 @@ class ProximityGattClient(
 
     private val cccdUuid: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     private val enableNotify = byteArrayOf(0x01, 0x00)
+    private val appContext = context.applicationContext
 
     private val cb =
         object : BluetoothGattCallback() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    runCatching { gatt.discoverServices() }.onFailure { Logs.w("proximity", "discover failed ${it.message.orEmpty()}") }
+                    discoverServices(gatt)
                 } else {
                     ready.set(false)
                     rxRef.set(null)
                     txRef.set(null)
                     Logs.i("proximity", "disconnected addr=${device.address}")
-                    runCatching { gatt.close() }
+                    closeGatt(gatt)
                     gattRef.compareAndSet(gatt, null)
                 }
             }
@@ -76,12 +78,11 @@ class ProximityGattClient(
 
     fun connect() {
         if (gattRef.get() != null) return
-        val gatt =
-            if (Build.VERSION.SDK_INT >= 23) {
-                device.connectGatt(context, false, cb, BluetoothDevice.TRANSPORT_LE)
-            } else {
-                device.connectGatt(context, false, cb)
-            }
+        if (!ProximityBluetoothPermissions.canConnect(appContext)) {
+            Logs.w("proximity", "connect skipped: bluetooth connect permission missing")
+            return
+        }
+        val gatt = connectGatt() ?: return
         gattRef.set(gatt)
         Logs.i("proximity", "connect addr=${device.address}")
     }
@@ -91,8 +92,8 @@ class ProximityGattClient(
         ready.set(false)
         rxRef.set(null)
         txRef.set(null)
-        runCatching { gatt.disconnect() }
-        runCatching { gatt.close() }
+        disconnectGatt(gatt)
+        closeGatt(gatt)
     }
 
     fun enqueueWrite(frame: ByteArray) {
@@ -111,7 +112,12 @@ class ProximityGattClient(
             return
         }
         rx.value = next
-        val ok = runCatching { gatt.writeCharacteristic(rx) }.getOrDefault(false)
+        if (!ProximityBluetoothPermissions.canConnect(appContext)) {
+            writing.set(false)
+            Logs.w("proximity", "write skipped: bluetooth connect permission missing")
+            return
+        }
+        val ok = writeCharacteristic(gatt, rx)
         if (!ok) {
             writing.set(false)
             Logs.w("proximity", "write failed addr=${device.address}")
@@ -119,9 +125,50 @@ class ProximityGattClient(
     }
 
     private fun subscribeTx(gatt: BluetoothGatt, tx: BluetoothGattCharacteristic) {
-        gatt.setCharacteristicNotification(tx, true)
+        if (!ProximityBluetoothPermissions.canConnect(appContext)) return
+        setCharacteristicNotification(gatt, tx)
         val d: BluetoothGattDescriptor = tx.getDescriptor(cccdUuid) ?: return
         d.value = enableNotify
+        writeDescriptor(gatt, d)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectGatt(): BluetoothGatt? {
+        return if (Build.VERSION.SDK_INT >= 23) {
+            device.connectGatt(context, false, cb, BluetoothDevice.TRANSPORT_LE)
+        } else {
+            device.connectGatt(context, false, cb)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun discoverServices(gatt: BluetoothGatt) {
+        runCatching { gatt.discoverServices() }
+            .onFailure { Logs.w("proximity", "discover failed ${it.message.orEmpty()}") }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun disconnectGatt(gatt: BluetoothGatt) {
+        runCatching { gatt.disconnect() }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun closeGatt(gatt: BluetoothGatt) {
+        runCatching { gatt.close() }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun writeCharacteristic(gatt: BluetoothGatt, rx: BluetoothGattCharacteristic): Boolean {
+        return runCatching { gatt.writeCharacteristic(rx) }.getOrDefault(false)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun setCharacteristicNotification(gatt: BluetoothGatt, tx: BluetoothGattCharacteristic) {
+        gatt.setCharacteristicNotification(tx, true)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun writeDescriptor(gatt: BluetoothGatt, d: BluetoothGattDescriptor) {
         gatt.writeDescriptor(d)
     }
 }
